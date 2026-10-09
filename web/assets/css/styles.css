@@ -266,3 +266,15 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
     .num-input { width: 90px; }
     th, td { padding: 10px; }
 }
+
+/* ------------------------------------------------------------ Login e conta (versão publicada) */
+.tabs-user { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+.tabs-user .link-btn { color: var(--accent); font-size: 13px; }
+
+.login-wrap { min-height: calc(100vh - 48px); display: flex; align-items: center; justify-content: center; }
+.login-card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; margin: 0; }
+.login-card h1 { margin: 0; font-size: 22px; }
+.login-sub { margin: -6px 0 4px; font-size: 14px; }
+.login-card .btn { width: 100%; margin-top: 4px; }
+.login-card .form-msg { margin-top: 0; }
+.login-note { margin: 0; }

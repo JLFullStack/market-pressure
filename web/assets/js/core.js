@@ -7,7 +7,8 @@
 // - local: no server.py. Se a página for aberta por outro servidor local (ex.: Live Server),
 //   as chamadas vão para a porta padrão do server.py;
 // - versão publicada (Cloudflare) e wrangler dev (porta 8787): no próprio navegador (Pyodide,
-//   num Web Worker, assets/js/py-worker.js), com as mesmas rotas /api.
+//   num Web Worker, assets/js/py-worker.js), com as mesmas rotas /api. Ali há login: o Worker
+//   exige sessão em tudo (worker/auth.js); aqui só se mostra quem entrou e o "Sair".
 const SERVER_PORT = "8765";
 const API = location.port === SERVER_PORT ? "/api" : `http://127.0.0.1:${SERVER_PORT}/api`;
 const IN_BROWSER = !/^(localhost|127\.0\.0\.1)$/.test(location.hostname) || location.port === "8787";
@@ -53,9 +54,44 @@ function pyCall(method, path, body) {
     });
 }
 
+// ---------------------------------------------------------------- Login (versão publicada)
+
+function toLogin() {
+    location.replace(`/login?next=${encodeURIComponent(location.pathname + location.search + location.hash)}`);
+}
+
+// Usuário da sessão ({name, email, admin}) ou null; sessão vencida → tela de login.
+async function checkSession() {
+    const response = await fetch('/auth/me', { cache: 'no-store' }).catch(() => null);
+    if (response?.status === 401) {
+        toLogin();
+        return null;
+    }
+    return response?.ok ? response.json() : null;
+}
+
+// Elementos [data-auth] (link "Conta", nome e "Sair") só aparecem com login.
+const session = IN_BROWSER ? checkSession() : Promise.resolve(null);
+session.then(user => {
+    if (!user) return;
+    document.querySelectorAll('[data-auth]').forEach(el => { el.hidden = false; });
+    const name = document.getElementById('userName');
+    if (name) name.textContent = user.name;
+    document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+        await fetch('/auth/logout', { method: 'POST' }).catch(() => null);
+        location.replace('/login');
+    });
+});
+
+// ---------------------------------------------------------------- Pedidos
+
 // {status, data} do pedido; erro de rede só no modo local (servidor fora do ar).
 async function send(method, path, body) {
-    if (IN_BROWSER) return pyCall(method, path, body);
+    if (IN_BROWSER) {
+        const res = await pyCall(method, path, body);
+        if (res.status >= 400) await checkSession(); // o erro pode ser a sessão que venceu
+        return res;
+    }
     const init = method === 'GET' ? undefined
         : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
     const response = await fetch(`${API}${path}`, init);

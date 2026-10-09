@@ -1,6 +1,6 @@
 // Publicação no Cloudflare Workers (deploy pelo GitHub: npx wrangler deploy).
 // O build monta dist/ (páginas + pacote Python); o Worker em worker/index.js serve dist/ e
-// atende /proxy (fontes de dados) e /db (banco D1). Segredo: BRAPI_TOKEN (painel do Worker →
+// atende /auth (login), /proxy (fontes de dados) e /db (banco D1). Segredo: BRAPI_TOKEN (painel do Worker →
 // Settings → Variables and Secrets).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -8,7 +8,8 @@
   "main": "worker/index.js",
   "compatibility_date": "2026-09-01",
   "build": { "command": "node scripts/build.mjs" },
-  "assets": { "directory": "dist", "binding": "ASSETS" },
+  // run_worker_first: todo pedido passa pelo Worker, que exige login antes de servir os arquivos.
+  "assets": { "directory": "dist", "binding": "ASSETS", "run_worker_first": true },
   "d1_databases": [
     {
       "binding": "DB",

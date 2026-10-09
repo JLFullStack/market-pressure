@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MarketPressure — Conta</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<div class="container">
+    <nav class="tabs" aria-label="Seções do MarketPressure">
+        <a href="analise_quantitativa_b3.html" class="tab">Screener</a>
+        <a href="carteira.html" class="tab">Carteira</a>
+        <a href="conta.html" class="tab" aria-current="page" data-auth hidden>Conta</a>
+        <div class="tabs-user" data-auth hidden>
+            <span id="userName"></span>
+            <button type="button" class="link-btn" id="logoutBtn">Sair</button>
+        </div>
+    </nav>
+
+    <div class="panel" id="localNote" hidden>
+        <h2>Conta</h2>
+        <p class="muted">Login e contas existem só na versão publicada (Cloudflare). Rodando pelo <code>server.py</code>, a aplicação é só sua e não pede login.</p>
+    </div>
+
+    <div class="panel" data-auth hidden>
+        <h2>👤 Minha conta</h2>
+        <p class="muted" id="accountInfo"></p>
+        <form id="passwordForm" class="form-grid" novalidate>
+            <label class="field">Senha atual
+                <input class="select" name="current" type="password" autocomplete="current-password" required>
+            </label>
+            <label class="field">Nova senha
+                <input class="select" name="password" type="password" autocomplete="new-password" minlength="8" required>
+            </label>
+            <label class="field">Repita a nova senha
+                <input class="select" name="confirm" type="password" autocomplete="new-password" minlength="8" required>
+            </label>
+            <div><button type="submit" class="btn">Alterar senha</button></div>
+        </form>
+        <div class="form-msg" id="passwordMsg" role="status"></div>
+    </div>
+
+    <section id="adminSection" hidden>
+        <div class="panel">
+            <h2>👥 Usuários</h2>
+            <p class="muted">Só o administrador cria contas. Cada usuário tem as próprias carteiras; o screener é comum a todos.</p>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr><th>Nome</th><th>CPF</th><th>E-mail</th><th>Perfil</th><th>Criada em</th><th class="c">Ações</th></tr>
+                    </thead>
+                    <tbody id="usersBody">
+                        <tr><td colspan="6" class="empty-row">Carregando…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="form-msg" id="usersMsg" role="status"></div>
+        </div>
+
+        <div class="panel">
+            <h2>Novo usuário</h2>
+            <form id="newUserForm" class="form-grid" novalidate>
+                <label class="field">Nome
+                    <input class="select" name="name" type="text" autocomplete="off" required>
+                </label>
+                <label class="field">CPF
+                    <input class="select" name="cpf" type="text" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" required>
+                </label>
+                <label class="field">E-mail
+                    <input class="select" name="email" type="email" autocomplete="off" required>
+                </label>
+                <label class="field">Senha inicial
+                    <input class="select" name="password" type="password" autocomplete="new-password" minlength="8" required>
+                </label>
+                <div><button type="submit" class="btn">Criar conta</button></div>
+            </form>
+            <div class="form-msg" id="newUserMsg" role="status"></div>
+        </div>
+
+        <div class="panel">
+            <h2>Redefinir senha de um usuário</h2>
+            <form id="resetForm" class="form-grid" novalidate>
+                <label class="field">Usuário
+                    <select class="select" name="id" id="resetUser" required></select>
+                </label>
+                <label class="field">Nova senha
+                    <input class="select" name="password" type="password" autocomplete="new-password" minlength="8" required>
+                </label>
+                <div><button type="submit" class="btn">Redefinir senha</button></div>
+            </form>
+            <div class="form-msg" id="resetMsg" role="status"></div>
+        </div>
+    </section>
+</div>
+
+<script src="assets/js/core.js"></script>
+<script src="assets/js/conta.js"></script>
+</body>
+</html>

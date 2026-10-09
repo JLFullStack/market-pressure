@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MarketPressure — Entrar</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<main class="login-wrap">
+    <form class="panel login-card" id="loginForm" novalidate>
+        <h1>MarketPressure</h1>
+        <p class="muted login-sub">Entre com seu CPF ou e-mail.</p>
+
+        <label class="field" for="login">CPF ou e-mail
+            <input class="select" id="login" name="login" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus>
+        </label>
+        <label class="field" for="password">Senha
+            <input class="select" id="password" name="password" type="password" autocomplete="current-password" required>
+        </label>
+
+        <button type="submit" class="btn" id="loginBtn">Entrar</button>
+        <div class="form-msg error" id="loginMsg" role="alert"></div>
+
+        <p class="footnote login-note">Acesso restrito a usuários cadastrados. Para ter acesso, fale com o administrador.</p>
+    </form>
+</main>
+
+<script src="assets/js/login.js"></script>
+</body>
+</html>
