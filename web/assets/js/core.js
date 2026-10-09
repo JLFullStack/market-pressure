@@ -33,7 +33,7 @@ const pyPending = new Map();
 
 function pyCall(method, path, body) {
     if (!pyWorker) {
-        pyWorker = new Worker('assets/js/py-worker.js');
+        pyWorker = new Worker('assets/js/py-worker.js', { type: 'module' });
         pyWorker.onmessage = (e) => {
             const resolve = pyPending.get(e.data.id);
             pyPending.delete(e.data.id);

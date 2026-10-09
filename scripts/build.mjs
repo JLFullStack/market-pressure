@@ -1,6 +1,8 @@
 // Monta dist/ para o Cloudflare (npm run build; o wrangler deploy roda antes de publicar):
-// as páginas de web/ (index.html = Screener) e o pacote marketpressure/, que o navegador
-// executa no Pyodide (py/marketpressure/*.py, listados em py/manifest.json).
+// as páginas de web/ (index.html = Screener), o pacote marketpressure/, que o navegador
+// executa no Pyodide (py/marketpressure/*.py, listados em py/manifest.json), e o próprio
+// Pyodide (pyodide/, do pacote npm), servido pelo mesmo domínio: sem depender de CDN, que
+// redes corporativas e bloqueadores costumam barrar.
 import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -26,6 +28,10 @@ for (const file of files) {
     hash.update(file).update(text);
     writeFileSync(join(pkg, file), text);
 }
+const PYODIDE_FILES = ["pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"];
+mkdirSync(join(dist, "pyodide"));
+for (const file of PYODIDE_FILES) cpSync(join(root, "node_modules", "pyodide", file), join(dist, "pyodide", file));
+
 // version entra na URL de cada arquivo: um deploy novo não reaproveita o cache antigo.
 writeFileSync(join(dist, "py", "manifest.json"), JSON.stringify({ version: hash.digest("hex").slice(0, 12), files }));
 console.log(`dist/ pronto: páginas de web/ e ${files.length} módulos Python`);

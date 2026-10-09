@@ -9,6 +9,7 @@
     "deploy": "wrangler deploy"
   },
   "devDependencies": {
+    "pyodide": "314.0.7",
     "wrangler": "4.136.3"
   }
 }

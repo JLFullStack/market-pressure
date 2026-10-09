@@ -4,12 +4,14 @@
 // pedidos e respostas e busca em paralelo os históricos da varredura do screener.
 //
 // Mensagens: página → {id, method, path, body (texto JSON | null)}; Worker → {id, status, data}.
+// Worker do tipo módulo (core.js: {type: 'module'}): o Pyodide não roda em Worker clássico.
 
-const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/";
-const PY_BASE = new URL("../../py/", self.location);
+// Pyodide servido pelo próprio site (copiado do pacote npm pelo build, em dist/pyodide/).
+import { loadPyodide } from "../../pyodide/pyodide.mjs";
+
+const PYODIDE_URL = new URL("../../pyodide/", import.meta.url).href;
+const PY_BASE = new URL("../../py/", import.meta.url);
 const SCAN_BATCH = 8; // históricos buscados ao mesmo tempo (como o batchSize do servidor)
-
-importScripts(`${PYODIDE_URL}pyodide.js`);
 
 const ready = (async () => {
     const pyodide = await loadPyodide({ indexURL: PYODIDE_URL });
