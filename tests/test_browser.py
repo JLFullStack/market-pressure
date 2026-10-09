@@ -1,6 +1,7 @@
 """Versão publicada (Python no navegador): banco no D1 pela rota /db, fontes pelo /proxy e a
 varredura em etapas de browser.py. O Worker do Cloudflare é simulado por FakeWorker."""
 
+import base64
 import json
 import urllib.parse
 from unittest import mock
@@ -83,6 +84,13 @@ class ProxyTest(BrowserTestCase):
         market_data.prime(self.URL, 0, "timeout")
         with self.assertRaisesRegex(market_data.UpstreamError, "timeout"):
             market_data.http_json(self.URL)
+
+    def test_b3_json_inside_a_string(self):
+        params = {"issuingCompany": "PETR", "language": "pt-br"}
+        url = f"{market_data.B3_COMPANY_API}/GetDetail/" + \
+            base64.b64encode(json.dumps(params).encode()).decode()
+        market_data.prime(url, 200, json.dumps(json.dumps([{"codeCVM": "9512"}])))
+        self.assertEqual(market_data.b3_call("GetDetail", params), [{"codeCVM": "9512"}])
 
 
 class BrowserBridgeTest(BrowserTestCase):

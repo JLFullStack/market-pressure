@@ -249,7 +249,14 @@ def cdi(start: date) -> dict:
 def b3_call(method: str, params: dict):
     """API pública da B3 (a mesma da página de empresas listadas): parâmetros em JSON base64."""
     payload = base64.b64encode(json.dumps(params).encode()).decode()
-    return http_json(f"{B3_COMPANY_API}/{method}/{payload}")
+    data = http_json(f"{B3_COMPANY_API}/{method}/{payload}")
+    # Conforme o cabeçalho Accept, a B3 devolve o JSON dentro de uma string.
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except ValueError:
+            raise UpstreamError("B3: resposta inválida") from None
+    return data
 
 
 def b3_date(text: str):

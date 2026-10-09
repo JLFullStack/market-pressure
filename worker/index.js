@@ -61,7 +61,8 @@ async function proxy(request, url, env) {
     let upstream;
     try {
         upstream = await fetch(target, {
-            headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+            // Sem Accept: com "application/json" a B3 devolve o JSON dentro de uma string.
+            headers: { "User-Agent": USER_AGENT },
             cf: { cacheEverything: true, cacheTtlByStatus: { "200-299": ttl, "404": 60, "400-599": 0 } },
         });
     } catch (err) {
