@@ -1,0 +1,328 @@
+"""Núcleo de cálculo compartilhado pelo Screener (screener.py) e pela Carteira (portfolio.py).
+
+Relógio da B3, indicadores, regra de entrada (evaluate_setup), regra de saída (exit_signal)
+e formatadores pt-BR usados nas mensagens. Só biblioteca padrão.
+
+Candles: listas de dicts {"date": unix (s), "o", "h", "l", "c", "v", "adj"}, em ordem de data
+(o formato de market_data.history). Os índices seguem os do front-end antigo (core.js).
+"""
+
+import math
+import time
+from datetime import date, datetime, timedelta, timezone
+from decimal import ROUND_HALF_UP, Decimal
+
+SESSION_END_HOUR = 18  # após as 18h (Brasília) o candle do dia é tratado como fechado
+
+# Parâmetros do setup "Garrafa de Gás" (evaluate_setup). O CONFIG do screener os incorpora.
+SETUP = {
+    "maxDistance": 0.03,       # fechamento até 3% ACIMA da média testada
+    "maxBelowDistance": 0.03,  # fechamentos anteriores do pullback podem ficar até 3% ABAIXO da média
+    "minPullback": 0.03,       # correção mínima: do topo de 20 pregões até a menor mínima do pullback
+    "mm200SlopeLookback": 20,  # MM200 hoje > MM200 de N pregões atrás
+}
+
+# ---------------------------------------------------------------- Fusos e relógio da B3
+# O Windows não traz a base de fusos (zoneinfo) e o projeto não usa pacotes externos, então os
+# três fusos usados são calculados aqui. Brasília não tem horário de verão desde 2019 (antes
+# dos 5 anos de histórico); Londres segue a regra europeia (último domingo de março e de
+# outubro, à 01:00 UTC).
+
+SAO_PAULO = timezone(timedelta(hours=-3))
+
+
+def _last_sunday(year: int, month: int) -> date:
+    last = (date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)) - timedelta(days=1)
+    return last - timedelta(days=(last.weekday() + 1) % 7)
+
+
+def _london_offset(moment: datetime) -> timedelta:
+    start = datetime.combine(_last_sunday(moment.year, 3), datetime.min.time(), timezone.utc) + timedelta(hours=1)
+    end = datetime.combine(_last_sunday(moment.year, 10), datetime.min.time(), timezone.utc) + timedelta(hours=1)
+    return timedelta(hours=1) if start <= moment < end else timedelta(0)
+
+
+def local_time(ts: float, zone: str = "America/Sao_Paulo") -> datetime:
+    """Instante (unix, s) no fuso: "America/Sao_Paulo", "UTC" ou "Europe/London"."""
+    utc = datetime.fromtimestamp(ts, timezone.utc)
+    if zone == "UTC":
+        return utc
+    if zone == "Europe/London":
+        return (utc + _london_offset(utc)).replace(tzinfo=None)
+    return utc.astimezone(SAO_PAULO)
+
+
+def iso_day_in(ts: float, zone: str) -> str:
+    """Data (AAAA-MM-DD) de um instante num fuso."""
+    return local_time(ts, zone).date().isoformat()
+
+
+def market_clock(ts: float) -> tuple[str, int]:
+    """Data (AAAA-MM-DD) e hora no fuso da B3."""
+    t = local_time(ts)
+    return t.date().isoformat(), t.hour
+
+
+def day_of(ts: float) -> str:
+    return market_clock(ts)[0]
+
+
+def today_iso(now: float | None = None) -> str:
+    return day_of(time.time() if now is None else now)
+
+
+def session_in_progress(candles: list, now: float | None = None) -> bool:
+    """O último candle é de um pregão ainda em andamento?"""
+    today, hour = market_clock(time.time() if now is None else now)
+    return day_of(candles[-1]["date"]) == today and hour < SESSION_END_HOUR
+
+
+def closed_candles(candles: list, now: float | None = None) -> list:
+    """Candles só de pregões fechados: descarta o candle do pregão em andamento."""
+    return candles[:-1] if candles and session_in_progress(candles, now) else candles
+
+
+# ---------------------------------------------------------------- Indicadores
+
+def sma(values, n):
+    out = [None] * len(values)
+    total = 0.0
+    for i, v in enumerate(values):
+        total += v
+        if i >= n:
+            total -= values[i - n]
+        if i >= n - 1:
+            out[i] = total / n
+    return out
+
+
+def ema(values, n):
+    out = [None] * len(values)
+    k = 2 / (n + 1)
+    prev = None
+    for i, v in enumerate(values):
+        if v is None:
+            continue
+        prev = v if prev is None else v * k + prev * (1 - k)
+        out[i] = prev
+    return out
+
+
+def rsi(closes, n=14):
+    out = [None] * len(closes)
+    gain = loss = 0.0
+    for i in range(1, len(closes)):
+        d = closes[i] - closes[i - 1]
+        g, l = max(d, 0), max(-d, 0)
+        if i <= n:
+            gain += g / n
+            loss += l / n
+        else:
+            gain = (gain * (n - 1) + g) / n
+            loss = (loss * (n - 1) + l) / n
+        if i >= n:
+            out[i] = 100 if loss == 0 else 100 - 100 / (1 + gain / loss)
+    return out
+
+
+def stochastic(candles, n=14, smooth=3):
+    raw = [None] * len(candles)
+    for i in range(n - 1, len(candles)):
+        window = candles[i - n + 1:i + 1]
+        hi = max(c["h"] for c in window)
+        lo = min(c["l"] for c in window)
+        raw[i] = 50 if hi == lo else (candles[i]["c"] - lo) / (hi - lo) * 100
+    out = [None] * len(candles)
+    for i in range(n - 1 + smooth - 1, len(candles)):
+        s = 0.0
+        for j in range(i - smooth + 1, i + 1):
+            s += raw[j]
+        out[i] = s / smooth
+    return out
+
+
+def bollinger_width(closes, n=20, mult=2):
+    mid = sma(closes, n)
+    out = [None] * len(closes)
+    for i, m in enumerate(mid):
+        if m is None:
+            continue
+        v = 0.0
+        for j in range(i - n + 1, i + 1):
+            v += (closes[j] - m) ** 2
+        out[i] = (2 * mult * math.sqrt(v / n)) / m
+    return out
+
+
+def obv(candles):
+    out = [0.0]
+    for i in range(1, len(candles)):
+        d = candles[i]["c"] - candles[i - 1]["c"]
+        direction = (d > 0) - (d < 0)
+        out.append(out[i - 1] + direction * candles[i]["v"])
+    return out
+
+
+def atr(candles, n=14):
+    """ATR com suavização de Wilder; true range = max(h−l, |h−c anterior|, |l−c anterior|)."""
+    out = [None] * len(candles)
+    prev = None
+    total = 0.0
+    for i, c in enumerate(candles):
+        pc = candles[i - 1]["c"] if i else c["c"]
+        tr = max(c["h"] - c["l"], abs(c["h"] - pc), abs(c["l"] - pc))
+        if i < n:
+            total += tr
+            if i == n - 1:
+                prev = out[i] = total / n
+        else:
+            prev = out[i] = (prev * (n - 1) + tr) / n
+    return out
+
+
+def clamp01(x):
+    return min(1, max(0, x))
+
+
+def compute_indicators(candles):
+    closes = [c["c"] for c in candles]
+    ema26 = ema(closes, 26)
+    macd_line = [v - ema26[i] for i, v in enumerate(ema(closes, 12))]
+    signal = ema(macd_line, 9)
+    return {
+        "candles": candles,
+        "closes": closes,
+        "mm20": sma(closes, 20),
+        "mm50": sma(closes, 50),
+        "mm200": sma(closes, 200),
+        "rsi": rsi(closes, 14),
+        "stoch": stochastic(candles, 14, 3),
+        "macd": macd_line,
+        "hist": [v - signal[i] for i, v in enumerate(macd_line)],
+        "bbw": bollinger_width(closes, 20, 2),
+        "obv": obv(candles),
+        "atr14": atr(candles, 14),
+    }
+
+
+def exit_signal(ind, i):
+    """Regra de venda (regra "B"): fechamento abaixo de MM20, MM50 e MM200 E tendência de baixa
+    formada (MM50 < MM200). Usada no backtest do screener e na situação das posições da carteira."""
+    c, mm20, mm50, mm200 = ind["closes"][i], ind["mm20"][i], ind["mm50"][i], ind["mm200"][i]
+    if None in (mm20, mm50, mm200):
+        return False
+    return c < mm20 and c < mm50 and c < mm200 and mm50 < mm200
+
+
+# ---------------------------------------------------------------- Setup "Garrafa de Gás"
+
+def candle_pattern(c):
+    rng = c["h"] - c["l"]
+    if rng <= 0:
+        return "doji"
+    body = abs(c["c"] - c["o"])
+    lower = min(c["o"], c["c"]) - c["l"]
+    upper = c["h"] - max(c["o"], c["c"])
+    if body <= rng * 0.1:
+        return "doji"
+    if lower >= body * 2 and upper <= rng * 0.3:
+        return "martelo"
+    if body <= rng * 0.35:
+        return "corpo estreito"
+    return None
+
+
+def evaluate_setup(ind, i, confirm_previous=False):
+    """Regra de entrada, usada no sinal do screener, no backtest e no aporte "pelas regras do
+    pullback" da carteira. confirm_previous: no intradiário, o último pregão fechado também
+    precisa estar acima da média."""
+    no_setup = {"trend": False, "pullback": None, "ma": None, "pattern": None, "topIdx": None,
+                "ok": False, "okStrict": False}
+    candles = ind["candles"]
+    past = i - SETUP["mm200SlopeLookback"]
+    if past < 0 or i < 19:
+        return no_setup
+    c = candles[i]
+    mm200, mm200_past = ind["mm200"][i], ind["mm200"][past]
+    if mm200 is None or mm200_past is None:
+        return no_setup
+
+    # Tendência primária de alta: MM200 subindo e preço, MM20 e MM50 acima dela.
+    # MM20 abaixo da MM50 é aceito (correções profundas quebram esse alinhamento).
+    trend = mm200 > mm200_past and c["c"] > mm200 and ind["mm20"][i] > mm200 and ind["mm50"][i] > mm200
+
+    # Pullback = do topo de 20 pregões até hoje; profundidade medida pela menor mínima,
+    # para que um repique já iniciado não descaracterize a correção.
+    top = i - 19
+    for j in range(i - 19, i + 1):
+        if candles[j]["h"] >= candles[top]["h"]:
+            top = j
+    lowest = min(candles[j]["l"] for j in range(top, i + 1))
+    pullback = 1 - lowest / candles[top]["h"]
+
+    # Média testada: fechamento atual acima dela (até maxDistance). Fechamentos anteriores
+    # do pullback podem ficar abaixo, desde que próximos (até maxBelowDistance) — quem
+    # fechou muito abaixo perdeu o suporte em vez de testá-lo.
+    ma = None
+    for name in ("MM20", "MM50", "MM200"):
+        arr = ind[name.lower()]
+        dist = c["c"] / arr[i] - 1
+        if dist < 0 or dist > SETUP["maxDistance"]:
+            continue
+        if confirm_previous and candles[i - 1]["c"] < arr[i - 1]:
+            continue
+        near = all(candles[j]["c"] >= arr[j] * (1 - SETUP["maxBelowDistance"]) for j in range(top, i))
+        if near and (ma is None or dist < ma["dist"]):
+            ma = {"name": name, "value": arr[i], "dist": dist}
+
+    pattern = candle_pattern(c)
+    ok = trend and pullback >= SETUP["minPullback"] and ma is not None
+    return {"trend": trend, "pullback": pullback, "ma": ma, "pattern": pattern, "topIdx": top,
+            "ok": ok, "okStrict": ok and pattern is not None}
+
+
+# ---------------------------------------------------------------- Aritmética e formatadores
+
+def add_up(values):
+    """Soma da esquerda para a direita, como o reduce do JavaScript (o sum() do Python 3.12+
+    compensa erros de arredondamento e pode diferir na última casa)."""
+    total = 0.0
+    for v in values:
+        total += v
+    return total
+
+
+def avg(values):
+    values = list(values)
+    return add_up(values) / len(values) if values else 0
+
+
+def js_round(x):
+    """Math.round do JavaScript: meio arredonda para cima (o round() do Python é bancário)."""
+    return math.floor(x + 0.5)
+
+
+def _pt_br(text):
+    return text.replace(",", "\0").replace(".", ",").replace("\0", ".")
+
+
+def fmt_num(v, d=1):
+    """Como toLocaleString('pt-BR') com d casas: arredonda o valor binário exato, meio para cima."""
+    exact = Decimal(v).quantize(Decimal(1).scaleb(-d), rounding=ROUND_HALF_UP)
+    return _pt_br(f"{exact:,.{d}f}")
+
+
+def fmt_brl(v):
+    return f"R$ {fmt_num(v, 2)}"
+
+
+def fmt_qty(q):
+    """Quantidade: inteira sem casas; fracionária (cripto, EUA) com até 8 casas."""
+    if float(q).is_integer():
+        return fmt_num(q, 0)
+    exact = Decimal(q).quantize(Decimal("1e-8"), rounding=ROUND_HALF_UP)
+    return _pt_br(f"{exact:,.8f}".rstrip("0").rstrip("."))
+
+
+def fmt_date(iso):
+    return f"{iso[8:10]}/{iso[5:7]}/{iso[0:4]}" if iso else "—"

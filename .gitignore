@@ -1,0 +1,14 @@
+# Configuração local e segredos
+.env
+
+# Banco de dados da aplicação (carteiras pessoais) e backups
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Arquivos temporários de testes manuais
+tmp/

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MarketPressure — Garrafa de Gás B3</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<div class="container">
+    <nav class="tabs" aria-label="Seções do MarketPressure">
+        <a href="analise_quantitativa_b3.html" class="tab" aria-current="page">Screener</a>
+        <a href="carteira.html" class="tab">Carteira</a>
+    </nav>
+
+    <div class="panel">
+        <div class="header-panel">
+            <div>
+                <h1>📊 Dashboard Premium V2: Matriz de Pressão e Assertividade — Top 20 B3</h1>
+                <div class="subtitle" id="lastUpdate">Screening quantitativo "Garrafa de Gás" sobre o universo líquido da B3</div>
+            </div>
+            <div class="controls">
+                <label class="toggle">Base:
+                    <select id="baseMode" class="select">
+                        <option value="fechamento">Último fechamento</option>
+                        <option value="intradiario">Intradiário</option>
+                    </select>
+                </label>
+                <label class="toggle"><input type="checkbox" id="requireCandle"> Exigir candle de rejeição</label>
+                <span class="status-badge" id="modeIndicator">Aguardando</span>
+                <button class="btn" id="refreshBtn" onclick="runScan(true)">Forçar Atualização</button>
+            </div>
+        </div>
+        <div class="progress" id="progress"><div class="progress-bar" id="progressBar"></div></div>
+    </div>
+
+    <div id="errorBanner" class="banner"></div>
+    <div id="infoBanner" class="banner"></div>
+
+    <div class="panel">
+        <h2>📈 Painel Macro e Resumo Executivo</h2>
+        <div class="kpis">
+            <div class="kpi">
+                <div class="kpi-label">Ativos escaneados</div>
+                <div class="kpi-value" id="kpiScanned">—</div>
+                <div class="kpi-note" id="kpiScannedNote"></div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Qualificados no setup</div>
+                <div class="kpi-value" id="kpiQualified">—</div>
+                <div class="kpi-note">MM20 e MM50 acima de uma MM200 ascendente + fechamento até 3% acima da média, pullback próximo dela</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Média de pressão (Top 20)</div>
+                <div class="kpi-value" id="kpiPressure">—</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Média da taxa de acerto (Top 20)</div>
+                <div class="kpi-value" id="kpiWinRate">—</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Melhor score composto</div>
+                <div class="kpi-value" id="kpiBest">—</div>
+                <div class="kpi-note" id="kpiBestNote"></div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">BOVA11 (12 meses)</div>
+                <div class="kpi-value" id="kpiBova">—</div>
+                <div class="kpi-note" id="kpiBovaNote"></div>
+            </div>
+        </div>
+        <div class="regime" id="regimeText"></div>
+    </div>
+
+    <div class="panel table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th class="c">Rank</th>
+                    <th>Ticker</th>
+                    <th class="c">Score Composto</th>
+                    <th class="c">Preço Atual</th>
+                    <th class="c">Média Testada</th>
+                    <th class="c">Pressão %</th>
+                    <th class="c">Taxa Acerto %</th>
+                    <th class="c">Estado da Garrafa</th>
+                    <th>Justificativa Quantitativa (Volume &amp; Momentum)</th>
+                </tr>
+            </thead>
+            <tbody id="rankingTableBody">
+                <tr><td colspan="9" class="empty-row">Iniciando varredura automatizada do mercado...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="panel">
+        <h2>⚠️ Diretrizes de Gerenciamento de Risco Institucional</h2>
+        <ul class="guidelines">
+            <li><strong>Fator Score Composto:</strong> priorize alocações em ativos cujo Score Composto seja superior a 75.0, mitigando falsos rompimentos.</li>
+            <li><strong>Slippage &amp; Execução:</strong> ativos fora do Ibovespa principal exigem ordens do tipo "Stop-Limitada" para blindagem contra gaps de abertura.</li>
+            <li><strong>Invalidação Teórica:</strong> fechamento diário abaixo do suporte dinâmico da média anula imediatamente o viés acumulativo da garrafa de gás.</li>
+        </ul>
+    </div>
+
+    <div class="panel footnote">
+        <strong>Metodologia.</strong> Universo: as <span id="fnUniverse"></span> ações mais negociadas da B3 por volume financeiro (lista da brapi, sem fracionários).
+        Candles diários de 5 anos do Yahoo Finance, sem ajuste por proventos (mesma base do gráfico padrão do TradingView). Tendência: MM200 ascendente, com preço, MM20 e MM50 acima dela. Pullback: correção mínima de 3% desde o topo de 20 pregões, fechamento atual até 3% acima da média testada (no intradiário, o último pregão também acima dela) e fechamentos anteriores do pullback no máximo 3% abaixo dela. Pressão = Volume 25% (OBV acima do preço em 60 dias, volume forte nos dias de alta do avanço até o topo e volume secando no pullback; no intradiário, o volume parcial do dia é ignorado) +
+        Momentum 30% (RSI 14 preservando a faixa de 40 no pullback, recuo do RSI desde o topo, Estocástico 14 que chegou perto da sobrevenda e divergência oculta de alta) +
+        Tendência 25% (histograma MACD recuperando a força vendedora do pullback, MACD vs. linha zero medido em ATR, distância da média) +
+        Estrutura 20% (largura das Bandas de Bollinger no percentil de 120 dias + amplitude dos últimos 5 pregões em ATR).
+        A pressão descreve o padrão do pullback; não é uma probabilidade de acerto.
+        Taxa de acerto: backtest da estratégia de compra no pullback e venda quando o fechamento fica abaixo da MM20, da MM50 e da MM200 com a MM50 abaixo da MM200, nos 5 anos de histórico do próprio ativo.
+        Compra e venda na abertura do pregão seguinte ao sinal, sem custos; acerto = venda acima da compra; operações ainda abertas não contam.
+        A taxa é suavizada para uma base de 50% quando há poucas operações; entre parênteses, acertos/operações e o retorno médio por operação.
+        Ferramenta de estudo — não constitui recomendação de investimento.
+    </div>
+</div>
+
+<script src="assets/js/core.js"></script>
+<script src="assets/js/app.js"></script>
+
+</body>
+</html>

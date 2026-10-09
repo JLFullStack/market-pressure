@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MarketPressure — Carteira</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<div class="container">
+    <nav class="tabs" aria-label="Seções do MarketPressure">
+        <a href="analise_quantitativa_b3.html" class="tab">Screener</a>
+        <a href="carteira.html" class="tab" aria-current="page">Carteira</a>
+    </nav>
+
+    <div class="panel">
+        <div class="header-panel">
+            <div>
+                <h1>💼 Carteira</h1>
+                <div class="subtitle" id="lastUpdate">Posições, proventos e rentabilidade comparada ao CDI e ao BOVA11</div>
+            </div>
+            <div class="controls">
+                <label class="toggle" for="portfolioSelect">Carteira:</label>
+                <select id="portfolioSelect" class="select"></select>
+                <button type="button" class="btn-secondary" id="newPortfolioBtn">Nova carteira</button>
+                <button type="button" class="btn-secondary" id="renamePortfolioBtn">Renomear</button>
+                <button type="button" class="btn-secondary" id="deletePortfolioBtn">Excluir</button>
+                <button type="button" class="btn" id="refreshBtn">Atualizar cotações</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="errorBanner" class="banner" role="alert"></div>
+
+    <div class="panel" id="emptyState" hidden>
+        <h2>Comece sua carteira</h2>
+        <p class="muted" id="emptyText">Crie uma carteira para registrar suas operações, acompanhar a rentabilidade e comparar com o CDI e o BOVA11.</p>
+        <button type="button" class="btn" id="emptyCreateBtn">Criar carteira</button>
+    </div>
+
+    <!-- Sub-abas da carteira (padrão de abas da WAI-ARIA). A ativa fica no hash da URL. -->
+    <div class="subtabs" id="subtabs" role="tablist" aria-label="Seções da carteira" hidden>
+        <button type="button" class="subtab" role="tab" id="tab-visao" data-tab="visao" aria-controls="panel-visao" aria-selected="true">Visão geral</button>
+        <button type="button" class="subtab" role="tab" id="tab-aportes" data-tab="aportes" aria-controls="panel-aportes" aria-selected="false" tabindex="-1">Aportes e lançamentos</button>
+        <button type="button" class="subtab" role="tab" id="tab-proventos" data-tab="proventos" aria-controls="panel-proventos" aria-selected="false" tabindex="-1">Proventos</button>
+        <button type="button" class="subtab" role="tab" id="tab-configuracoes" data-tab="configuracoes" aria-controls="panel-configuracoes" aria-selected="false" tabindex="-1">Configurações</button>
+    </div>
+
+    <!-- ============================================================ Visão geral -->
+    <section id="panel-visao" role="tabpanel" aria-labelledby="tab-visao" tabindex="0" hidden>
+        <div class="panel" id="firstOpPanel" data-no-entries>
+            <h2>Carteira sem lançamentos</h2>
+            <p class="muted" id="firstOpText">Registre uma compra ou um título de renda fixa para ver o resumo, a rentabilidade e a alocação.</p>
+            <button type="button" class="btn" id="firstOpBtn">Lançar primeira operação</button>
+        </div>
+
+        <div id="portfolioContent" data-needs-entries>
+            <div class="panel">
+                <h2>📈 Resumo</h2>
+                <div class="kpis">
+                    <div class="kpi">
+                        <div class="kpi-label">Patrimônio atual</div>
+                        <div class="kpi-value" id="kpiValue">—</div>
+                        <div class="kpi-note" id="kpiValueNote"></div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-label">Total investido</div>
+                        <div class="kpi-value" id="kpiInvested">—</div>
+                        <div class="kpi-note">Aportes menos vendas e resgates</div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-label">Lucro total</div>
+                        <div class="kpi-value" id="kpiProfit">—</div>
+                        <div class="kpi-note" id="kpiProfitNote"></div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-label">Proventos recebidos</div>
+                        <div class="kpi-value" id="kpiDividends">—</div>
+                        <div class="kpi-note" id="kpiDividendsNote"></div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-label">Variação do dia</div>
+                        <div class="kpi-value" id="kpiDay">—</div>
+                        <div class="kpi-note" id="kpiDayNote"></div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-label">Rentabilidade desde o início</div>
+                        <div class="kpi-value" id="kpiTwrAll">—</div>
+                        <div class="kpi-compare" id="kpiTwrAllNote"></div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-label">Rentabilidade em 12 meses</div>
+                        <div class="kpi-value" id="kpiTwr12">—</div>
+                        <div class="kpi-compare" id="kpiTwr12Note"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-head">
+                    <h2>Rentabilidade acumulada</h2>
+                    <div class="seg" role="group" aria-label="Período do gráfico" id="periodButtons"></div>
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="returnChart" role="img" aria-label="Rentabilidade acumulada da carteira, do CDI e do BOVA11"></canvas>
+                </div>
+                <p class="small muted" id="chartNote"></p>
+            </div>
+
+            <div class="panel">
+                <div class="panel-head">
+                    <h2>Alocação por classe</h2>
+                    <a href="#configuracoes" class="inline-link small">Editar classes e metas</a>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Classe</th>
+                                <th class="r">Valor</th>
+                                <th class="r">% atual</th>
+                                <th class="r">% meta</th>
+                                <th class="r">Diferença</th>
+                                <th class="r">Para atingir a meta</th>
+                                <th>Atual × meta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="allocationViewBody"></tbody>
+                    </table>
+                </div>
+                <p class="small muted" id="allocationNote"></p>
+            </div>
+
+            <div class="panel">
+                <h2>Posições</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Ativo</th>
+                                <th class="r">Quantidade</th>
+                                <th class="r">Preço médio</th>
+                                <th class="r">Preço atual</th>
+                                <th class="r">Var. dia</th>
+                                <th class="r">Valor</th>
+                                <th class="r">Lucro</th>
+                                <th class="r">Rentab.</th>
+                                <th class="r">Proventos</th>
+                                <th class="r">% carteira</th>
+                                <th class="c">Situação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="positionsBody"></tbody>
+                    </table>
+                </div>
+                <p class="small muted">Lucro e rentabilidade incluem valorização, vendas e proventos (base: total comprado do ativo). Situação: <strong>Vender</strong> quando o fechamento fica abaixo da MM20, da MM50 e da MM200 com a MM50 abaixo da MM200; <strong>Atenção</strong> quando o fechamento perdeu as três médias sem esse cruzamento, ou está abaixo da MM200. Usa o último pregão fechado.</p>
+            </div>
+        </div>
+
+        <div class="panel footnote">
+            <strong>Metodologia.</strong> Cotações diárias do Yahoo Finance sem ajuste por proventos (o mesmo fechamento do gráfico padrão do TradingView); durante o pregão, o patrimônio usa o candle do dia.
+            Preço médio: compras somam quantidade e custo (preço × quantidade + taxas); vendas reduzem a posição pelo preço médio e geram lucro realizado.
+            Proventos: valor por cota × quantidade possuída na data-com (pregão anterior à data-ex).
+            Rentabilidade por cota (TWR): retorno diário = (patrimônio + proventos do dia − aportes líquidos do dia) ÷ patrimônio do dia anterior − 1, acumulado no calendário de pregões do BOVA11.
+            Ativos dos EUA e cripto: preço em US$ × câmbio USDBRL do dia (Yahoo USDBRL=X); cripto, que negocia todos os dias, entra em cada pregão da B3 pelo último preço até a data. Cada operação guarda o câmbio usado.
+            Renda fixa: último valor atual informado, somado aos aportes e resgates posteriores; antes do primeiro, o valor aplicado.
+            BOVA11 pelo fechamento ajustado (retorno total); CDI pela série 12 do Banco Central.
+            Os dados das carteiras ficam no banco local (arquivos Parquet na pasta data/ do projeto). Ferramenta de estudo — não constitui recomendação de investimento.
+        </div>
+    </section>
+
+    <!-- ============================================================ Aportes e lançamentos -->
+    <section id="panel-aportes" role="tabpanel" aria-labelledby="tab-aportes" tabindex="0" hidden>
+        <div class="panel" data-no-entries>
+            <h2>💰 Calculadora de aporte</h2>
+            <p class="muted">A calculadora usa as posições da carteira e aparece depois do primeiro lançamento. <a href="#lancamentos" class="inline-link">Registre a primeira operação</a> em "Nova operação", abaixo.</p>
+        </div>
+        <div class="panel" id="aportePanel" data-needs-entries>
+            <div class="panel-head">
+                <h2 id="aporteTitle">💰 Calculadora de aporte</h2>
+                <button type="button" class="btn-secondary" id="aporteToggle" aria-expanded="true" aria-controls="aporteBody">Recolher</button>
+            </div>
+            <div id="aporteBody">
+            <div class="form-grid">
+                <label class="field">Valor que irá investir (R$)
+                    <input type="number" id="aporteAmount" class="select" min="0" step="0.01" inputmode="decimal" placeholder="Ex.: 2000">
+                </label>
+                <label class="field">Distribuir entre
+                    <select id="aporteMode" class="select"></select>
+                </label>
+                <label class="field" id="aporteBaseField" hidden>Base do pullback
+                    <select id="aporteBase" class="select">
+                        <option value="fechamento">Último fechamento</option>
+                        <option value="intradiario">Intradiário</option>
+                    </select>
+                </label>
+            </div>
+            <div class="kpis aporte-kpis" id="aporteKpis"></div>
+            <div class="aporte-note" id="aporteNote" role="status" aria-live="polite"></div>
+
+            <h3>Resumo por classe</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Classe</th>
+                            <th class="r">Saldo atual</th>
+                            <th class="r">% atual</th>
+                            <th class="r">% meta</th>
+                            <th class="r">Valor ideal</th>
+                            <th class="r">A investir (ideal − saldo)</th>
+                            <th class="r">Sugestão</th>
+                            <th>Atual × meta</th>
+                        </tr>
+                    </thead>
+                    <tbody id="aporteClassBody"></tbody>
+                </table>
+            </div>
+
+            <h3>Por ativo</h3>
+            <div class="table-container">
+                <table id="aporteTable">
+                    <thead>
+                        <tr>
+                            <th class="c pick">Escolher</th>
+                            <th>Ativo</th>
+                            <th>Situação</th>
+                            <th class="r">Saldo atual</th>
+                            <th class="r">% atual</th>
+                            <th class="r">% meta</th>
+                            <th class="r">Valor ideal</th>
+                            <th class="r">A investir (ideal − saldo)</th>
+                            <th class="r">Sugestão</th>
+                            <th class="r">Cotas</th>
+                            <th class="r">Valor efetivo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="aporteAssetsBody"></tbody>
+                </table>
+            </div>
+            <p class="small" id="aporteWarnings" role="status"></p>
+
+            <div class="aporte-actions">
+                <button type="button" class="btn" id="aporteRegisterBtn" aria-expanded="false" aria-controls="batchPanel" hidden>Registrar compras sugeridas</button>
+                <div class="form-msg" id="aporteMsg" role="status" aria-live="polite"></div>
+            </div>
+
+            <!-- Conferência das compras sugeridas: tudo é gravado num único PUT, ou nada. -->
+            <div class="subpanel" id="batchPanel" role="region" aria-labelledby="batchTitle" hidden>
+                <h3 id="batchTitle">Conferir compras sugeridas</h3>
+                <div class="form-grid">
+                    <label class="field">Data de todos os lançamentos
+                        <input type="date" id="batchDate" class="select">
+                    </label>
+                </div>
+                <div class="table-container">
+                    <table id="batchTable">
+                        <thead>
+                            <tr>
+                                <th class="c">Incluir</th>
+                                <th>Ativo</th>
+                                <th>Data</th>
+                                <th class="r">Quantidade</th>
+                                <th class="r">Preço</th>
+                                <th class="r">Câmbio</th>
+                                <th class="r">Taxas</th>
+                                <th class="r">Total (R$)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="batchBody"></tbody>
+                    </table>
+                </div>
+                <p class="aporte-note" id="batchSummary" role="status" aria-live="polite"></p>
+                <div class="batch-buttons">
+                    <button type="button" class="btn" id="batchConfirmBtn">Confirmar lançamentos</button>
+                    <button type="button" class="btn-secondary" id="batchCancelBtn">Cancelar</button>
+                </div>
+                <div class="form-msg" id="batchMsg" role="status" aria-live="polite"></div>
+            </div>
+            <p class="small muted">Valor ideal = (patrimônio atual + aporte) × % meta; "a investir" pode ser negativo (acima do ideal). A meta de cada ativo é, por padrão, a meta da classe dividida igualmente entre os ativos com posição; digite um % para fixá-la (os demais dividem o restante) ou apague o campo para voltar ao automático.
+                A sugestão só compra: divide o aporte entre os ativos elegíveis proporcionalmente ao que falta para o valor ideal. Ativos com situação <strong>Vender</strong> nunca recebem aporte. No modo pullback, só recebem os ativos em setup agora (mesma regra e base do screener) e a renda fixa, pela meta.
+                Cotas = sugestão ÷ preço em reais, arredondado para baixo (inteiras na B3; 4 casas para EUA e cripto). Barras: faixa de cima = % atual; de baixo = % após a sugestão; traço = meta.
+                "Registrar compras sugeridas" abre a lista para conferir quantidade, preço, câmbio e data antes de gravar; os lançamentos entram juntos no histórico.</p>
+            </div>
+        </div>
+
+        <div class="panel" id="operationsPanel">
+            <h2>Nova operação</h2>
+            <form id="txForm" novalidate>
+                <div class="form-grid">
+                    <label class="field">Ativo
+                        <input type="text" id="txTicker" class="select" placeholder="Ex.: PETR4" autocomplete="off" spellcheck="false" required>
+                    </label>
+                    <label class="field">Tipo
+                        <select id="txType" class="select">
+                            <option value="compra">Compra</option>
+                            <option value="venda">Venda</option>
+                        </select>
+                    </label>
+                    <label class="field">Data
+                        <input type="date" id="txDate" class="select" required>
+                    </label>
+                    <label class="field">Quantidade
+                        <input type="number" id="txQty" class="select" min="0" step="any" inputmode="decimal" required>
+                    </label>
+                    <label class="field" id="txMarketField" hidden>Mercado
+                        <select id="txMarket" class="select"></select>
+                    </label>
+                    <label class="field"><span id="txPriceLabel">Preço (R$)</span>
+                        <input type="number" id="txPrice" class="select" min="0" step="any" inputmode="decimal" required aria-describedby="txPriceHint">
+                        <span class="field-hint" id="txPriceHint"></span>
+                    </label>
+                    <label class="field" id="txFxField" hidden>Câmbio (R$ por US$)
+                        <input type="number" id="txFx" class="select" min="0" step="any" inputmode="decimal" aria-describedby="txFxHint">
+                        <span class="field-hint" id="txFxHint"></span>
+                    </label>
+                    <label class="field"><span id="txFeesLabel">Taxas (R$)</span>
+                        <input type="number" id="txFees" class="select" min="0" step="any" value="0" inputmode="decimal">
+                    </label>
+                    <label class="field" id="txClassField" hidden>Classe do ativo
+                        <select id="txClass" class="select"></select>
+                    </label>
+                    <div><button type="submit" class="btn">Adicionar</button></div>
+                </div>
+                <div class="form-msg" id="txMsg" role="status" aria-live="polite"></div>
+            </form>
+
+            <div class="subpanel">
+                <h2>Renda fixa</h2>
+                <form id="fiNewForm" novalidate>
+                    <div class="form-grid">
+                        <label class="field">Nome do título
+                            <input type="text" id="fiName" class="select" placeholder="Ex.: Tesouro Selic 2029" autocomplete="off" required>
+                        </label>
+                        <label class="field">Classe
+                            <select id="fiClass" class="select"></select>
+                        </label>
+                        <div><button type="submit" class="btn-secondary">Criar título</button></div>
+                    </div>
+                </form>
+                <form id="fiEntryForm" novalidate style="margin-top: 14px;">
+                    <div class="form-grid">
+                        <label class="field">Título
+                            <select id="fiItem" class="select"></select>
+                        </label>
+                        <label class="field">Lançamento
+                            <select id="fiType" class="select">
+                                <option value="aporte">Aporte</option>
+                                <option value="resgate">Resgate</option>
+                                <option value="valor_atual">Atualizar valor atual</option>
+                            </select>
+                        </label>
+                        <label class="field">Data
+                            <input type="date" id="fiDate" class="select" required>
+                        </label>
+                        <label class="field">Valor (R$)
+                            <input type="number" id="fiAmount" class="select" min="0" step="0.01" inputmode="decimal" required>
+                        </label>
+                        <div><button type="submit" class="btn">Registrar</button></div>
+                    </div>
+                </form>
+                <div class="form-msg" id="fiMsg" role="status" aria-live="polite"></div>
+            </div>
+        </div>
+
+        <div class="panel" id="historyPanel">
+            <h2>Histórico de lançamentos</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Ativo</th>
+                            <th>Tipo</th>
+                            <th class="r">Qtd</th>
+                            <th class="r">Preço</th>
+                            <th class="r">Total</th>
+                            <th class="c"><span class="sr-only">Ações</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody"></tbody>
+                </table>
+            </div>
+            <button type="button" class="btn-secondary history-toggle" id="historyToggle" aria-expanded="false" aria-controls="historyBody" hidden>Ver todos</button>
+        </div>
+    </section>
+
+    <!-- ============================================================ Proventos -->
+    <section id="panel-proventos" role="tabpanel" aria-labelledby="tab-proventos" tabindex="0" hidden>
+        <div class="panel" data-no-entries>
+            <h2>Proventos recebidos</h2>
+            <p class="muted">Os proventos aparecem depois do primeiro lançamento de um ativo.</p>
+        </div>
+        <div class="panel" data-needs-entries>
+            <h2>Proventos a receber</h2>
+            <p class="small muted" id="receivableTotals"></p>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Pagamento</th>
+                            <th>Data-com</th>
+                            <th>Ativo</th>
+                            <th>Tipo</th>
+                            <th class="r">Valor por cota</th>
+                            <th class="r">Qtd na data-com</th>
+                            <th class="r">Total bruto</th>
+                            <th>Situação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="receivablesBody"></tbody>
+                </table>
+            </div>
+            <p class="small muted">Proventos anunciados por empresas e FIIs na B3 e ainda não pagos. <strong>Confirmado</strong>: a data-com já passou e a quantidade é a que você tinha nela. <strong>Previsto</strong>: a data-com é hoje ou futura e a quantidade é a atual, então só vale se o ativo for mantido até lá. Os confirmados já aparecem em Proventos recebidos e na rentabilidade, que contam pela data-ex. Cobre ações, units e FIIs; ETFs, BDRs e ativos dos EUA e cripto ficam de fora.</p>
+        </div>
+        <div class="panel" data-needs-entries>
+            <h2>Proventos recebidos</h2>
+            <p class="small muted" id="dividendTotals"></p>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data-com</th>
+                            <th>Ativo</th>
+                            <th class="r">Valor por cota</th>
+                            <th class="r">Qtd na data</th>
+                            <th class="r">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dividendsBody"></tbody>
+                </table>
+            </div>
+            <p class="small muted">Valores brutos estimados pela data-com e pelos proventos informados pelo Yahoo Finance (data-ex). JCP tem 15% de IR retido na fonte; dividendos de ativos dos EUA aparecem brutos, sem os 30% de IR retidos lá, convertidos pelo câmbio USDBRL da data-ex. Os valores podem diferir do extrato da corretora.</p>
+        </div>
+    </section>
+
+    <!-- ============================================================ Configurações -->
+    <section id="panel-configuracoes" role="tabpanel" aria-labelledby="tab-configuracoes" tabindex="0" hidden>
+        <div class="panel">
+            <h2>Classes e metas</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Classe</th>
+                            <th class="r">Meta (%)</th>
+                            <th>Ativos e títulos</th>
+                            <th class="c"><span class="sr-only">Remover</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="allocationBody"></tbody>
+                </table>
+            </div>
+            <p class="small" id="targetsWarning" role="status"></p>
+            <form id="classForm" novalidate>
+                <div class="form-grid">
+                    <label class="field">Nova classe
+                        <input type="text" id="classNewName" class="select" maxlength="40" placeholder="Ex.: Cripto" autocomplete="off">
+                    </label>
+                    <label class="field">Meta (%)
+                        <input type="number" id="classNewTarget" class="select" min="0" max="100" step="0.5" inputmode="decimal" placeholder="0">
+                    </label>
+                    <div><button type="submit" class="btn-secondary">Adicionar classe</button></div>
+                </div>
+            </form>
+            <form id="moveForm" novalidate style="margin-top: 12px;">
+                <div class="form-grid">
+                    <label class="field">Mover ativo
+                        <select id="moveAsset" class="select"></select>
+                    </label>
+                    <label class="field">Para a classe
+                        <select id="moveClass" class="select"></select>
+                    </label>
+                    <div><button type="submit" class="btn-secondary">Mover</button></div>
+                </div>
+            </form>
+            <div class="form-msg" id="classMsg" role="status" aria-live="polite"></div>
+        </div>
+
+        <div class="panel">
+            <h2>Meta por ativo</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ativo</th>
+                            <th class="r">% atual</th>
+                            <th class="r">Meta (% do patrimônio)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="assetTargetsBody"></tbody>
+                </table>
+            </div>
+            <p class="small" id="assetTargetsWarnings" role="status"></p>
+            <p class="small muted">Por padrão, a meta de cada ativo é a meta da classe dividida igualmente entre os ativos com posição. Digite um % para fixá-la (os demais da classe dividem o restante) ou apague o campo para voltar ao automático. A mesma meta pode ser editada na tabela da aba Aportar.</p>
+        </div>
+    </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="assets/js/core.js"></script>
+<script src="assets/js/carteira.js"></script>
+
+</body>
+</html>
