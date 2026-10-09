@@ -1,23 +1,25 @@
-"""Banco de dados da aplicação: uma tabela Parquet por arquivo na pasta data/.
+"""Banco de dados da aplicação: tabelas com esquema fixo (SCHEMAS), em dois lugares.
 
-Cada tabela tem um esquema fixo (SCHEMAS). read_table devolve as linhas como dicts, na ordem
-gravada (a ordem das linhas é a ordem de exibição: carteiras, classes, ativos...);
-write_tables grava várias tabelas juntas: primeiro todos os temporários, depois, se pedido,
-copia a versão anterior para data/backup/ e troca os arquivos (os.replace). Tabela que ainda
-não existe é lida como vazia.
+- Servidor local: uma tabela Parquet por arquivo na pasta data/ (precisa do pyarrow,
+  pip install -r requirements.txt). write_tables grava primeiro todos os temporários, depois,
+  se pedido, copia a versão anterior para data/backup/ e troca os arquivos (os.replace).
+- Navegador (versão publicada, runtime.BROWSER): cada tabela é um JSON numa linha do D1 do
+  Cloudflare, lida e gravada pela rota /db do Worker (worker/index.js); as tabelas de uma
+  gravação vão juntas numa transação e backup=True guarda a versão anterior em outra tabela.
 
-Precisa do pyarrow (pip install -r requirements.txt).
+read_table devolve as linhas como dicts, na ordem gravada (a ordem das linhas é a ordem de
+exibição: carteiras, classes, ativos...). Tabela que ainda não existe é lida como vazia.
+Valores que não cabem no tipo da coluna levantam TypeError/ValueError e nada é gravado.
 """
 
+import json
 import os
 import shutil
 import threading
+import urllib.parse
 from pathlib import Path
 
-import pyarrow as pa
-import pyarrow.parquet as pq
-
-from . import config
+from . import config, runtime
 
 # Atributos do módulo (e não constantes do config) para que os testes troquem a pasta do banco.
 DATA_DIR: Path = config.DATA_DIR
@@ -25,11 +27,12 @@ BACKUP_DIR: Path = DATA_DIR / "backup"
 
 _lock = threading.RLock()
 
-_str, _f64, _i64, _bool = pa.string(), pa.float64(), pa.int64(), pa.bool_()
+_str, _f64, _i64, _bool = "string", "float64", "int64", "bool"
 
 
 def _schema(*fields):
-    return pa.schema([pa.field(name, kind) for name, kind in fields])
+    """Colunas da tabela, em ordem: {nome: tipo}."""
+    return dict(fields)
 
 
 # Campos de uma análise do screener (uma linha por ativo × base): coluna, caminho no dict, tipo.
@@ -81,42 +84,128 @@ def table_path(name) -> Path:
 
 
 def exists(name) -> bool:
+    if runtime.BROWSER:
+        return _remote_read([name])[name] is not None
     return table_path(name).exists()
 
 
 def read_table(name) -> list:
     """Linhas da tabela como dicts (colunas do esquema), na ordem gravada; [] se não existe."""
+    return read_tables([name])[name]
+
+
+def read_tables(names) -> dict:
+    """{nome: linhas} de várias tabelas (no navegador, numa só requisição)."""
     with _lock:
-        path = table_path(name)
-        if not path.exists():
-            return []
-        return pq.read_table(path).to_pylist()
+        if runtime.BROWSER:
+            return {name: rows or [] for name, rows in _remote_read(names).items()}
+        return {name: _parquet_read(name) for name in names}
 
 
 def write_tables(tables: dict, backup=False):
-    """Grava {nome: linhas} com o esquema de cada tabela. Primeiro todos os temporários, depois
-    as trocas (os.replace); backup=True guarda a versão anterior de cada uma em data/backup/."""
+    """Grava {nome: linhas} com o esquema de cada tabela, todas juntas; backup=True guarda a
+    versão anterior de cada uma (data/backup/ ou a tabela de backup do D1)."""
     with _lock:
-        DATA_DIR.mkdir(exist_ok=True)
-        staged = []
-        try:
-            for name, rows in tables.items():
-                schema = SCHEMAS[name]
-                table = pa.Table.from_pylist([{f: r.get(f) for f in schema.names} for r in rows], schema=schema)
-                tmp = table_path(name).with_suffix(".parquet.tmp")
-                pq.write_table(table, tmp)
-                staged.append((tmp, table_path(name)))
-        except Exception:
-            for tmp, _ in staged:
-                tmp.unlink(missing_ok=True)
-            raise
-        if backup:
-            BACKUP_DIR.mkdir(exist_ok=True)
-            for _, path in staged:
-                if path.exists():
-                    shutil.copy2(path, BACKUP_DIR / path.name)
-        for tmp, path in staged:
-            os.replace(tmp, path)
+        if runtime.BROWSER:
+            _remote_write(tables, backup)
+        else:
+            _parquet_write(tables, backup)
+
+
+# ---------------------------------------------------------------- Parquet (servidor local)
+
+
+def _arrow_schema(name):
+    import pyarrow as pa
+
+    kinds = {_str: pa.string(), _f64: pa.float64(), _i64: pa.int64(), _bool: pa.bool_()}
+    return pa.schema([pa.field(field, kinds[kind]) for field, kind in SCHEMAS[name].items()])
+
+
+def _parquet_read(name):
+    import pyarrow.parquet as pq
+
+    path = table_path(name)
+    if not path.exists():
+        return []
+    return pq.read_table(path).to_pylist()
+
+
+def _parquet_write(tables, backup):
+    """Primeiro todos os temporários, depois as trocas (os.replace)."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    DATA_DIR.mkdir(exist_ok=True)
+    staged = []
+    try:
+        for name, rows in tables.items():
+            schema = _arrow_schema(name)
+            table = pa.Table.from_pylist([{f: r.get(f) for f in schema.names} for r in rows], schema=schema)
+            tmp = table_path(name).with_suffix(".parquet.tmp")
+            pq.write_table(table, tmp)
+            staged.append((tmp, table_path(name)))
+    except Exception:
+        for tmp, _ in staged:
+            tmp.unlink(missing_ok=True)
+        raise
+    if backup:
+        BACKUP_DIR.mkdir(exist_ok=True)
+        for _, path in staged:
+            if path.exists():
+                shutil.copy2(path, BACKUP_DIR / path.name)
+    for tmp, path in staged:
+        os.replace(tmp, path)
+
+
+# ---------------------------------------------------------------- D1 (navegador)
+
+
+def _coerce(value, kind, where):
+    """Valor no tipo da coluna (como o pyarrow: número inteiro vale em float64, nada além)."""
+    if value is None:
+        return None
+    if kind == _str and isinstance(value, str):
+        return value
+    if kind == _bool and isinstance(value, bool):
+        return value
+    if not isinstance(value, bool) and isinstance(value, (int, float)):
+        if kind == _f64:
+            return float(value)
+        if kind == _i64 and float(value).is_integer():
+            return int(value)
+    raise TypeError(f"{where}: {value!r} não é {kind}")
+
+
+def _typed_rows(name, rows):
+    schema = SCHEMAS[name]
+    return [{f: _coerce(r.get(f), kind, f"{name}.{f}") for f, kind in schema.items()} for r in rows]
+
+
+def _remote_error(status, text):
+    try:
+        message = json.loads(text).get("message")
+    except (ValueError, AttributeError):
+        message = None
+    return OSError(f"banco de dados indisponível (HTTP {status}): {message or text[:200]}")
+
+
+def _remote_read(names):
+    """GET /db?names=a,b → {nome: linhas | None (tabela ainda não gravada)}."""
+    status, text = runtime.http_request("GET", "/db?" + urllib.parse.urlencode({"names": ",".join(names)}))
+    if status != 200:
+        raise _remote_error(status, text)
+    data = json.loads(text)
+    return {name: data.get(name) for name in names}
+
+
+def _remote_write(tables, backup):
+    """PUT /db com cada tabela como texto JSON (o Worker guarda o texto como veio)."""
+    payload = {name: json.dumps(_typed_rows(name, rows), ensure_ascii=False) for name, rows in tables.items()}
+    body = json.dumps({"backup": bool(backup), "tables": payload}, ensure_ascii=False)
+    status, text = runtime.http_request("PUT", "/db", body)
+    if status != 200:
+        raise _remote_error(status, text)
 
 
 # ---------------------------------------------------------------- Análises do screener

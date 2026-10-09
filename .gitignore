@@ -12,3 +12,9 @@ venv/
 
 # Arquivos temporários de testes manuais
 tmp/
+
+# Publicação no Cloudflare (gerados)
+dist/
+node_modules/
+.wrangler/
+.dev.vars

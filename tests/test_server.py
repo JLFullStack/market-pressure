@@ -70,7 +70,7 @@ class ServerTest(DatabaseTestCase):
         with mock.patch.object(market_data, "universe", side_effect=market_data.UpstreamError("brapi fora")):
             self.assertEqual(self.request("GET", "/api/universe")[:2], (502, {"message": "brapi fora"}))
         with mock.patch.object(market_data, "universe", side_effect=KeyError("bug")), \
-                self.assertLogs("marketpressure.server", "ERROR"):
+                self.assertLogs("marketpressure.api", "ERROR"):
             self.assertEqual(self.request("GET", "/api/universe")[0], 500)
 
     def test_nan_becomes_null(self):

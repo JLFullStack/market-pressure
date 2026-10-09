@@ -9,6 +9,10 @@
 As funções load_* devolvem o formato bruto das rotas /api/*; history() devolve os candles no
 formato usado nos cálculos ({date, o, h, l, c, v, adj}). Falha de uma fonte externa (rede,
 HTTP, resposta sem dados) levanta UpstreamError, que o servidor devolve como HTTP 502.
+
+No navegador (versão publicada, runtime.BROWSER) as fontes não mandam CORS: cada URL vai pelo
+repasse /proxy do Worker do Cloudflare, que acrescenta o token da brapi. A varredura busca os
+históricos em paralelo no JavaScript e os entrega antes (prime), já que lá não há threads.
 """
 
 import base64
@@ -21,7 +25,7 @@ import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
-from . import config
+from . import config, runtime
 from . import database as db
 from .core import iso_day_in
 
@@ -36,7 +40,7 @@ B3_COMPANY_API = "https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/
 # câmbio (ex.: USDBRL -> USDBRL=X).
 YAHOO_SYMBOL = {"b3": "{}.SA", "us": "{}", "crypto": "{}-USD", "fx": "{}=X"}
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
-
+PROXY = "/proxy?url="  # repasse do Worker do Cloudflare (só no navegador)
 
 
 class UpstreamError(RuntimeError):
@@ -58,7 +62,45 @@ def cached(key, loader, ttl=CACHE_TTL_SECONDS):
     return value
 
 
+_primed: dict[str, tuple[int, str]] = {}
+
+
+def prime(url, status, text):
+    """Resposta já buscada pelo navegador (status, texto) para a próxima http_json(url)."""
+    _primed[url] = (status, text)
+
+
+def proxy_url(url):
+    return PROXY + urllib.parse.quote(url, safe="")
+
+
+def _error_message(body, status):
+    """Mensagem de erro de uma resposta HTTP (brapi: message; Yahoo: chart.error)."""
+    if not isinstance(body, dict):
+        body = {}
+    message = body.get("message") or (body.get("chart") or {}).get("error", {}) or f"HTTP {status}"
+    return message if isinstance(message, str) else json.dumps(message)
+
+
+def _browser_json(url):
+    status, text = _primed.pop(url, None) or runtime.http_request("GET", proxy_url(url))
+    host = urllib.parse.urlsplit(url).hostname
+    if status == 0:
+        raise UpstreamError(f"falha ao consultar {host}: {text or 'sem conexão'}")
+    try:
+        body = json.loads(text)
+    except ValueError:
+        if status == 200:
+            raise UpstreamError(f"falha ao consultar {host}: resposta inválida") from None
+        body = {}
+    if status != 200:
+        raise UpstreamError(_error_message(body, status))
+    return body
+
+
 def http_json(url):
+    if runtime.BROWSER:
+        return _browser_json(url)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=config.HTTP_TIMEOUT_SECONDS) as response:
@@ -68,10 +110,7 @@ def http_json(url):
             body = json.load(err)
         except ValueError:
             body = {}
-        if not isinstance(body, dict):
-            body = {}
-        message = body.get("message") or (body.get("chart") or {}).get("error", {}) or f"HTTP {err.code}"
-        raise UpstreamError(message if isinstance(message, str) else json.dumps(message)) from None
+        raise UpstreamError(_error_message(body, err.code)) from None
     except (OSError, ValueError) as err:  # sem rede, tempo esgotado, JSON inválido
         raise UpstreamError(f"falha ao consultar {urllib.parse.urlsplit(url).hostname}: {err}") from None
 
@@ -106,6 +145,12 @@ def universe():
     return cached("universe", load_universe)
 
 
+def history_url(ticker: str, market: str = "b3") -> str:
+    symbol = YAHOO_SYMBOL[market].format(ticker)
+    return (f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}"
+            "?range=5y&interval=1d&events=div")
+
+
 def load_history(ticker: str, market: str = "b3") -> dict:
     """Candles diários de 5 anos do Yahoo Finance (OHLC sem ajuste por proventos) e proventos.
 
@@ -119,10 +164,7 @@ def load_history(ticker: str, market: str = "b3") -> dict:
     dividends: [{"date": ts, "amount": valor por cota}], em ordem de data. A data do Yahoo
     é a data-ex (primeiro pregão sem direito); a data-com é o pregão anterior.
     """
-    symbol = YAHOO_SYMBOL[market].format(ticker)
-    url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}"
-           "?range=5y&interval=1d&events=div")
-    data = http_json(url)
+    data = http_json(history_url(ticker, market))
     result = (data.get("chart") or {}).get("result") or []
     if not result:
         raise UpstreamError(f"Yahoo sem dados para {ticker}")

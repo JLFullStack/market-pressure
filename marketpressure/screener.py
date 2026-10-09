@@ -1,8 +1,9 @@
 """Screener "Garrafa de Gás": varredura, pressão, backtest, ranking e KPI do BOVA11.
 
-A varredura roda no servidor, numa thread em segundo plano (scan_status inicia e informa o
-progresso); o resultado fica em memória e no banco (tabelas scan, scan_analyses e scan_failures em data/)
-por CONFIG["cacheTtlMinutes"].
+A varredura roda no servidor, numa thread em segundo plano (scan_job.status inicia e informa o
+progresso); o resultado fica em memória e no banco (tabelas scan, scan_analyses e scan_failures)
+por CONFIG["cacheTtlMinutes"]. No navegador (versão publicada) não há threads: scan_job.start é
+trocado por browser.py, que conduz a varredura em etapas (finish/fail no fim).
 O front-end só escolhe qual das visões prontas mostrar (base × candle de rejeição).
 """
 
@@ -10,10 +11,9 @@ import logging
 import math
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 from . import database as db
-from . import market_data
+from . import market_data, runtime
 from .core import (SETUP, add_up, avg, clamp01, closed_candles, compute_indicators, day_of,
                   evaluate_setup, exit_signal, fmt_num, session_in_progress)
 
@@ -208,17 +208,17 @@ def load_universe():
 def run_scan(progress=lambda done, total: None):
     universe = load_universe()
     analyses, failures = [], []
-    done = 0
     progress(0, len(universe))
-    with ThreadPoolExecutor(max_workers=CONFIG["batchSize"]) as pool:
-        futures = [(asset, pool.submit(analyze_ticker, asset)) for asset in universe]
-        for asset, future in futures:
-            try:
-                analyses.append(future.result())
-            except Exception as err:
-                failures.append({"ticker": asset["ticker"], "reason": str(err)})
-            done += 1
-            progress(done, len(universe))
+    for done, (asset, analysis, err) in enumerate(runtime.run_all(analyze_ticker, universe, CONFIG["batchSize"]), 1):
+        if err is None:
+            analyses.append(analysis)
+        else:
+            failures.append({"ticker": asset["ticker"], "reason": str(err)})
+        progress(done, len(universe))
+    return build_scan(universe, analyses, failures)
+
+
+def build_scan(universe, analyses, failures):
     if not analyses:
         raise RuntimeError(failures[0]["reason"] if failures else "nenhum ativo retornou dados")
     return {"version": SCAN_VERSION, "timestamp": int(time.time() * 1000), "universeSize": len(universe),
@@ -344,7 +344,8 @@ def read_scan():
 
 class ScanJob:
     """Uma varredura por vez, em segundo plano. status() devolve o resultado pronto (se ainda
-    válido) ou inicia/acompanha a varredura."""
+    válido) ou inicia/acompanha a varredura. start() dispara o trabalho (uma thread com
+    run_scan; no navegador, browser.py), que termina com finish(scan) ou fail(err)."""
 
     def __init__(self):
         self.lock = threading.Lock()
@@ -353,6 +354,7 @@ class ScanJob:
         self.error = None
         self.scan = self._read_file()
         self.payload = scan_payload(self.scan) if self.scan else None
+        self.start = lambda: threading.Thread(target=self._work, daemon=True).start()
 
     @staticmethod
     def _read_file():
@@ -370,27 +372,30 @@ class ScanJob:
 
     def _work(self):
         try:
-            scan = run_scan(self._progress)
-            payload = scan_payload(scan)
-            try:
-                write_scan(scan)
-            except Exception:
-                log.warning("não foi possível salvar a varredura no banco", exc_info=True)
-            with self.lock:
-                self.scan, self.payload, self.error = scan, payload, None
+            self.finish(run_scan(self._progress))
         except Exception as err:
-            log.warning("varredura falhou: %s", err)
-            with self.lock:
-                self.error = str(err)
-        finally:
-            with self.lock:
-                self.running = False
+            self.fail(err)
+
+    def finish(self, scan):
+        """Varredura concluída: guarda em memória e no banco."""
+        payload = scan_payload(scan)
+        try:
+            write_scan(scan)
+        except Exception:
+            log.warning("não foi possível salvar a varredura no banco", exc_info=True)
+        with self.lock:
+            self.scan, self.payload, self.error, self.running = scan, payload, None, False
+
+    def fail(self, err):
+        log.warning("varredura falhou: %s", err)
+        with self.lock:
+            self.error, self.running = str(err), False
 
     def status(self, force=False):
         with self.lock:
             if not self.running and (force or not self._fresh()) and not (self.error and not force):
                 self.running, self.done, self.total, self.error = True, 0, 0, None
-                threading.Thread(target=self._work, daemon=True).start()
+                self.start()
             if self.running:
                 return {"state": "running", "done": self.done, "total": self.total}
             if self.error:

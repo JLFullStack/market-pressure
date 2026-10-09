@@ -1,4 +1,4 @@
-"""Armazenamento das carteiras (tabelas Parquet em data/) e as alterações feitas pela página.
+"""Armazenamento das carteiras (tabelas do banco) e as alterações feitas pela página.
 
 O documento das carteiras ({"version", "portfolios": [...]}) é guardado em seis tabelas do
 banco (database.py): portfolios, portfolio_classes, portfolio_assets, transactions,
@@ -46,7 +46,7 @@ def _optional(item, key, value):
 def read_raw() -> dict:
     """Monta o documento a partir das tabelas (vazio se ainda não há carteiras)."""
     with _lock:
-        rows = {name: db.read_table(name) for name in PORTFOLIO_TABLES}
+        rows = db.read_tables(PORTFOLIO_TABLES)
     by_portfolio = {name: {} for name in PORTFOLIO_TABLES[1:]}
     for name, grouped in by_portfolio.items():
         for r in rows[name]:

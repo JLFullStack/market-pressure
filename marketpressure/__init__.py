@@ -2,13 +2,15 @@
 
 Camadas (cada uma só usa as de baixo):
 
-    server             HTTP: rotas /api/* e arquivos de web/
+    server, browser    servidor HTTP local / ponte do navegador (versão publicada, Pyodide)
+    api                rotas /api/* (as mesmas nas duas pontas)
     screener           varredura, ranking e KPI do BOVA11
     portfolio_store    carteiras no banco e as ações que as alteram
     portfolio_service  carrega os dados e monta os payloads da aba Carteira
     portfolio          cálculos puros da carteira (sem rede nem disco)
     market_data        fontes externas (brapi, Yahoo, BCB, B3) com cache em memória
-    database           tabelas Parquet em data/
+    database           tabelas: Parquet em data/ (local) ou D1 (publicado)
     core               relógio da B3, indicadores, regras do setup, formatadores
+    runtime            servidor (threads, urllib) ou navegador (sequencial, XHR)
     config             caminhos, endereço do servidor, token e tempos de cache (.env)
 """

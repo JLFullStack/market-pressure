@@ -1,0 +1,23 @@
+// Publicação no Cloudflare Workers (deploy pelo GitHub: npx wrangler deploy).
+// O build monta dist/ (páginas + pacote Python); o Worker em worker/index.js serve dist/ e
+// atende /proxy (fontes de dados) e /db (banco D1). Segredo: BRAPI_TOKEN (painel do Worker →
+// Settings → Variables and Secrets).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "market-pressure",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-09-01",
+  "build": { "command": "node scripts/build.mjs" },
+  "assets": { "directory": "dist", "binding": "ASSETS" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "market-pressure",
+      // Id do banco criado no painel (Storage & Databases → D1) ou com: npx wrangler d1 create market-pressure
+      "database_id": "f533ac13-5aa7-4c95-8539-bddb9cc30a39"
+    }
+  ],
+  // Domínio próprio: depois que lucasaraujo.dev.br estiver ativo no Cloudflare.
+  "routes": [{ "pattern": "marketpressure.lucasaraujo.dev.br", "custom_domain": true }],
+  "observability": { "enabled": true }
+}

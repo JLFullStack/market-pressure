@@ -6,10 +6,9 @@
 import json
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
-from . import market_data
+from . import market_data, runtime
 from .core import add_up, day_of, session_in_progress, today_iso
 from .portfolio import (APORTE_MODES, BENCHMARK, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
                         analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_items,
@@ -93,13 +92,11 @@ def load_histories(portfolio):
     if any(market_of(portfolio, t) != "b3" for t in tickers):
         requests.append((FX, "fx"))
     histories, failed = {}, []
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [(t, pool.submit(quote_history, t, m)) for t, m in requests]
-        for t, future in futures:
-            try:
-                histories[t] = future.result()
-            except Exception as err:
-                failed.append(f"{t} ({err})")
+    for (t, _), hist, err in runtime.run_all(lambda r: quote_history(*r), requests):
+        if err is None:
+            histories[t] = hist
+        else:
+            failed.append(f"{t} ({err})")
     return histories, failed
 
 
@@ -212,13 +209,13 @@ def receivables(portfolio):
     tickers = [t for t in dict.fromkeys(tx["ticker"] for tx in portfolio["transactions"])
                if market_of(portfolio, t) == "b3"]
     rows, failed = [], []
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [(t, pool.submit(market_data.proventos, t)) for t in tickers]
-        for t, future in futures:
-            try:
-                rows.extend(dividends_to_receive(portfolio["transactions"], t, future.result()["events"]))
-            except Exception as err:
-                failed.append(f"{t} ({err})")
+    for t, data, err in runtime.run_all(market_data.proventos, tickers):
+        try:
+            if err is not None:
+                raise err
+            rows.extend(dividends_to_receive(portfolio["transactions"], t, data["events"]))
+        except Exception as err:
+            failed.append(f"{t} ({err})")
     rows.sort(key=lambda r: (r["paymentDate"] or "9999-99-99", r["ticker"]))
     return {"rows": rows, "failed": failed, "total": add_up(r["total"] for r in rows),
             "net": add_up(r["net"] for r in rows), "expected": add_up(r["total"] for r in rows if not r["confirmed"]),

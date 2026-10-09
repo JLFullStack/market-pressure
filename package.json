@@ -1,0 +1,14 @@
+{
+  "name": "market-pressure",
+  "private": true,
+  "description": "Publicação do MarketPressure no Cloudflare Workers (Python no navegador via Pyodide + D1)",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.136.3"
+  }
+}

@@ -1,12 +1,16 @@
-// Base comum das abas Screener (app.js) e Carteira (carteira.js): acesso à API do server.py
-// e formatadores de tela. Script clássico, carregado antes do script da página.
-// Todos os cálculos (indicadores, setup, ranking, carteira, aporte) ficam no servidor, em
-// Python; aqui só se busca o resultado pronto e se exibe.
-
-// Se a página for aberta por outro servidor (ex.: Live Server), as chamadas vão para a porta
-// padrão do server.py.
+// Base comum das abas Screener (app.js) e Carteira (carteira.js): acesso à API e formatadores
+// de tela. Script clássico, carregado antes do script da página.
+// Todos os cálculos (indicadores, setup, ranking, carteira, aporte) ficam no Python; aqui só
+// se busca o resultado pronto e se exibe.
+//
+// Onde o Python roda:
+// - local: no server.py. Se a página for aberta por outro servidor local (ex.: Live Server),
+//   as chamadas vão para a porta padrão do server.py;
+// - versão publicada (Cloudflare) e wrangler dev (porta 8787): no próprio navegador (Pyodide,
+//   num Web Worker, assets/js/py-worker.js), com as mesmas rotas /api.
 const SERVER_PORT = "8765";
 const API = location.port === SERVER_PORT ? "/api" : `http://127.0.0.1:${SERVER_PORT}/api`;
+const IN_BROWSER = !/^(localhost|127\.0\.0\.1)$/.test(location.hostname) || location.port === "8787";
 
 const MODE_KEY = "marketpressure_base_mode"; // base "fechamento" | "intradiario", comum às duas abas
 const OFFLINE = 'servidor local fora do ar — rode "python server.py" na pasta do projeto';
@@ -21,10 +25,52 @@ class ApiError extends Error {
     constructor(message, status, data = {}) { super(message); this.status = status; this.data = data; }
 }
 
+// Python no navegador: um Web Worker para as duas abas da página, iniciado no primeiro pedido
+// (o primeiro carregamento baixa o Pyodide, alguns segundos; depois fica no cache).
+let pyWorker = null;
+let pySeq = 0;
+const pyPending = new Map();
+
+function pyCall(method, path, body) {
+    if (!pyWorker) {
+        pyWorker = new Worker('assets/js/py-worker.js');
+        pyWorker.onmessage = (e) => {
+            const resolve = pyPending.get(e.data.id);
+            pyPending.delete(e.data.id);
+            if (resolve) resolve(e.data);
+        };
+        pyWorker.onerror = (e) => {
+            const message = `falha ao iniciar o Python no navegador${e.message ? `: ${e.message}` : ''}`;
+            for (const resolve of pyPending.values()) resolve({ status: 500, data: { message } });
+            pyPending.clear();
+            pyWorker = null;
+        };
+    }
+    return new Promise(resolve => {
+        const id = ++pySeq;
+        pyPending.set(id, resolve);
+        pyWorker.postMessage({ id, method, path: `/api${path}`, body: body === undefined ? null : JSON.stringify(body) });
+    });
+}
+
+// {status, data} do pedido; erro de rede só no modo local (servidor fora do ar).
+async function send(method, path, body) {
+    if (IN_BROWSER) return pyCall(method, path, body);
+    const init = method === 'GET' ? undefined
+        : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+    const response = await fetch(`${API}${path}`, init);
+    return { status: response.status, data: await response.json().catch(() => ({})) };
+}
+
+function checked({ status, data }) {
+    if (status < 200 || status >= 300) throw new ApiError(data.message || `HTTP ${status}`, status, data);
+    return data;
+}
+
 async function apiGet(path, retries = 2) {
-    let response;
+    let res;
     try {
-        response = await fetch(`${API}${path}`);
+        res = await send('GET', path);
     } catch (e) {
         if (retries > 0) {
             await sleep(1000);
@@ -32,28 +78,22 @@ async function apiGet(path, retries = 2) {
         }
         throw new Error(OFFLINE);
     }
-    if ((response.status === 429 || response.status === 502) && retries > 0) {
+    if ((res.status === 429 || res.status === 502) && retries > 0) {
         await sleep(1500);
         return apiGet(path, retries - 1);
     }
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new ApiError(data.message || `HTTP ${response.status}`, response.status, data);
-    return data;
+    return checked(res);
 }
 
 // POST com corpo JSON (sem novas tentativas: pode gravar).
 async function apiPost(path, body) {
-    let response;
+    let res;
     try {
-        response = await fetch(`${API}${path}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-        });
+        res = await send('POST', path, body);
     } catch (e) {
         throw new Error(OFFLINE);
     }
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new ApiError(data.message || `HTTP ${response.status}`, response.status, data);
-    return data;
+    return checked(res);
 }
 
 // ---------------------------------------------------------------- Formatadores
