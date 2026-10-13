@@ -108,6 +108,13 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
 
 .table-container { overflow-x: auto; padding: 0; }
 
+/* Screener: um painel por tipo de ativo (app.js: rankingPanel). */
+.ranking { padding: 0; overflow: hidden; }
+.ranking-head { padding: 16px 16px 12px; }
+.ranking-head h2 { margin-bottom: 6px; }
+.ranking-head .regime { margin-top: 8px; }
+.ranking-note { margin-top: 8px; font-size: 13px; color: var(--warning); }
+
 table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
 th {
     background-color: rgba(48, 54, 61, 0.3);

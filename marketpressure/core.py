@@ -102,6 +102,16 @@ def last_close(now: float | None = None) -> float:
     return close.timestamp()
 
 
+def adjusted_candles(candles: list) -> list:
+    """Candles ajustados por proventos (o, h, l e c × adj / c; volume igual): a queda da data-ex
+    deixa de parecer pullback. O último candle tem fator 1, então o preço atual não muda."""
+    out = []
+    for c in candles:
+        f = c["adj"] / c["c"] if c["c"] else 1.0
+        out.append({**c, "o": c["o"] * f, "h": c["h"] * f, "l": c["l"] * f, "c": c["c"] * f})
+    return out
+
+
 # ---------------------------------------------------------------- Indicadores
 
 def sma(values, n):

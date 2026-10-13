@@ -14,16 +14,34 @@ import time
 
 from . import database as db
 from . import market_data, runtime
-from .core import (SETUP, add_up, avg, clamp01, closed_candles, compute_indicators, day_of,
+from .core import (SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
                   evaluate_setup, exit_signal, fmt_num, in_session_hours, last_close, session_in_progress)
 
 CONFIG = {
-    # Universo: ações com volume financeiro médio (fechamento × volume) dos últimos pregões
-    # fechados acima do piso. A média evita que um ativo saia por causa de um único dia fraco;
-    # o volume do dia (lista da brapi) só descarta antes os que estão muito longe do piso.
+    # Universo: ativos da lista do Yahoo (market_data.load_universe) de quatro tipos, cada um com
+    # o seu ranking (KINDS), com volume financeiro médio (fechamento × volume) dos últimos pregões
+    # fechados acima do piso do tipo. A média evita que um ativo saia por causa de um único dia
+    # fraco; a média de 3 meses da lista só descarta antes os que estão muito longe do piso.
     "minAvgVolume": 5_000_000,  # R$ por pregão
+    "minAvgVolumeByKind": {"fundos": 3_000_000},  # fundos: book raso abaixo disso, mas R$ 3 mi bastam
     "liquidityWindow": 20,      # pregões da média
-    "prefilterRatio": 0.25,     # candidato: volume do dia >= 25% do piso
+    "prefilterRatio": 0.6,      # candidato: média de 3 meses (lista do Yahoo) >= 60% do piso
+    # Fundos (FII, Fiagro, FI-Infra) caem todo mês o valor do rendimento na data-ex: com o preço
+    # bruto, a MM200 fica inclinada para baixo e a regra de saída dispara à toa (HGLG11: 34
+    # vendas em 5 anos contra 15 no ajustado). Eles usam o preço ajustado por proventos.
+    "adjustDividends": ("fundos",),
+    # Pesos da pressão. BDRs sem o componente Volume: na B3 o volume é do formador de mercado e
+    # da arbitragem, não descoberta de preço (redistribuição proporcional dos outros três).
+    "pressureWeights": {"default": {"volume": 0.25, "momentum": 0.30, "trend": 0.25, "structure": 0.20},
+                        "bdrs": {"volume": 0.0, "momentum": 0.40, "trend": 0.33, "structure": 0.27}},
+    # ETFs: os de amplitude diária média (máxima − mínima) abaixo de 0,3% em 250 pregões são de
+    # renda fixa (sem pullbacks) e saem; e um só por índice: o que tem retornos diários com
+    # correlação >= 0,98 com um ETF mais líquido é marcado como duplicado (duplicateOf).
+    "etfMinRange": 0.003,
+    "etfRangeWindow": 250,
+    "etfDuplicateCorrelation": 0.98,
+    "etfCorrelationWindow": 120,
+    "regimeMinAssets": 20,      # amplitude/regime do tipo só com pelo menos 20 ativos
     "batchSize": 8,           # requisições simultâneas ao Yahoo
     "cacheTtlMinutes": 60,
     "topN": 20,
@@ -41,8 +59,13 @@ CONFIG = {
 
 log = logging.getLogger(__name__)
 
-SCAN_VERSION = 2  # mude se o formato das análises mudar (descarta a varredura salva no banco)
+SCAN_VERSION = 3  # mude se o formato das análises mudar (descarta a varredura salva no banco)
 MODES = ("fechamento", "intradiario")
+KINDS = ("acoes", "fundos", "etfs", "bdrs")  # tipos de ativo (market_data.asset_kind), um ranking cada
+
+
+def min_avg_volume(kind):
+    return CONFIG["minAvgVolumeByKind"].get(kind, CONFIG["minAvgVolume"])
 
 # ---------------------------------------------------------------- Auxiliares de pressure()
 
@@ -77,9 +100,10 @@ def mean_in(values, a, b):
 
 # ---------------------------------------------------------------- Pressão e backtest
 
-def pressure(ind, i, setup, live=False):
+def pressure(ind, i, setup, live=False, weights=None):
     """Pressão da "garrafa de gás": gás comprador acumulado no pullback desde o topo (topIdx).
-    live: pregão em andamento — o volume parcial do dia é ignorado (volume usa e = i − 1)."""
+    live: pregão em andamento — o volume parcial do dia é ignorado (volume usa e = i − 1).
+    weights: pesos dos quatro componentes (CONFIG["pressureWeights"]; padrão 25/30/25/20)."""
     t = setup["topIdx"]
     e = i - 1 if live else i
     candles, closes = ind["candles"], ind["closes"]
@@ -127,7 +151,8 @@ def pressure(ind, i, setup, live=False):
     range5_atr = (max_in(highs, i - 4, i) - min_in(lows, i - 4, i)) / atr_now if atr_now else 4
     structure = 100 * (0.6 * (1 - bbw_pct) + 0.4 * clamp01((4 - range5_atr) / 2))
 
-    total = 0.25 * volume + 0.30 * momentum + 0.25 * trend + 0.20 * structure
+    w = weights or CONFIG["pressureWeights"]["default"]
+    total = w["volume"] * volume + w["momentum"] * momentum + w["trend"] * trend + w["structure"] * structure
     return {
         "total": total, "volume": volume, "momentum": momentum, "trend": trend, "structure": structure,
         "details": {
@@ -174,7 +199,8 @@ def backtest(ind, strict):
             "avgReturn": add_up(returns) / trades * 100 if trades else None}
 
 
-def analyze_asset(candles, confirm_previous=False):
+def analyze_asset(candles, confirm_previous=False, kind="acoes"):
+    weights = CONFIG["pressureWeights"].get(kind, CONFIG["pressureWeights"]["default"])
     ind = compute_indicators(candles)
     i = len(candles) - 1
     setup = evaluate_setup(ind, i, confirm_previous)
@@ -189,7 +215,7 @@ def analyze_asset(candles, confirm_previous=False):
         return base
     return {
         **base,
-        "pressure": pressure(ind, i, setup, confirm_previous),
+        "pressure": pressure(ind, i, setup, confirm_previous, weights),
         "backtest": {"loose": backtest(ind, False), "strict": backtest(ind, True)},
     }
 
@@ -200,30 +226,87 @@ def avg_traded_value(candles):
     return add_up(c["c"] * c["v"] for c in window) / len(window) if window else 0.0
 
 
+def avg_range(candles):
+    """Amplitude diária média ((máxima − mínima) / fechamento) dos últimos etfRangeWindow candles."""
+    window = candles[-CONFIG["etfRangeWindow"]:]
+    return add_up((c["h"] - c["l"]) / c["c"] for c in window) / len(window) if window else 0.0
+
+
 def analyze_ticker(asset, now=None):
     """Análise de um ativo nas duas bases. Na base "fechamento", descarta o candle do pregão
     em andamento; "intradiario" o usa (e exige o último pregão fechado acima da média).
-    None quando o volume médio dos pregões fechados fica abaixo do piso (fora do universo)."""
+    None quando o volume médio dos pregões fechados fica abaixo do piso do tipo (fora do
+    universo) ou, num ETF, quando a amplitude é de renda fixa. Fundos usam o preço ajustado
+    por proventos (adjusted_candles); a liquidez é sempre medida no preço bruto."""
+    kind = asset.get("kind") or "acoes"
     candles = market_data.history(asset["ticker"])["candles"]
+    if not candles:
+        raise ValueError("histórico insuficiente")
     live = session_in_progress(candles, now)
-    if avg_traded_value(candles[:-1] if live else candles) < CONFIG["minAvgVolume"]:
+    traded = avg_traded_value(candles[:-1] if live else candles)
+    if traded < min_avg_volume(kind):
         return None
     if len(candles) < CONFIG["minCandles"]:
         raise ValueError("histórico insuficiente")
-    intradiario = analyze_asset(candles, live)
-    fechamento = analyze_asset(candles[:-1]) if live else intradiario
-    return {**asset, "fechamento": fechamento, "intradiario": intradiario}
+    if kind == "etfs" and avg_range(candles) < CONFIG["etfMinRange"]:
+        return None
+    if kind in CONFIG["adjustDividends"]:
+        candles = adjusted_candles(candles)
+    intradiario = analyze_asset(candles, live, kind)
+    fechamento = analyze_asset(candles[:-1], False, kind) if live else intradiario
+    return {**asset, "kind": kind, "traded": traded, "fechamento": fechamento, "intradiario": intradiario}
+
+
+def _returns(ticker):
+    """{data: retorno diário} dos últimos etfCorrelationWindow pregões (histórico em cache)."""
+    candles = market_data.history(ticker)["candles"][-(CONFIG["etfCorrelationWindow"] + 1):]
+    return {day_of(b["date"]): b["c"] / a["c"] - 1 for a, b in zip(candles, candles[1:])}
+
+
+def correlation(x: dict, y: dict):
+    days = sorted(set(x) & set(y))
+    if len(days) < 20:
+        return None
+    a, b = [x[d] for d in days], [y[d] for d in days]
+    ma, mb = add_up(a) / len(a), add_up(b) / len(b)
+    cov = add_up((p - ma) * (q - mb) for p, q in zip(a, b))
+    var = math.sqrt(add_up((p - ma) ** 2 for p in a) * add_up((q - mb) ** 2 for q in b))
+    return cov / var if var else None
+
+
+def mark_duplicates(analyses):
+    """Um ETF por índice: do mais negociado ao menos, o ETF cujos retornos diários têm
+    correlação >= etfDuplicateCorrelation com um já mantido ganha duplicateOf (sai do ranking)."""
+    kept = []
+    for a in sorted((a for a in analyses if a.get("kind") == "etfs"), key=lambda a: -(a.get("traded") or 0)):
+        try:
+            returns = _returns(a["ticker"])
+        except Exception:
+            log.warning("sem retornos para comparar %s com os outros ETFs", a["ticker"], exc_info=True)
+            continue
+        for ticker, other in kept:
+            r = correlation(returns, other)
+            if r is not None and r >= CONFIG["etfDuplicateCorrelation"]:
+                a["duplicateOf"] = ticker
+                break
+        else:
+            kept.append((a["ticker"], returns))
 
 
 # ---------------------------------------------------------------- Varredura
 
 def load_universe():
-    """Candidatos ao universo: volume financeiro do dia acima de prefilterRatio do piso, do mais
-    negociado ao menos. O piso pela média de liquidityWindow pregões é aplicado em analyze_ticker."""
-    cut = CONFIG["minAvgVolume"] * CONFIG["prefilterRatio"]
-    stocks = sorted(market_data.universe(), key=lambda s: s["close"] * s["volume"], reverse=True)
-    return [{"ticker": s["ticker"], "name": s["name"], "sector": s["sector"]}
-            for s in stocks if s["close"] * s["volume"] >= cut]
+    """Candidatos ao universo: ativos dos tipos de KINDS com volume financeiro médio de 3 meses
+    (fechamento × avg_volume da lista; sem ela, o volume do dia) acima de prefilterRatio do piso
+    do tipo, do mais negociado ao menos. O piso pela média de liquidityWindow pregões fechados é
+    aplicado em analyze_ticker."""
+    def traded(s):
+        return (s.get("close") or 0) * (s.get("avg_volume") or s.get("volume") or 0)
+
+    assets = [s for s in market_data.universe() if (s.get("kind") or "acoes") in KINDS]
+    return [{"ticker": s["ticker"], "name": s["name"], "sector": s["sector"], "kind": s.get("kind") or "acoes"}
+            for s in sorted(assets, key=traded, reverse=True)
+            if traded(s) >= min_avg_volume(s.get("kind") or "acoes") * CONFIG["prefilterRatio"]]
 
 
 def run_scan(progress=lambda done, total: None):
@@ -244,6 +327,7 @@ def build_scan(analyses, failures):
     não contam)."""
     if not analyses:
         raise RuntimeError(failures[0]["reason"] if failures else "nenhum ativo retornou dados")
+    mark_duplicates(analyses)
     return {"version": SCAN_VERSION, "timestamp": int(time.time() * 1000), "universeSize": len(analyses) + len(failures),
             "analyses": analyses, "failures": failures}
 
@@ -276,11 +360,14 @@ def justification(a):
     parts = [f"{pattern} na {setup['ma']['name']} (+{fmt_num(setup['ma']['dist'] * 100)}% acima), "
              f"pullback de {fmt_num(setup['pullback'] * 100)}%."]
     vol = []
-    if d["dryRatio"] is not None:
+    if a.get("kind") == "bdrs":
+        vol.append("Volume fora da pressão (BDR: volume do formador de mercado)")
+    elif d["dryRatio"] is not None:
         vol.append(f"Volume {'secou' if d['dryRatio'] <= 1 else 'cresceu'} no pullback ({fmt_num(d['dryRatio'], 1)}x do avanço)")
-    vol.append(f"OBV {'acima' if d['obvPct'] >= d['closePct'] else 'abaixo'} do preço")
-    if d["advanceRatio"] is not None and d["advanceRatio"] >= 1:
-        vol.append(f"avanço com volume ({fmt_num(d['advanceRatio'], 1)}x)")
+    if a.get("kind") != "bdrs":
+        vol.append(f"OBV {'acima' if d['obvPct'] >= d['closePct'] else 'abaixo'} do preço")
+        if d["advanceRatio"] is not None and d["advanceRatio"] >= 1:
+            vol.append(f"avanço com volume ({fmt_num(d['advanceRatio'], 1)}x)")
     parts.append("; ".join(vol) + ".")
     mom = [f"RSI respeitou 40 (mín. {fmt_num(d['rsiMin'], 0)})" if d["rsiMin"] >= 40 else f"RSI caiu a {fmt_num(d['rsiMin'], 0)}",
            f"Estoc. tocou {fmt_num(d['stochMin'], 0)} (agora {fmt_num(d['stoch'], 0)})"]
@@ -302,26 +389,38 @@ def analyses_for(scan, mode):
     return out
 
 
+def ranking_view(analyses, strict):
+    """Top topN de um tipo (sem os ETFs duplicados), com as médias do top."""
+    ranking = build_ranking([a for a in analyses if not a.get("duplicateOf")], strict)
+    top = [{k: a[k] for k in ("ticker", "name", "sector", "price", "change", "setup", "bt", "score")}
+           | {"pressure": a["pressure"]["total"], "bottle": bottle_state(a["pressure"]["total"]),
+              "justification": justification(a)} for a in ranking[:CONFIG["topN"]]]
+    return {
+        "qualified": len(ranking),
+        "top": top,
+        "avgPressure": avg(a["pressure"] for a in top) if top else None,
+        "avgWinRate": avg(a["bt"]["winRate"] for a in top) if top else None,
+    }
+
+
 def views(scan):
-    """Tudo o que a página mostra, nas quatro combinações de base × candle de rejeição."""
+    """Tudo o que a página mostra, nas quatro combinações de base × candle de rejeição: um
+    ranking por tipo de ativo (KINDS), cada um com a sua amplitude e regime (só com pelo menos
+    regimeMinAssets ativos no tipo; abaixo disso, None = amostra pequena)."""
     result = {}
     for mode in MODES:
         analyses = analyses_for(scan, mode)
-        scanned = len(analyses)
-        breadth = sum(1 for a in analyses if a["aboveRisingMM200"]) / scanned * 100
-        view = {"refDate": day_of(max(a["date"] for a in analyses)), "scanned": scanned,
-                "breadth": breadth, "regime": regime(breadth)}
-        for key, strict in (("loose", False), ("strict", True)):
-            ranking = build_ranking(analyses, strict)
-            top = [{k: a[k] for k in ("ticker", "name", "sector", "price", "change", "setup", "bt", "score")}
-                   | {"pressure": a["pressure"]["total"], "bottle": bottle_state(a["pressure"]["total"]),
-                      "justification": justification(a)} for a in ranking[:CONFIG["topN"]]]
-            view[key] = {
-                "qualified": len(ranking),
-                "top": top,
-                "avgPressure": avg(a["pressure"] for a in top) if top else None,
-                "avgWinRate": avg(a["bt"]["winRate"] for a in top) if top else None,
-            }
+        view = {"refDate": day_of(max(a["date"] for a in analyses)), "scanned": len(analyses), "rankings": []}
+        for kind in KINDS:
+            group = [a for a in analyses if (a.get("kind") or "acoes") == kind]
+            breadth = (sum(1 for a in group if a["aboveRisingMM200"]) / len(group) * 100
+                       if len(group) >= CONFIG["regimeMinAssets"] else None)
+            view["rankings"].append({
+                "kind": kind, "scanned": len(group), "minAvgVolume": min_avg_volume(kind),
+                "duplicates": sum(1 for a in group if a.get("duplicateOf")),
+                "breadth": breadth, "regime": regime(breadth) if breadth is not None else None,
+                "loose": ranking_view(group, False), "strict": ranking_view(group, True),
+            })
         result[mode] = view
     return result
 
@@ -331,7 +430,6 @@ def scan_payload(scan):
     return {
         "timestamp": scan["timestamp"],
         "universeSize": scan["universeSize"],
-        "minAvgVolume": CONFIG["minAvgVolume"],
         "topN": CONFIG["topN"],
         "failures": len(failures),
         "apiErrors": sum(1 for f in failures if f["reason"] != "histórico insuficiente"),
@@ -340,11 +438,15 @@ def scan_payload(scan):
     }
 
 
+ASSET_COLUMNS = (("ticker", "ticker"), ("name", "name"), ("sector", "sector"), ("kind", "kind"),
+                 ("duplicate_of", "duplicateOf"))
+
+
 def write_scan(scan):
     """Grava a varredura nas tabelas scan (1 linha), scan_failures e scan_analyses (ativo × base)."""
     analyses = []
     for a in scan["analyses"]:
-        asset = {k: a[k] for k in ("ticker", "name", "sector")}
+        asset = {col: a.get(key) for col, key in ASSET_COLUMNS}
         analyses += [{**asset, "mode": mode, **db.flatten_analysis(a[mode])} for mode in MODES]
     db.write_tables({
         "scan": [{"version": scan["version"], "timestamp": scan["timestamp"], "universe_size": scan["universeSize"]}],
@@ -360,7 +462,11 @@ def read_scan():
         return None
     analyses = {}
     for r in db.read_table("scan_analyses"):
-        a = analyses.setdefault(r["ticker"], {k: r[k] for k in ("ticker", "name", "sector")})
+        a = analyses.get(r["ticker"])
+        if a is None:
+            a = analyses[r["ticker"]] = {key: r.get(col) for col, key in ASSET_COLUMNS}
+            if a["duplicateOf"] is None:
+                del a["duplicateOf"]
         a[r["mode"]] = db.unflatten_analysis(r)
     return {"version": meta[0]["version"], "timestamp": meta[0]["timestamp"], "universeSize": meta[0]["universe_size"],
             "analyses": list(analyses.values()), "failures": db.read_table("scan_failures")}

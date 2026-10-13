@@ -34,12 +34,20 @@ class AnalysisTest(unittest.TestCase):
 
 
 class UniverseTest(DatabaseTestCase):
-    def test_candidates_use_a_loose_cut_on_the_day_volume(self):
-        floor = screener.CONFIG["minAvgVolume"]
-        listed = [{"ticker": t, "name": t, "sector": "S", "close": 10, "volume": v}
-                  for t, v in (("BAIX3", floor * 0.2 / 10), ("ALTA3", floor * 3 / 10), ("MEIO3", floor * 0.5 / 10))]
+    def test_candidates_use_a_loose_cut_on_the_3_month_average_per_kind(self):
+        listed = [{"ticker": t, "name": t, "sector": "S", "kind": kind, "close": 10, "volume": 1, "avg_volume": v / 10}
+                  for t, kind, v in (("BAIX3", "acoes", 2e6), ("ALTA3", "acoes", 15e6), ("MEIO3", "acoes", 3.5e6),
+                                     ("FUND11", "fundos", 2e6), ("ZZZZ11", "outro", 9e6))]
         with mock.patch.object(screener.market_data, "universe", return_value=listed):
-            self.assertEqual([a["ticker"] for a in screener.load_universe()], ["ALTA3", "MEIO3"])
+            candidates = screener.load_universe()
+        # ações: 60% de R$ 5 mi = 3 mi; fundos: 60% de R$ 3 mi = 1,8 mi; tipo fora de KINDS: fora
+        self.assertEqual([a["ticker"] for a in candidates], ["ALTA3", "MEIO3", "FUND11"])
+        self.assertEqual(candidates[2]["kind"], "fundos")
+
+    def test_old_saved_list_without_kind_counts_as_stocks(self):
+        listed = [{"ticker": "ALTA3", "name": "A", "sector": "S", "close": 10, "volume": 1e6}]
+        with mock.patch.object(screener.market_data, "universe", return_value=listed):
+            self.assertEqual(screener.load_universe()[0]["kind"], "acoes")
 
     def test_floor_uses_the_average_of_closed_sessions(self):
         def raw(ticker, market="b3"):
@@ -76,6 +84,93 @@ class ScanStorageTest(DatabaseTestCase):
         self.assertEqual(scan["failures"], [])
         screener.write_scan(scan)
         self.assertEqual(screener.scan_payload(screener.read_scan()), screener.scan_payload(scan))
+
+
+class KindsTest(DatabaseTestCase):
+    def scan(self, universe, raw=None):
+        patches = [mock.patch.object(screener, "load_universe", return_value=universe)]
+        if raw:
+            patches.append(mock.patch.object(screener.market_data, "raw_history", raw))
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        return screener.run_scan()
+
+    def test_one_ranking_per_kind_and_etf_clones_are_dropped(self):
+        universe = [{"ticker": t, "name": t, "sector": None, "kind": k}
+                    for t, k in (("AAAA3", "acoes"), ("FUND11", "fundos"), ("BOVA11", "etfs"), ("BOVV11", "etfs"),
+                                 ("AAPL34", "bdrs"))]
+        scan = self.scan(universe)
+        etfs = {a["ticker"]: a.get("duplicateOf") for a in scan["analyses"] if a["kind"] == "etfs"}
+        # mesmas cotações sintéticas = mesmo índice: um dos dois fica, o outro aponta para ele
+        self.assertIn(etfs, ({"BOVA11": None, "BOVV11": "BOVA11"}, {"BOVA11": "BOVV11", "BOVV11": None}))
+        view = screener.scan_payload(scan)["views"]["fechamento"]
+        self.assertEqual([r["kind"] for r in view["rankings"]], list(screener.KINDS))
+        by_kind = {r["kind"]: r for r in view["rankings"]}
+        self.assertEqual(by_kind["etfs"]["duplicates"], 1)
+        self.assertEqual(by_kind["fundos"]["minAvgVolume"], 3_000_000)
+        self.assertIsNone(by_kind["acoes"]["regime"])  # 1 ativo: amostra pequena
+        screener.write_scan(scan)
+        saved = screener.read_scan()
+        self.assertEqual(screener.scan_payload(saved), screener.scan_payload(scan))
+        # setor nulo (fundos, ETFs, BDRs) continua no ativo lido do banco: o ranking o usa
+        self.assertTrue(all("sector" in a and "kind" in a for a in saved["analyses"]))
+
+    def test_fixed_income_etf_is_left_out(self):
+        def flat(ticker, market="b3"):
+            data = raw_history(ticker, wave=0.0, drift=0.0003)
+            for c in data["candles"]:
+                c["high"], c["low"] = c["close"] * 1.0005, c["close"] * 0.9995
+            return data
+        scan = self.scan([{"ticker": "LFTS11", "name": "L", "sector": None, "kind": "etfs"},
+                          {"ticker": "AAAA3", "name": "A", "sector": None, "kind": "acoes"}], flat)
+        self.assertEqual([a["ticker"] for a in scan["analyses"]], ["AAAA3"])
+
+    def test_bdr_pressure_has_no_volume_weight(self):
+        series = candles(400)[:222]
+        stock = screener.analyze_asset(series)["pressure"]
+        bdr = screener.analyze_asset(series, kind="bdrs")["pressure"]
+        self.assertAlmostEqual(bdr["total"], 0.40 * stock["momentum"] + 0.33 * stock["trend"] + 0.27 * stock["structure"])
+
+    def test_funds_use_dividend_adjusted_prices(self):
+        def with_dividends(ticker, market="b3"):
+            data = raw_history(ticker)
+            n = len(data["candles"])
+            for k, c in enumerate(data["candles"]):
+                c["adjustedClose"] = c["close"] * (1 - 0.0004 * (n - 1 - k))  # passado mais barato
+            return data
+        scan = self.scan([{"ticker": "FUND11", "name": "F", "sector": None, "kind": "fundos"}], with_dividends)
+        a = scan["analyses"][0]
+        raw = raw_history("FUND11")["candles"]
+        self.assertAlmostEqual(a["fechamento"]["price"], raw[-1]["close"])  # o preço atual não muda
+        self.assertEqual(a["kind"], "fundos")
+
+
+class AssetKindTest(unittest.TestCase):
+    def test_kind_by_ticker_and_yahoo_name(self):
+        kind = screener.market_data.asset_kind
+        self.assertEqual(kind("PETR4", "PETROBRAS   PN"), "acoes")
+        self.assertEqual(kind("TAEE11", "TAESA       UNT     N2"), "acoes")
+        self.assertEqual(kind("HGLG11", "FII HGLG PAXCI  ER", "Cshg Logistica - Fundo De Investimento Imobiliario"), "fundos")
+        self.assertEqual(kind("KDIF11", "FI INFRA KDIF", "Kinea Infra Fundo Incentivado"), "fundos")
+        self.assertEqual(kind("BOVA11", "ISHARES BOVACI", "ISHARES IBOVESPA CLASSE DE ÍNDICE"), "etfs")
+        self.assertIsNone(kind("LFTS11", "IT NOW LFTS", "IT NOW TESOURO SELIC FUNDO DE ÍNDICE"))
+        self.assertIsNone(kind("HASH11", "HASHDEX NCI CI", "HASHDEX NASDAQ CRYPTO INDEX FUNDO DE ÍNDICE"))
+        self.assertEqual(kind("AAPL34", "APPLE       DRN"), "bdrs")
+        self.assertIsNone(kind("PETR4F", "PETROBRAS   PN"))
+        self.assertIsNone(kind("BBDC10", "BRADESCO    DIR"))
+
+    def test_isolated_bad_candles_are_dropped(self):
+        series = candles(60)
+        for c in series[30:33]:  # 3 pregões em ~1% do preço (como o XPML11 no Yahoo)
+            c["c"] = c["c"] / 100
+        with self.assertLogs("marketpressure.market_data", "WARNING"):
+            kept = screener.market_data.drop_bad_candles(series, "XPML11")
+        self.assertEqual(len(kept), 57)
+        jump = candles(60)
+        for c in jump[30:]:  # mudança de patamar (só de um lado) fica
+            c["c"] *= 3
+        self.assertEqual(len(screener.market_data.drop_bad_candles(jump)), 60)
 
 
 def sp(day, hour):

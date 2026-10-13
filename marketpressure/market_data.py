@@ -16,10 +16,12 @@ históricos em paralelo no JavaScript e os entrega antes (prime), já que lá n�
 """
 
 import base64
+import http.cookiejar
 import json
 import logging
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -82,8 +84,11 @@ def _error_message(body, status):
     return message if isinstance(message, str) else json.dumps(message)
 
 
-def _browser_json(url):
-    status, text = _primed.pop(url, None) or runtime.http_request("GET", proxy_url(url))
+def _browser_json(url, body=None):
+    if body is None:
+        status, text = _primed.pop(url, None) or runtime.http_request("GET", proxy_url(url))
+    else:
+        status, text = runtime.http_request("POST", proxy_url(url), body)
     host = urllib.parse.urlsplit(url).hostname
     if status == 0:
         raise UpstreamError(f"falha ao consultar {host}: {text or 'sem conexão'}")
@@ -98,12 +103,16 @@ def _browser_json(url):
     return body
 
 
-def http_json(url):
+def http_json(url, body=None, opener=None):
+    """GET da URL (ou POST de body, texto JSON) → JSON. opener: urllib com cookies (Yahoo)."""
     if runtime.REMOTE:
-        return _browser_json(url)
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        return _browser_json(url, body)
+    headers = {"User-Agent": USER_AGENT}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, headers=headers, data=body.encode() if body is not None else None)
     try:
-        with urllib.request.urlopen(request, timeout=config.HTTP_TIMEOUT_SECONDS) as response:
+        with (opener.open if opener else urllib.request.urlopen)(request, timeout=config.HTTP_TIMEOUT_SECONDS) as response:
             return json.load(response)
     except urllib.error.HTTPError as err:
         try:
@@ -115,30 +124,163 @@ def http_json(url):
         raise UpstreamError(f"falha ao consultar {urllib.parse.urlsplit(url).hostname}: {err}") from None
 
 
-def load_universe():
-    """Lista de ações à vista e units da B3, sem fracionários, com fechamento e volume do dia."""
-    try:
-        query = urllib.parse.urlencode({
-            "type": "stock", "sortBy": "volume", "sortOrder": "desc", "limit": 400, "token": config.BRAPI_TOKEN,
-        })
-        data = http_json(f"https://brapi.dev/api/quote/list?{query}")
-        stocks = [
-            {"ticker": s["stock"], "name": s.get("name"), "sector": s.get("sector"),
-             "close": s.get("close"), "volume": s.get("volume")}
-            for s in data.get("stocks", [])
-            if not s["stock"].endswith("F") and s.get("close") and s.get("volume")
-        ]
+# ---------------------------------------------------------------- Lista de ativos (Yahoo)
+#
+# A lista vem do screener do Yahoo (bolsa SAO), que, ao contrário dos candles (v8/chart), exige
+# o cookie de fc.yahoo.com e o "crumb" da sessão. No servidor local, _yahoo_session os obtém;
+# publicado, o Worker faz isso no /proxy (POST para YAHOO_SCREENER). A brapi complementa com o
+# setor das ações e é a reserva quando o Yahoo falha.
+
+YAHOO_SCREENER = "https://query1.finance.yahoo.com/v1/finance/screener"
+YAHOO_PAGE = 250
+YAHOO_MIN_SHARES = 1000   # média de 3 meses (em cotas) mínima: descarta símbolos sem negócios
+YAHOO_SESSION_SECONDS = 3600
+BDR_SUFFIXES = ("31", "32", "33", "34", "35", "39")
+STOCK_SUFFIXES = ("3", "4", "5", "6", "7", "8")
+_yahoo_session = {"opener": None, "crumb": None, "at": 0.0}
+_yahoo_lock = threading.Lock()
+
+
+# ETFs que não entram no screener, pelo nome: renda fixa e juros (sem pullbacks: LFTS11 oscila
+# 0,05% ao dia), cripto (negocia 24/7) e alavancados/inversos (decaimento). O screener ainda
+# descarta os de amplitude muito baixa (CONFIG["etfMinRange"]) que escapem desta lista.
+ETF_EXCLUDED_WORDS = ("TESOURO", "SELIC", "IMA-B", "IMAB", "IRF-M", "IRFM", "IPCA", "DEBENT", "RENDA FIXA",
+                      "JUROS", "CDI", "LFT", "NTN", "CREDITO", "BITCOIN", "ETHER", "CRYPTO", "CRIPTO", "HASHDEX",
+                      "SOLANA", "XRP", "ALAVANC", "INVERS", "2X", "3X", "-1X")
+FUND_WORDS = ("IMOBILI", "FIAGRO", "AGROINDUSTR", "INFRA", "INCENTIVAD")
+
+
+def _plain(text: str) -> str:
+    return unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().upper()
+
+
+def asset_kind(ticker: str, short_name: str = "", long_name: str = "") -> str | None:
+    """Tipo do ativo pelo código e pelo nome do Yahoo: "acoes" (ON, PN e units), "fundos" (FII,
+    Fiagro e FI-Infra), "etfs" (de ações, sem os de ETF_EXCLUDED_WORDS) ou "bdrs"; None para o
+    que não entra (fracionários, direitos, recibos, outros fundos)."""
+    if not (5 <= len(ticker) <= 6 and ticker.isascii() and ticker.isalnum() and ticker[4:].isdigit()):
+        return None
+    suffix = ticker[4:]
+    if suffix in STOCK_SUFFIXES:
+        return "acoes"
+    if suffix in BDR_SUFFIXES:
+        return "bdrs"
+    if suffix != "11":
+        return None
+    if "UNT" in _plain(short_name).split():
+        return "acoes"
+    name = f"{_plain(short_name)} {_plain(long_name)}"
+    if "INDICE" in name:
+        return None if any(word in name for word in ETF_EXCLUDED_WORDS) else "etfs"
+    if any(word in name for word in FUND_WORDS):
+        return "fundos"
+    return None
+
+
+def _yahoo_auth(refresh=False):
+    """(opener com o cookie, crumb) da sessão do Yahoo, renovados a cada hora."""
+    with _yahoo_lock:
+        s = _yahoo_session
+        if refresh or not s["crumb"] or time.time() - s["at"] > YAHOO_SESSION_SECONDS:
+            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+            headers = {"User-Agent": USER_AGENT}
+            try:
+                opener.open(urllib.request.Request("https://fc.yahoo.com", headers=headers), timeout=config.HTTP_TIMEOUT_SECONDS)
+            except urllib.error.HTTPError:
+                pass  # responde 404, mas manda o cookie
+            except OSError as err:
+                raise UpstreamError(f"falha ao consultar fc.yahoo.com: {err}") from None
+            try:
+                crumb = opener.open(urllib.request.Request("https://query1.finance.yahoo.com/v1/test/getcrumb", headers=headers),
+                                    timeout=config.HTTP_TIMEOUT_SECONDS).read().decode().strip()
+            except OSError as err:
+                raise UpstreamError(f"Yahoo recusou a sessão (crumb): {err}") from None
+            if not crumb or len(crumb) > 64:
+                raise UpstreamError("Yahoo recusou a sessão (crumb)")
+            s.update(opener=opener, crumb=crumb, at=time.time())
+        return s["opener"], s["crumb"]
+
+
+def yahoo_screener(query: dict) -> dict:
+    """POST no screener do Yahoo com a sessão (cookie + crumb); renova a sessão uma vez se recusada."""
+    body = json.dumps(query)
+    if runtime.REMOTE:
+        return http_json(YAHOO_SCREENER, body)
+    for refresh in (False, True):
+        opener, crumb = _yahoo_auth(refresh)
         try:
-            db.write_tables({"universe": stocks})
-        except Exception:
-            log.warning("não foi possível salvar a lista de ações no banco", exc_info=True)
-        return stocks
+            return http_json(f"{YAHOO_SCREENER}?crumb={urllib.parse.quote(crumb)}", body, opener)
+        except UpstreamError:
+            if refresh:
+                raise
+            log.info("Yahoo recusou a sessão; renovando", exc_info=True)
+
+
+def load_yahoo_list() -> list:
+    """Todos os ativos da bolsa de São Paulo no Yahoo com negócios nos últimos 3 meses."""
+    quotes, offset = [], 0
+    while offset < 20 * YAHOO_PAGE:
+        query = {"offset": offset, "size": YAHOO_PAGE, "sortField": "ticker", "sortType": "ASC", "quoteType": "EQUITY",
+                 "query": {"operator": "AND", "operands": [
+                     {"operator": "EQ", "operands": ["exchange", "SAO"]},
+                     {"operator": "GT", "operands": ["avgdailyvol3m", YAHOO_MIN_SHARES]}]}}
+        result = (((yahoo_screener(query).get("finance") or {}).get("result")) or [{}])[0]
+        page = result.get("quotes") or []
+        quotes += page
+        offset += len(page)
+        if not page or offset >= (result.get("total") or 0):
+            break
+    if not quotes:
+        raise UpstreamError("Yahoo: lista de ativos vazia")
+    return quotes
+
+
+def load_brapi_stocks() -> list:
+    """Ações à vista e units da brapi, sem fracionários, com setor, fechamento e volume do dia."""
+    query = urllib.parse.urlencode({
+        "type": "stock", "sortBy": "volume", "sortOrder": "desc", "limit": 400, "token": config.BRAPI_TOKEN,
+    })
+    data = http_json(f"https://brapi.dev/api/quote/list?{query}")
+    return [{"ticker": s["stock"], "name": s.get("name"), "sector": s.get("sector"), "kind": "acoes",
+             "close": s.get("close"), "volume": s.get("volume"), "avg_volume": None}
+            for s in data.get("stocks", [])
+            if not s["stock"].endswith("F") and s.get("close") and s.get("volume")]
+
+
+def load_universe():
+    """Ativos da B3 que podem entrar no screener: {ticker, name, sector, kind (asset_kind), close,
+    volume (do dia), avg_volume (média de 3 meses, em cotas)}. Lista do Yahoo com o nome e o
+    setor da brapi quando ela conhece o ticker; sem o Yahoo, só as ações da brapi; sem as duas,
+    a última lista salva (tabela universe)."""
+    try:
+        brapi = {s["ticker"]: s for s in load_brapi_stocks()}
     except Exception as err:
-        # Sem a brapi, reaproveita a última lista salva no banco (tabela universe).
-        if db.exists("universe"):
-            log.warning("brapi indisponível (%s); usando a última lista salva", err)
-            return db.read_table("universe")
-        raise
+        log.warning("brapi indisponível (%s): sem setor das ações", err)
+        brapi = {}
+    try:
+        assets = []
+        for q in load_yahoo_list():
+            ticker = (q.get("symbol") or "").removesuffix(".SA")
+            kind = asset_kind(ticker, q.get("shortName"), q.get("longName"))
+            if not q.get("symbol", "").endswith(".SA") or kind is None or not q.get("regularMarketPrice"):
+                continue
+            known = brapi.get(ticker, {})
+            assets.append({"ticker": ticker, "name": known.get("name") or q.get("longName") or q.get("shortName"),
+                           "sector": known.get("sector"), "kind": kind, "close": q["regularMarketPrice"],
+                           "volume": q.get("regularMarketVolume") or 0, "avg_volume": q.get("averageDailyVolume3Month")})
+    except Exception as err:
+        if not brapi:
+            if db.exists("universe"):
+                log.warning("Yahoo e brapi indisponíveis (%s); usando a última lista salva", err)
+                return db.read_table("universe")
+            raise
+        log.warning("lista do Yahoo indisponível (%s); usando só as ações da brapi", err)
+        assets = list(brapi.values())
+    try:
+        db.write_tables({"universe": assets})
+    except Exception:
+        log.warning("não foi possível salvar a lista de ativos no banco", exc_info=True)
+    return assets
 
 
 def universe():
@@ -405,6 +547,31 @@ def restamp_days(hist: dict, zone: str) -> dict:
     return {"candles": sorted(by_day.values(), key=lambda c: c["date"]), "dividends": dividends}
 
 
+BAD_CANDLE_RATIO = 0.5  # fechamento 50%+ longe dos vizinhos dos dois lados = dado corrompido
+BAD_CANDLE_NEIGHBORS = 5
+
+
+def drop_bad_candles(candles: list, ticker: str = "") -> list:
+    """Descarta candles isolados com fechamento absurdo (o Yahoo tem, por exemplo, XPML11 a
+    ~1,07 em vez de ~110 de 14 a 16/01/2026), que contaminariam a MM200 por 200 pregões: o
+    fechamento fica mais de BAD_CANDLE_RATIO longe da mediana dos BAD_CANDLE_NEIGHBORS anteriores
+    e também da dos seguintes (a mediana tolera até 3 candles ruins seguidos). Uma mudança de
+    patamar (só de um lado) não é descartada, nem o primeiro e o último candles."""
+    closes = [c["c"] for c in candles]
+    n, k = len(closes), BAD_CANDLE_NEIGHBORS
+
+    def far(i, window):
+        if len(window) < 3:
+            return False
+        return abs(closes[i] / sorted(window)[len(window) // 2] - 1) > BAD_CANDLE_RATIO
+
+    kept = [c for i, c in enumerate(candles)
+            if not (far(i, closes[max(0, i - k):i]) and far(i, closes[i + 1:i + 1 + k]))]
+    if len(kept) < n:
+        log.warning("%s: %d candle(s) com fechamento fora do padrão descartado(s)", ticker, n - len(kept))
+    return kept
+
+
 def history(ticker: str, market: str = "b3") -> dict:
     """Histórico completo de um ticker na moeda do mercado: candles e proventos (data-ex e valor
     por cota). Preços sem ajuste por proventos (o Yahoo já ajusta desdobramentos), como o
@@ -417,7 +584,7 @@ def history(ticker: str, market: str = "b3") -> dict:
                      key=lambda c: c["date"])
     candles = [{"date": c["date"], "o": c["open"], "h": c["high"], "l": c["low"], "c": c["close"],
                 "v": c.get("volume") or 0, "adj": c.get("adjustedClose") or c["close"]} for c in candles]
-    hist = {"candles": candles, "dividends": list(data.get("dividends") or [])}
+    hist = {"candles": drop_bad_candles(candles, ticker), "dividends": list(data.get("dividends") or [])}
     if market not in ("crypto", "fx"):
         return hist
     if not candles:

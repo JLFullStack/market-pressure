@@ -98,13 +98,14 @@ function json(status, body) {
 // ---------------------------------------------------------------- Repasse
 
 async function proxy(request, url, env) {
-    if (request.method !== "GET") return json(405, { message: "método não permitido" });
     let target;
     try {
         target = new URL(url.searchParams.get("url"));
     } catch {
         return json(400, { message: "url inválida" });
     }
+    if (request.method === "POST" && target.href === YAHOO_SCREENER) return yahooScreener(request);
+    if (request.method !== "GET") return json(405, { message: "método não permitido" });
     const ttl = SOURCES[target.hostname];
     if (target.protocol !== "https:" || ttl === undefined) return json(400, { message: "fonte não permitida" });
     if (target.hostname === "brapi.dev") {
@@ -125,6 +126,46 @@ async function proxy(request, url, env) {
         status: upstream.status,
         headers: { "Content-Type": upstream.headers.get("Content-Type") || "application/json", "Cache-Control": "no-store" },
     });
+}
+
+// Lista de ativos (screener do Yahoo, marketpressure/market_data.py: load_yahoo_list). Diferente
+// dos candles, exige o cookie de fc.yahoo.com e o "crumb" da sessão; guardados por uma hora
+// neste isolate e renovados uma vez se o Yahoo recusar. O corpo (a consulta) vem do Python.
+const YAHOO_SCREENER = "https://query1.finance.yahoo.com/v1/finance/screener";
+const YAHOO_SESSION_MS = 3600 * 1000;
+let yahooSession = null;
+
+async function yahooAuth(refresh) {
+    if (!refresh && yahooSession && Date.now() - yahooSession.at < YAHOO_SESSION_MS) return yahooSession;
+    const first = await fetch("https://fc.yahoo.com/", { headers: { "User-Agent": USER_AGENT }, redirect: "manual" });
+    const cookie = first.headers.getSetCookie().map(c => c.split(";")[0]).join("; ");
+    const response = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb",
+        { headers: { "User-Agent": USER_AGENT, Cookie: cookie } });
+    const crumb = (await response.text()).trim();
+    if (!response.ok || !crumb || crumb.length > 64) throw new Error(`Yahoo recusou a sessão (HTTP ${response.status})`);
+    yahooSession = { cookie, crumb, at: Date.now() };
+    return yahooSession;
+}
+
+async function yahooScreener(request) {
+    const body = await request.text();
+    if (body.length > 4096) return json(400, { message: "consulta grande demais" });
+    try {
+        for (const refresh of [false, true]) {
+            const { cookie, crumb } = await yahooAuth(refresh);
+            const upstream = await fetch(`${YAHOO_SCREENER}?crumb=${encodeURIComponent(crumb)}`, {
+                method: "POST", body,
+                headers: { "User-Agent": USER_AGENT, "Content-Type": "application/json", Cookie: cookie },
+            });
+            if ((upstream.status === 401 || upstream.status === 403) && !refresh) continue;
+            return new Response(upstream.body, {
+                status: upstream.status,
+                headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+            });
+        }
+    } catch (err) {
+        return json(502, { message: `falha ao consultar o Yahoo: ${err.message}` });
+    }
 }
 
 // ---------------------------------------------------------------- Banco (D1)

@@ -22,7 +22,7 @@
     <div class="panel">
         <div class="header-panel">
             <div>
-                <h1>📊 Dashboard Premium V2: Matriz de Pressão e Assertividade — Top 20 B3</h1>
+                <h1>📊 Dashboard Premium V2: Matriz de Pressão e Assertividade — Top 20 B3 por tipo de ativo</h1>
                 <div class="subtitle" id="lastUpdate">Screening quantitativo "Garrafa de Gás" sobre o universo líquido da B3</div>
             </div>
             <div class="controls">
@@ -41,7 +41,6 @@
     </div>
 
     <div id="errorBanner" class="banner"></div>
-    <div id="infoBanner" class="banner"></div>
 
     <div class="panel">
         <h2>📈 Painel Macro e Resumo Executivo</h2>
@@ -54,15 +53,7 @@
             <div class="kpi">
                 <div class="kpi-label">Qualificados no setup</div>
                 <div class="kpi-value" id="kpiQualified">—</div>
-                <div class="kpi-note">MM20 e MM50 acima de uma MM200 ascendente + fechamento até 3% acima da média, pullback próximo dela</div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Média de pressão (Top 20)</div>
-                <div class="kpi-value" id="kpiPressure">—</div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Média da taxa de acerto (Top 20)</div>
-                <div class="kpi-value" id="kpiWinRate">—</div>
+                <div class="kpi-note" id="kpiQualifiedNote"></div>
             </div>
             <div class="kpi">
                 <div class="kpi-label">Melhor score composto</div>
@@ -75,28 +66,12 @@
                 <div class="kpi-note" id="kpiBovaNote"></div>
             </div>
         </div>
-        <div class="regime" id="regimeText"></div>
+        <div class="kpi-note">Setup: MM20 e MM50 acima de uma MM200 ascendente + fechamento até 3% acima da média, pullback próximo dela. Um ranking por tipo de ativo, abaixo.</div>
     </div>
 
-    <div class="panel table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th class="c">Rank</th>
-                    <th>Ticker</th>
-                    <th class="c">Score Composto</th>
-                    <th class="c">Preço Atual</th>
-                    <th class="c">Média Testada</th>
-                    <th class="c">Pressão %</th>
-                    <th class="c">Taxa Acerto %</th>
-                    <th class="c">Estado da Garrafa</th>
-                    <th>Justificativa Quantitativa (Volume &amp; Momentum)</th>
-                </tr>
-            </thead>
-            <tbody id="rankingTableBody">
-                <tr><td colspan="9" class="empty-row">Iniciando varredura automatizada do mercado...</td></tr>
-            </tbody>
-        </table>
+    <!-- Um painel por tipo de ativo (Ações, Fundos, ETFs, BDRs), montado por renderRankings em app.js. -->
+    <div id="rankings">
+        <div class="panel"><div class="empty-row">Iniciando varredura automatizada do mercado...</div></div>
     </div>
 
     <div class="panel">
@@ -109,8 +84,9 @@
     </div>
 
     <div class="panel footnote">
-        <strong>Metodologia.</strong> Universo: as <span id="fnUniverse"></span> ações da B3 (lista da brapi, sem fracionários) com volume financeiro médio dos últimos 20 pregões acima de <span id="fnLiquidity"></span>; a média evita que uma ação saia do universo por causa de um único dia fraco.
-        Candles diários de 5 anos do Yahoo Finance, sem ajuste por proventos (mesma base do gráfico padrão do TradingView). Tendência: MM200 ascendente, com preço, MM20 e MM50 acima dela. Pullback: correção mínima de 3% desde o topo de 20 pregões, fechamento atual até 3% acima da média testada (no intradiário, o último pregão também acima dela) e fechamentos anteriores do pullback no máximo 3% abaixo dela. Pressão = Volume 25% (OBV acima do preço em 60 dias, volume forte nos dias de alta do avanço até o topo e volume secando no pullback; no intradiário, o volume parcial do dia é ignorado) +
+        <strong>Metodologia.</strong> Universo: os <span id="fnUniverse"></span> ativos da B3 (lista do Yahoo Finance, sem fracionários, direitos e recibos) com volume financeiro médio dos últimos 20 pregões acima do piso do tipo (R$ 5 mi por pregão; fundos, R$ 3 mi); a média evita que um ativo saia do universo por causa de um único dia fraco.
+        Um ranking por tipo: ações (ON, PN e units); fundos listados (FII, Fiagro e FI-Infra); ETFs de ações (sem os de renda fixa, cripto e alavancados, e um só por índice: os que repetem os retornos de um ETF mais líquido ficam de fora); e BDRs (pressão sem o componente Volume, que na B3 reflete o formador de mercado; a compra deve ser feita depois da abertura da bolsa americana).
+        Candles diários de 5 anos do Yahoo Finance, sem ajuste por proventos (mesma base do gráfico padrão do TradingView), exceto nos fundos, que usam o preço ajustado por proventos: a queda mensal na data-ex deixaria a MM200 inclinada para baixo (no TradingView, ligue o ajuste por dividendos para comparar). Candles com fechamento absurdo e isolado (erro de dados) são descartados. Tendência: MM200 ascendente, com preço, MM20 e MM50 acima dela. Pullback: correção mínima de 3% desde o topo de 20 pregões, fechamento atual até 3% acima da média testada (no intradiário, o último pregão também acima dela) e fechamentos anteriores do pullback no máximo 3% abaixo dela. Pressão = Volume 25% (OBV acima do preço em 60 dias, volume forte nos dias de alta do avanço até o topo e volume secando no pullback; no intradiário, o volume parcial do dia é ignorado) +
         Momentum 30% (RSI 14 preservando a faixa de 40 no pullback, recuo do RSI desde o topo, Estocástico 14 que chegou perto da sobrevenda e divergência oculta de alta) +
         Tendência 25% (histograma MACD recuperando a força vendedora do pullback, MACD vs. linha zero medido em ATR, distância da média) +
         Estrutura 20% (largura das Bandas de Bollinger no percentil de 120 dias + amplitude dos últimos 5 pregões em ATR).

@@ -83,49 +83,100 @@ function render(scan) {
     const strict = document.getElementById('requireCandle').checked;
     const mode = document.getElementById('baseMode').value;
     const view = scan.views[mode];
-    const result = view[strict ? 'strict' : 'loose'];
-    const top = result.top;
 
     const refDate = fmtDate(view.refDate);
-    const liquidity = `R$ ${fmtNum(scan.minAvgVolume / 1e6, 0)} mi por pregão`;
     const basis = mode === 'fechamento'
         ? `Base: fechamento de ${refDate}`
         : scan.liveSession
             ? `Base: intradiário de ${refDate} (pregão em andamento; dados até ${new Date(scan.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})`
             : `Base: intradiário — sem pregão em andamento, usando o fechamento de ${refDate}`;
     document.getElementById('lastUpdate').innerText =
-        `${basis} · varredura de ${new Date(scan.timestamp).toLocaleString('pt-BR')} · universo de ${scan.universeSize} ações da B3 com volume médio acima de ${liquidity}`;
+        `${basis} · varredura de ${new Date(scan.timestamp).toLocaleString('pt-BR')} · universo de ${scan.universeSize} ativos da B3 acima do piso de liquidez`;
     document.getElementById('fnUniverse').innerText = scan.universeSize;
-    document.getElementById('fnLiquidity').innerText = liquidity;
 
-    const info = document.getElementById('infoBanner');
-    info.style.display = top.length < scan.topN ? "block" : "none";
-    info.innerText = `Apenas ${top.length} ativo(s) atendem a todos os critérios hoje.` +
-        (strict ? ' Desmarque "Exigir candle de rejeição" para ampliar a lista.' : '');
-
-    renderKpis(scan, view, result);
-    renderTable(top);
+    renderKpis(scan, view, strict);
+    renderRankings(scan, view, strict);
     renderBova(mode);
 }
+
+// Tipos de ativo (screener.KINDS): título do painel e nome curto.
+const KIND_TITLE = {
+    acoes: '🏢 Ações (ON, PN e units)',
+    fundos: '🏬 Fundos listados (FII, Fiagro e FI-Infra)',
+    etfs: '🧺 ETFs de ações',
+    bdrs: '🌎 BDRs',
+};
+const KIND_SHORT = { acoes: 'ações', fundos: 'fundos', etfs: 'ETFs', bdrs: 'BDRs' };
+const KIND_OF = { acoes: 'das ações', fundos: 'dos fundos', etfs: 'dos ETFs', bdrs: 'dos BDRs' };
 
 const REGIME_TEXT = {
     alta: 'tendência de alta disseminada — pullbacks tendem a ser compras de oportunidade',
     misto: 'regime misto e seletivo — prefira os setups de maior score composto',
-    defensivo: 'regime defensivo — poucas ações em tendência primária de alta; reduza exposição'
+    defensivo: 'regime defensivo — poucos ativos em tendência primária de alta; reduza exposição'
 };
 
-function renderKpis(scan, view, result) {
-    const top = result.top;
+function renderKpis(scan, view, strict) {
+    const results = view.rankings.map(r => ({ kind: r.kind, result: r[strict ? 'strict' : 'loose'] }));
+    const byKind = (fn) => view.rankings.map((r, k) => `${fn(r, results[k].result)} ${KIND_SHORT[r.kind]}`).join(' · ');
     document.getElementById('kpiScanned').innerText = view.scanned;
-    document.getElementById('kpiScannedNote').innerText = scan.failures
-        ? `${scan.failures} sem dados suficientes` : 'todos com histórico completo';
-    document.getElementById('kpiQualified').innerText = result.qualified;
-    document.getElementById('kpiPressure').innerText = top.length ? `${fmtNum(result.avgPressure)}%` : '—';
-    document.getElementById('kpiWinRate').innerText = top.length ? `${fmtNum(result.avgWinRate)}%` : '—';
-    document.getElementById('kpiBest').innerText = top.length ? top[0].ticker : '—';
-    document.getElementById('kpiBestNote').innerText = top.length ? `SC ${fmtNum(top[0].score)}` : '';
-    document.getElementById('regimeText').innerHTML =
-        `<strong>Status do regime:</strong> ${fmtNum(view.breadth, 0)}% do universo está em tendência primária de alta (preço, MM20 e MM50 acima de uma MM200 ascendente) — ${REGIME_TEXT[view.regime]}.`;
+    document.getElementById('kpiScannedNote').innerText = byKind(r => r.scanned) +
+        (scan.failures ? ` · ${scan.failures} sem dados suficientes` : '');
+    document.getElementById('kpiQualified').innerText = results.reduce((sum, r) => sum + r.result.qualified, 0);
+    document.getElementById('kpiQualifiedNote').innerText = byKind((r, result) => result.qualified);
+    const best = results.filter(r => r.result.top.length)
+        .map(r => ({ kind: r.kind, a: r.result.top[0] }))
+        .sort((x, y) => y.a.score - x.a.score)[0];
+    document.getElementById('kpiBest').innerText = best ? best.a.ticker : '—';
+    document.getElementById('kpiBestNote').innerText = best ? `SC ${fmtNum(best.a.score)} · ${KIND_SHORT[best.kind]}` : '';
+}
+
+function renderRankings(scan, view, strict) {
+    document.getElementById('rankings').innerHTML = view.rankings
+        .map(r => rankingPanel(scan, r, r[strict ? 'strict' : 'loose'], strict)).join('');
+}
+
+function rankingPanel(scan, r, result, strict) {
+    const top = result.top;
+    const facts = [
+        `${r.scanned} escaneados (média acima de R$ ${fmtNum(r.minAvgVolume / 1e6, 0)} mi por pregão)`,
+        `${result.qualified} no setup`,
+        top.length ? `pressão média ${fmtNum(result.avgPressure)}%` : null,
+        top.length ? `acerto médio ${fmtNum(result.avgWinRate)}%` : null,
+        r.duplicates ? `${r.duplicates} ETF(s) que repetem um índice já listado omitidos` : null,
+    ].filter(Boolean).join(' · ');
+    const regimeText = r.regime
+        ? `<strong>Regime:</strong> ${fmtNum(r.breadth, 0)}% ${KIND_OF[r.kind]} em tendência primária de alta (preço, MM20 e MM50 acima de uma MM200 ascendente) — ${REGIME_TEXT[r.regime]}.`
+        : `<strong>Regime:</strong> amostra pequena (menos de 20 ${KIND_SHORT[r.kind]} no universo) — sem leitura de amplitude.`;
+    const few = top.length && top.length < scan.topN
+        ? `<div class="ranking-note">Apenas ${top.length} ${KIND_SHORT[r.kind]} atendem a todos os critérios hoje.${strict ? ' Desmarque "Exigir candle de rejeição" para ampliar a lista.' : ''}</div>`
+        : '';
+    return `
+        <section class="panel ranking" aria-labelledby="ranking-${r.kind}">
+            <div class="ranking-head">
+                <h2 id="ranking-${r.kind}">${KIND_TITLE[r.kind]} — Top ${scan.topN}</h2>
+                <div class="small muted">${facts}</div>
+                <div class="regime">${regimeText}</div>
+                ${few}
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="c">Rank</th>
+                            <th>Ticker</th>
+                            <th class="c">Score Composto</th>
+                            <th class="c">Preço Atual</th>
+                            <th class="c">Média Testada</th>
+                            <th class="c">Pressão %</th>
+                            <th class="c">Taxa Acerto %</th>
+                            <th class="c">Estado da Garrafa</th>
+                            <th>Justificativa Quantitativa (Volume &amp; Momentum)</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows(top, r.kind)}</tbody>
+                </table>
+            </div>
+        </section>`;
 }
 
 const BOTTLE_BADGE = {
@@ -134,19 +185,16 @@ const BOTTLE_BADGE = {
     enchendo: `<span class="badge badge-low">Enchendo</span>`
 };
 
-function renderTable(top) {
-    const tableBody = document.getElementById('rankingTableBody');
+function tableRows(top, kind) {
     if (top.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="9" class="empty-row">Nenhum ativo atende a todos os critérios hoje.</td></tr>`;
-        return;
+        return `<tr><td colspan="9" class="empty-row">Nenhum ${kind === 'acoes' ? 'ativo' : 'ativo deste tipo'} atende a todos os critérios hoje.</td></tr>`;
     }
-
     const medals = ['🥇', '🥈', '🥉'];
-    tableBody.innerHTML = top.map((a, index) => `
+    return top.map((a, index) => `
         <tr>
             <td class="c nowrap" style="font-weight: bold;">${medals[index] || ''} ${index + 1}º</td>
             <td><a href="https://br.tradingview.com/chart/?symbol=BMFBOVESPA:${a.ticker}" target="_blank" rel="noopener" class="ticker-link">${a.ticker}</a>
-                <div class="small muted">${escapeHTML(a.sector || '')}</div></td>
+                <div class="small muted">${escapeHTML(a.sector || a.name || '')}</div></td>
             <td class="c" style="font-weight: bold; color: var(--accent);">${fmtNum(a.score)}</td>
             <td class="c nowrap">${fmtBRL(a.price)}<div class="small" style="color: ${a.change >= 0 ? 'var(--success)' : 'var(--danger)'};">${a.change >= 0 ? '+' : ''}${fmtNum(a.change, 2)}%</div></td>
             <td class="c muted">${a.setup.ma.name}</td>
