@@ -27,6 +27,7 @@ async function runScan(force) {
     banner.style.display = "none";
     btn.disabled = true;
     setStatus(force ? "Iniciando varredura..." : "Carregando...", '');
+    const busy = busyStart(force ? "Iniciando varredura..." : "Carregando ranking...");
     try {
         let status = await apiGet(`/scan${force ? '?force=1' : ''}`);
         const waited = status.state === 'running';
@@ -34,8 +35,10 @@ async function runScan(force) {
             if (status.total) {
                 setProgress(status.done / status.total);
                 setStatus(`Escaneando ${status.done}/${status.total}`, '');
+                busy.text(`Escaneando ativos: ${status.done} de ${status.total}`);
             } else {
                 setStatus("Carregando universo...", '');
+                busy.text("Carregando a lista de ativos...");
             }
             await sleep(POLL_MS);
             status = await apiGet('/scan');
@@ -60,6 +63,7 @@ async function runScan(force) {
         banner.style.display = "block";
         setStatus("Falha na API", 'warn');
     } finally {
+        busy();
         btn.disabled = false;
         setProgress(null);
     }

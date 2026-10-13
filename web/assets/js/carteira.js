@@ -73,9 +73,11 @@ const fmtMoney = (v, currency = 'R$') => currency === 'R$' ? fmtBRL(v)
 // ajustar o estado da página (ex.: a carteira selecionada). Retorna { error } ou a resposta.
 async function act(action, params = {}, before = null) {
     let res;
+    const busy = busyStart('Salvando...');
     try {
         res = await apiPost('/carteira/acao', { action, id: state.currentId, ...params });
     } catch (e) {
+        busy();
         if (e.status === 400) return { error: e.message, data: e.data };
         showError(`Não foi possível salvar a carteira (${e.message}). Nada foi alterado.`);
         return { error: `Falha ao salvar: ${e.message}`, saveFailed: true, data: {} };
@@ -83,7 +85,7 @@ async function act(action, params = {}, before = null) {
     state.doc = res.doc;
     before?.(res);
     hideError();
-    await refresh();
+    try { await refresh(); } finally { busy(); } // o indicador segue aberto até redesenhar
     return res;
 }
 
@@ -159,6 +161,7 @@ async function init() {
     setAporteCollapsed(collapsed);
     state.tab = tabFromHash() || savedTab() || 'visao';
 
+    const busy = busyStart('Carregando carteiras...');
     try {
         state.doc = await apiGet('/portfolios');
     } catch (e) {
@@ -166,7 +169,11 @@ async function init() {
     }
     let saved = null;
     try { saved = localStorage.getItem(SELECTED_KEY); } catch (e) { /* sem preferência salva */ }
-    await selectPortfolio(state.doc.portfolios.some(p => p.id === saved) ? saved : state.doc.portfolios[0]?.id || null);
+    try {
+        await selectPortfolio(state.doc.portfolios.some(p => p.id === saved) ? saved : state.doc.portfolios[0]?.id || null);
+    } finally {
+        busy();
+    }
     // #lancamentos (endereço antigo) rola até "Nova operação" depois que a página foi montada.
     if (location.hash === '#lancamentos' && state.tab === 'aportes') $('operationsPanel').scrollIntoView();
 }
@@ -229,8 +236,14 @@ async function deletePortfolio() {
     if (res.error && !res.saveFailed) alert(res.error);
 }
 
-// Busca a estrutura e a análise da carteira atual e redesenha tudo.
+// Busca a estrutura e a análise da carteira atual e redesenha tudo, com o indicador de
+// carregamento até a análise chegar (os proventos a receber têm o próprio aviso no card).
 async function refresh() {
+    const busy = busyStart('Carregando carteira...');
+    try { await loadPortfolio(busy); } finally { busy(); }
+}
+
+async function loadPortfolio(busy) {
     renderSelector();
     const portfolio = current();
     const run = ++state.run;
@@ -274,6 +287,7 @@ async function refresh() {
 
     $('refreshBtn').disabled = true;
     $('lastUpdate').innerText = 'Carregando cotações...';
+    busy.text('Carregando cotações e calculando a carteira...');
     // Proventos a receber em paralelo; o card é preenchido depois do resto da página.
     const receivables = apiGet(`/carteira/${portfolio.id}/proventos`).then(r => ({ ok: true, r }), e => ({ ok: false, e }));
     let a;
@@ -302,6 +316,7 @@ async function refresh() {
     renderDividends(a);
     $('receivableTotals').innerText = '';
     $('receivablesBody').innerHTML = `<tr><td colspan="8" class="empty-row">Carregando proventos anunciados...</td></tr>`;
+    busy();
     const result = await receivables;
     if (run !== state.run) return;
     renderReceivables(result);

@@ -132,6 +132,59 @@ async function apiPost(path, body) {
     return checked(res);
 }
 
+// ---------------------------------------------------------------- Indicador de carregamento
+
+// Spinner com fundo escurecido enquanto os dados são consultados ou gravados. Cada chamada de
+// busyStart(texto) devolve uma função que a encerra (pode ser chamada mais de uma vez); com
+// várias abertas, vale o texto da mais recente. Só aparece depois de BUSY_DELAY_MS, para não
+// piscar em respostas rápidas. Não é usado nos recálculos feitos enquanto se digita (aporte,
+// totais da lista, cotação do formulário), para não atrapalhar a digitação.
+const BUSY_DELAY_MS = 250;
+const busyStack = [];
+let busyEl = null;
+let busyTimer = null;
+
+function busyOverlay() {
+    if (!busyEl) {
+        busyEl = document.createElement('div');
+        busyEl.className = 'busy-overlay';
+        busyEl.hidden = true;
+        busyEl.innerHTML = `<div class="busy-box" role="status" aria-live="polite">
+            <div class="busy-spinner" aria-hidden="true"></div><div class="busy-text"></div></div>`;
+        document.body.appendChild(busyEl);
+    }
+    return busyEl;
+}
+
+function busyRender() {
+    const top = busyStack[busyStack.length - 1];
+    const el = busyOverlay();
+    if (!top) {
+        clearTimeout(busyTimer);
+        busyTimer = null;
+        el.hidden = true;
+        document.body.removeAttribute('aria-busy');
+        return;
+    }
+    el.querySelector('.busy-text').textContent = top.text;
+    document.body.setAttribute('aria-busy', 'true');
+    if (el.hidden && !busyTimer) {
+        busyTimer = setTimeout(() => { busyTimer = null; if (busyStack.length) el.hidden = false; }, BUSY_DELAY_MS);
+    }
+}
+
+function busyStart(text = 'Carregando...') {
+    const entry = { text };
+    busyStack.push(entry);
+    busyRender();
+    const end = () => {
+        const k = busyStack.indexOf(entry);
+        if (k >= 0) { busyStack.splice(k, 1); busyRender(); }
+    };
+    end.text = (t) => { entry.text = t; busyRender(); }; // troca o texto (ex.: progresso)
+    return end;
+}
+
 // ---------------------------------------------------------------- Formatadores
 
 const fmtBRL = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
