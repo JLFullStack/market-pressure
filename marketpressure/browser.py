@@ -4,9 +4,10 @@ rotas e respostas do servidor local (api.py).
 
 A varredura do screener não cabe numa chamada só (sem threads, ela travaria o Worker por
 minutos): scan_job.start só marca o pedido, e o Worker, entre um pedido e outro, conduz a
-varredura em etapas: scan_begin (lista de ações e URLs dos históricos), busca as URLs em
-paralelo e as entrega com prime, scan_step(i) para cada ação e scan_end. Enquanto isso, a
-página continua consultando /api/scan e recebe o progresso.
+varredura em etapas: scan_begin (lista de ações) e, a cada lote, scan_prepare (lê do D1 os
+históricos salvos do lote e devolve as URLs do trecho que falta de cada um), busca as URLs em
+paralelo e as entrega com prime, scan_step(i) para cada ação; no fim, scan_end. Enquanto isso,
+a página continua consultando /api/scan e recebe o progresso.
 """
 
 import json
@@ -55,7 +56,7 @@ def take_scan_request():
 
 
 def scan_begin():
-    """Lista de ações e as URLs dos históricos (JSON), ou "null" se a lista falhou."""
+    """Carrega a lista de ações; devolve quantas são (JSON), ou "null" se a lista falhou."""
     try:
         universe = screener.load_universe()
     except Exception as err:
@@ -63,7 +64,16 @@ def scan_begin():
         return "null"
     _scan.update(universe=universe, analyses=[], failures=[])
     screener.scan_job._progress(0, len(universe))
-    return json.dumps([market_data.history_url(a["ticker"]) for a in universe])
+    return json.dumps(len(universe))
+
+
+def scan_prepare(start, end):
+    """URLs a buscar para as ações [start, end) (JSON; null = já está no cache em memória). Lê
+    antes, numa só consulta ao D1, os históricos salvos do lote: a URL depende de cada um (só
+    o trecho que falta)."""
+    assets = [(a["ticker"], "b3") for a in _scan["universe"][start:end]]
+    market_data.prefetch_stored(assets)
+    return json.dumps([market_data.update_url(ticker, market) for ticker, market in assets])
 
 
 def scan_step(index):
@@ -85,3 +95,4 @@ def scan_end():
         screener.scan_job.fail(err)
     finally:
         _scan.update(universe=[], analyses=[], failures=[])
+        market_data.prefetch_stored([])

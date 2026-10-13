@@ -14,11 +14,12 @@
 //   o resto          arquivos de dist/ (páginas, CSS, JS e o pacote Python), via ASSETS.
 //
 // Tudo exige login, menos a tela de login (PUBLIC): sem sessão, as páginas redirecionam para
-// /login e o resto responde 401. Por isso o wrangler.jsonc tem run_worker_first (sem ele, os
+// /login e o resto responde 401. A exceção é a atualização diária (GitHub Actions), que manda
+// o token de serviço (segredo SERVICE_TOKEN) e só usa /proxy e as tabelas comuns do /db. Por isso o wrangler.jsonc tem run_worker_first (sem ele, os
 // arquivos de dist/ seriam servidos sem passar por aqui).
 
 import { currentUser, handleAuth } from "./auth.js";
-import { SCHEMA, SHARED_TABLES } from "./schema.js";
+import { SCHEMA, isShared } from "./schema.js";
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
 // Host → segundos no cache (os mesmos tempos do cache em memória do Python).
@@ -28,7 +29,7 @@ const SOURCES = {
     "api.bcb.gov.br": 43200,
     "sistemaswebb3-listados.b3.com.br": 21600,
 };
-const TABLE_NAME = /^[a-z_]{1,40}$/;
+const TABLE_NAME = /^[a-z0-9_]{1,40}$/;
 const MAX_DB_BODY = 4 * 1024 * 1024;
 const PUBLIC = new Set(["/login", "/login.html", "/assets/css/styles.css", "/assets/js/login.js", "/favicon.ico"]);
 
@@ -49,7 +50,14 @@ export default {
                 if (user && url.pathname.startsWith("/login")) return Response.redirect(new URL("/", url), 302);
                 return env.ASSETS.fetch(request);
             }
-            if (!user) return unauthenticated(request, url);
+            if (!user) {
+                // Atualização diária (marketpressure/update.py no GitHub Actions): só /proxy e as
+                // tabelas comuns do /db, com o token de serviço (segredo SERVICE_TOKEN).
+                if (!(await isService(request, env))) return unauthenticated(request, url);
+                if (url.pathname === "/proxy") return await proxy(request, url, env);
+                if (url.pathname === "/db") return await database(request, url, env, SERVICE);
+                return json(404, { message: "não encontrado" });
+            }
             if (url.pathname === "/proxy") return await proxy(request, url, env);
             if (url.pathname === "/db") return await database(request, url, env, user);
         } catch (err) {
@@ -59,6 +67,18 @@ export default {
         return env.ASSETS.fetch(request);
     },
 };
+
+const SERVICE = { id: null, service: true };
+
+// Authorization: Bearer <SERVICE_TOKEN>, comparado em tempo constante (pelo SHA-256 dos dois).
+async function isService(request, env) {
+    const header = request.headers.get("Authorization") || "";
+    if (!env.SERVICE_TOKEN || !header.startsWith("Bearer ")) return false;
+    const encoder = new TextEncoder();
+    const [given, expected] = await Promise.all([header.slice(7), env.SERVICE_TOKEN]
+        .map(text => crypto.subtle.digest("SHA-256", encoder.encode(text))));
+    return crypto.subtle.timingSafeEqual(given, expected);
+}
 
 // Página (navegação) → tela de login, voltando depois para onde estava; o resto → 401.
 function unauthenticated(request, url) {
@@ -116,8 +136,10 @@ function ensureSchema(db) {
     return schemaReady;
 }
 
-// Nome da tabela no D1: as do screener são comuns; as das carteiras, de cada usuário.
-const storedName = (name, user) => SHARED_TABLES.has(name) ? name : `${user.id}/${name}`;
+// Nome da tabela no D1: as do screener e os históricos são comuns; as das carteiras, de cada usuário.
+const storedName = (name, user) => isShared(name) ? name : `${user.id}/${name}`;
+// O token de serviço (atualização diária) só lê e grava as tabelas comuns.
+const forbidden = (names, user) => user.service && names.some(n => !isShared(n));
 
 async function database(request, url, env, user) {
     if (request.method === "GET") return readTables(env.DB, url, user);
@@ -128,6 +150,7 @@ async function database(request, url, env, user) {
 async function readTables(db, url, user) {
     const names = (url.searchParams.get("names") || "").split(",").filter(Boolean);
     if (!names.length || names.some(n => !TABLE_NAME.test(n))) return json(400, { message: "tabelas inválidas" });
+    if (forbidden(names, user)) return json(403, { message: "só as tabelas comuns" });
     const stored = names.map(n => storedName(n, user));
     const { results } = await db.prepare(`SELECT name, rows FROM mp_tables WHERE name IN (${stored.map(() => "?").join(",")})`)
         .bind(...stored).all();
@@ -149,6 +172,7 @@ async function writeTables(db, request, user) {
     if (!tables.length || tables.some(([name, rows]) => !TABLE_NAME.test(name) || typeof rows !== "string")) {
         return json(400, { message: 'esperado {"backup": bool, "tables": {nome: "texto JSON"}}' });
     }
+    if (forbidden(tables.map(([name]) => name), user)) return json(403, { message: "só as tabelas comuns" });
     const now = Date.now();
     const statements = [];
     for (const [table, rows] of tables) {

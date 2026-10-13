@@ -17,7 +17,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { hashPassword, newUserProblem, normalizeCpf, normalizeEmail } from "../worker/auth.js";
-import { SCHEMA, SHARED_TABLES } from "../worker/schema.js";
+import { SCHEMA, SHARED_PREFIX, SHARED_TABLES } from "../worker/schema.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const { values: opts } = parseArgs({
@@ -56,7 +56,7 @@ if (opts["claim-legacy"]) {
     // Tabelas sem dono (nome sem "/") que não são do screener: as carteiras de antes do login.
     const shared = [...SHARED_TABLES].map(sql).join(", ");
     for (const table of ["mp_tables", "mp_backup"]) {
-        statements.push(`UPDATE ${table} SET name = ${sql(`${id}/`)} || name WHERE instr(name, '/') = 0 AND name NOT IN (${shared})`);
+        statements.push(`UPDATE ${table} SET name = ${sql(`${id}/`)} || name WHERE instr(name, '/') = 0 AND name NOT IN (${shared}) AND substr(name, 1, ${SHARED_PREFIX.length}) <> ${sql(SHARED_PREFIX)}`);
     }
 }
 

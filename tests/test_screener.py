@@ -1,7 +1,9 @@
 import unittest
+from datetime import datetime
 from unittest import mock
 
-from marketpressure import screener
+from marketpressure import screener, update
+from marketpressure.core import SAO_PAULO
 from tests.support import DatabaseTestCase, candles, raw_history
 
 
@@ -73,6 +75,39 @@ class ScanStorageTest(DatabaseTestCase):
             scan = screener.run_scan()
         self.assertEqual(scan["failures"], [])
         screener.write_scan(scan)
+        self.assertEqual(screener.scan_payload(screener.read_scan()), screener.scan_payload(scan))
+
+
+def sp(day, hour):
+    """Instante (unix) num dia e hora de Brasília."""
+    return datetime.fromisoformat(f"{day}T{hour:02d}:00").replace(tzinfo=SAO_PAULO).timestamp()
+
+
+class ScanFreshnessTest(unittest.TestCase):
+    def fresh(self, made, now):
+        job = screener.ScanJob.__new__(screener.ScanJob)
+        job.scan = {"timestamp": made * 1000}
+        return job._fresh(now)
+
+    def test_scan_after_the_close_lasts_until_the_next_session(self):
+        thursday_close = sp("2023-09-28", 18) + 1800
+        self.assertTrue(self.fresh(thursday_close, sp("2023-09-29", 9)))   # sexta antes da abertura
+        self.assertFalse(self.fresh(thursday_close, sp("2023-09-29", 11)))  # sexta, pregão aberto
+        self.assertTrue(self.fresh(sp("2023-09-29", 19), sp("2023-10-01", 15)))  # fim de semana
+        self.assertFalse(self.fresh(sp("2023-09-28", 17), sp("2023-09-28", 19)))  # feita no pregão
+
+    def test_scan_during_the_session_lasts_the_ttl(self):
+        made = sp("2023-09-28", 12)
+        self.assertTrue(self.fresh(made, made + 59 * 60))
+        self.assertFalse(self.fresh(made, made + 61 * 60))
+
+
+class DailyUpdateTest(DatabaseTestCase):
+    def test_update_saves_the_scan(self):
+        universe = [{"ticker": t, "name": t, "sector": "Teste"} for t in ("AAAA3", "BBBB4")]
+        with mock.patch.object(screener, "load_universe", return_value=universe), \
+                self.assertLogs("marketpressure.update", "INFO"):
+            scan = update.run()
         self.assertEqual(screener.scan_payload(screener.read_scan()), screener.scan_payload(scan))
 
 

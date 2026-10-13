@@ -38,11 +38,14 @@ permitida), 404, 500 (erro interno, registrado no log) ou 502 (falha de uma font
 import json
 import logging
 import re
+import threading
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import api, config
+from . import api, config, screener
 from .api import HTTPError, clean
+from .core import in_session_hours
 
 log = logging.getLogger(__name__)
 
@@ -154,10 +157,28 @@ class Handler(BaseHTTPRequestHandler):
             log.info("%s %s", self.address_string(), fmt % args)
 
 
+DAILY_CHECK_SECONDS = 10 * 60
+
+
+def daily_update():
+    """Atualização diária local (a mesma do update.py publicado): fora do horário do pregão,
+    se a varredura salva é de antes do último fechamento, inicia uma, que acrescenta ao
+    histórico salvo os candles que faltam. Confere ao iniciar e a cada DAILY_CHECK_SECONDS,
+    então também roda quando o servidor é aberto depois do fechamento."""
+    while True:
+        try:
+            if not in_session_hours():
+                screener.scan_job.status()
+        except Exception:
+            log.warning("atualização diária falhou", exc_info=True)
+        time.sleep(DAILY_CHECK_SECONDS)
+
+
 def main():
     logging.basicConfig(level=config.LOG_LEVEL, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     if not config.BRAPI_TOKEN:
         log.warning("BRAPI_TOKEN não definido (.env): a lista de ações virá da última cópia salva no banco")
+    threading.Thread(target=daily_update, daemon=True).start()
     server = ThreadingHTTPServer((config.HOST, config.PORT), Handler)
     print(f"MarketPressure rodando em http://{config.HOST}:{config.PORT}  (Ctrl+C para parar)", flush=True)
     try:

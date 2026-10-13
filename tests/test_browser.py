@@ -39,7 +39,7 @@ class BrowserTestCase(DatabaseTestCase):
     def setUp(self):
         super().setUp()
         self.worker = FakeWorker()
-        for patcher in (mock.patch.object(runtime, "BROWSER", True),
+        for patcher in (mock.patch.object(runtime, "BROWSER", True), mock.patch.object(runtime, "REMOTE", True),
                         mock.patch.object(runtime, "http_request", self.worker)):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -111,7 +111,8 @@ class BrowserBridgeTest(BrowserTestCase):
             self.assertEqual(json.loads(browser.handle("GET", "/api/scan"))["body"]["state"], "running")
             self.assertTrue(browser.take_scan_request())
             self.assertFalse(browser.take_scan_request())
-            urls = json.loads(browser.scan_begin())
+            self.assertEqual(json.loads(browser.scan_begin()), 2)
+            urls = json.loads(browser.scan_prepare(0, 2))
             self.assertEqual(urls, [market_data.history_url(t) for t in ("AAAA3", "BBBB4")])
             browser.scan_step(0)
             self.assertEqual(json.loads(browser.handle("GET", "/api/scan"))["body"],

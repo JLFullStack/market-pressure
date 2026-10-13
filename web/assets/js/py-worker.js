@@ -52,13 +52,14 @@ self.onmessage = async (event) => {
 async function runScan(browser) {
     scanning = true;
     try {
-        const urls = JSON.parse(browser.scan_begin());
-        if (!urls) return;
-        for (let start = 0; start < urls.length; start += SCAN_BATCH) {
-            const batch = urls.slice(start, start + SCAN_BATCH);
-            const responses = await Promise.all(batch.map(fetchSource));
-            batch.forEach((url, k) => {
-                browser.prime(url, responses[k].status, responses[k].text);
+        const total = JSON.parse(browser.scan_begin());
+        if (total === null) return;
+        for (let start = 0; start < total; start += SCAN_BATCH) {
+            // URL de cada ação do lote (só o trecho que falta no histórico salvo; null = em cache).
+            const urls = JSON.parse(browser.scan_prepare(start, Math.min(start + SCAN_BATCH, total)));
+            const responses = await Promise.all(urls.map(url => url && fetchSource(url)));
+            urls.forEach((url, k) => {
+                if (url) browser.prime(url, responses[k].status, responses[k].text);
                 browser.scan_step(start + k);
             });
         }

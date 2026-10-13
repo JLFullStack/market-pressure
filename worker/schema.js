@@ -14,6 +14,10 @@ export const SCHEMA = [
     "CREATE TABLE IF NOT EXISTS mp_login_attempts (key TEXT PRIMARY KEY, failures INTEGER NOT NULL, first_at INTEGER NOT NULL)",
 ];
 
-// Tabelas do screener, comuns a todos os usuários. As demais (carteiras) são de cada usuário e
-// ficam em mp_tables com o nome "{id do usuário}/{tabela}"; o Python não sabe disso.
+// Tabelas do screener, comuns a todos os usuários, e os históricos salvos de cada ativo
+// (history_{mercado}_{ticker}, ver marketpressure/market_data.py), também comuns. As demais
+// (carteiras) são de cada usuário e ficam em mp_tables com o nome "{id do usuário}/{tabela}";
+// o Python não sabe disso.
 export const SHARED_TABLES = new Set(["universe", "scan", "scan_failures", "scan_analyses"]);
+export const SHARED_PREFIX = "history_";
+export const isShared = (name) => SHARED_TABLES.has(name) || name.startsWith(SHARED_PREFIX);

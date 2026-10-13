@@ -1,0 +1,32 @@
+# Atualização diária da versão publicada, depois do fechamento da B3 (marketpressure/update.py):
+# acrescenta ao histórico salvo no D1 os candles que faltam e salva a varredura do screener.
+# Tudo passa pelo Worker do site (/proxy e /db) com o token de serviço: o segredo
+# MARKETPRESSURE_SERVICE_TOKEN deste repositório tem o mesmo valor do segredo SERVICE_TOKEN do Worker.
+name: Atualização diária
+
+on:
+  schedule:
+    - cron: "30 21 * * 1-5"  # 18:30 em Brasília (UTC−3), segunda a sexta
+  workflow_dispatch:          # rodar à mão: aba Actions → Atualização diária → Run workflow
+
+concurrency:
+  group: atualizacao-diaria
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"  # a mesma do Pyodide da versão publicada
+      - name: Atualizar históricos e varredura
+        run: python -m marketpressure.update
+        env:
+          MARKETPRESSURE_REMOTE_URL: https://marketpressure.lucasaraujo.dev.br
+          MARKETPRESSURE_SERVICE_TOKEN: ${{ secrets.MARKETPRESSURE_SERVICE_TOKEN }}

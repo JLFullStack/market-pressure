@@ -5,12 +5,19 @@ web/assets/js/py-worker.js). Lá não há threads nem rede pelo urllib: as requi
 XMLHttpRequest síncronas (permitidas num Web Worker) para a mesma origem, onde o Worker do
 Cloudflare (worker/index.js) repassa as fontes externas (/proxy) e guarda o banco no D1 (/db);
 o que rodaria em paralelo roda em sequência.
+
+A atualização diária (marketpressure/update.py, no GitHub Actions) usa o mesmo caminho fora do
+navegador: use_remote troca http_request por requisições ao site publicado, com o token de
+serviço, e REMOTE faz o banco e as fontes externas irem pelo /db e pelo /proxy do Worker.
 """
 
 import sys
+import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 BROWSER = sys.platform == "emscripten"
+REMOTE = BROWSER  # banco no D1 e fontes pelo /proxy (navegador ou use_remote)
 HTTP_TIMEOUT_MS = 30000
 
 
@@ -51,3 +58,26 @@ def http_request(method, url, body=None):
     except Exception as err:  # JsException: sem rede ou tempo esgotado
         return 0, str(err)
     return xhr.status, xhr.responseText
+
+
+def use_remote(base_url, token):
+    """Fora do navegador, fala com o site publicado (base_url) como o navegador fala: /db e
+    /proxy, autenticado pelo token de serviço (segredo SERVICE_TOKEN do Worker)."""
+    global REMOTE, http_request
+    base_url = base_url.rstrip("/")
+
+    def remote_request(method, url, body=None):
+        request = urllib.request.Request(base_url + url, method=method,
+                                         data=body.encode() if body is not None else None,
+                                         headers={"Authorization": f"Bearer {token}",
+                                                  "Content-Type": "application/json",
+                                                  "User-Agent": "MarketPressure-update"})
+        try:
+            with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_MS / 1000) as response:
+                return response.status, response.read().decode()
+        except urllib.error.HTTPError as err:
+            return err.code, err.read().decode(errors="replace")
+        except OSError as err:  # sem rede, tempo esgotado
+            return 0, str(err)
+
+    REMOTE, http_request = True, remote_request

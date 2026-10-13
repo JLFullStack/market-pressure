@@ -7,6 +7,9 @@
   Cloudflare, lida e gravada pela rota /db do Worker (worker/index.js); as tabelas de uma
   gravação vão juntas numa transação e backup=True guarda a versão anterior em outra tabela.
 
+Além das tabelas de SCHEMAS, cada ativo tem seu histórico diário salvo (HISTORY_SCHEMA, tabelas
+history_{mercado}_{ticker}, em data/history/; ver market_data.load_history).
+
 read_table devolve as linhas como dicts, na ordem gravada (a ordem das linhas é a ordem de
 exibição: carteiras, classes, ativos...). Tabela que ainda não existe é lida como vazia.
 Valores que não cabem no tipo da coluna levantam TypeError/ValueError e nada é gravado.
@@ -78,13 +81,26 @@ SCHEMAS = {
                              *[(col, kind) for col, _, kind in ANALYSIS_FIELDS]),
 }
 
+# Histórico diário salvo de cada ativo (market_data.load_history): uma tabela por ticker e
+# mercado, "history_{mercado}_{ticker}" (ex.: history_b3_petr4), em data/history/. Linhas de
+# candle têm dividend nulo; as de provento têm só date e dividend (valor por cota, data-ex).
+HISTORY_PREFIX = "history_"
+HISTORY_SCHEMA = _schema(("date", _i64), ("open", _f64), ("high", _f64), ("low", _f64), ("close", _f64),
+                         ("volume", _i64), ("adj", _f64), ("dividend", _f64))
+
+
+def schema_of(name) -> dict:
+    return HISTORY_SCHEMA if name.startswith(HISTORY_PREFIX) else SCHEMAS[name]
+
 
 def table_path(name) -> Path:
+    if name.startswith(HISTORY_PREFIX):
+        return DATA_DIR / "history" / f"{name}.parquet"
     return DATA_DIR / f"{name}.parquet"
 
 
 def exists(name) -> bool:
-    if runtime.BROWSER:
+    if runtime.REMOTE:
         return _remote_read([name])[name] is not None
     return table_path(name).exists()
 
@@ -97,7 +113,7 @@ def read_table(name) -> list:
 def read_tables(names) -> dict:
     """{nome: linhas} de várias tabelas (no navegador, numa só requisição)."""
     with _lock:
-        if runtime.BROWSER:
+        if runtime.REMOTE:
             return {name: rows or [] for name, rows in _remote_read(names).items()}
         return {name: _parquet_read(name) for name in names}
 
@@ -106,7 +122,7 @@ def write_tables(tables: dict, backup=False):
     """Grava {nome: linhas} com o esquema de cada tabela, todas juntas; backup=True guarda a
     versão anterior de cada uma (data/backup/ ou a tabela de backup do D1)."""
     with _lock:
-        if runtime.BROWSER:
+        if runtime.REMOTE:
             _remote_write(tables, backup)
         else:
             _parquet_write(tables, backup)
@@ -119,7 +135,7 @@ def _arrow_schema(name):
     import pyarrow as pa
 
     kinds = {_str: pa.string(), _f64: pa.float64(), _i64: pa.int64(), _bool: pa.bool_()}
-    return pa.schema([pa.field(field, kinds[kind]) for field, kind in SCHEMAS[name].items()])
+    return pa.schema([pa.field(field, kinds[kind]) for field, kind in schema_of(name).items()])
 
 
 def _parquet_read(name):
@@ -136,12 +152,12 @@ def _parquet_write(tables, backup):
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    DATA_DIR.mkdir(exist_ok=True)
     staged = []
     try:
         for name, rows in tables.items():
             schema = _arrow_schema(name)
             table = pa.Table.from_pylist([{f: r.get(f) for f in schema.names} for r in rows], schema=schema)
+            table_path(name).parent.mkdir(parents=True, exist_ok=True)
             tmp = table_path(name).with_suffix(".parquet.tmp")
             pq.write_table(table, tmp)
             staged.append((tmp, table_path(name)))
@@ -178,7 +194,7 @@ def _coerce(value, kind, where):
 
 
 def _typed_rows(name, rows):
-    schema = SCHEMAS[name]
+    schema = schema_of(name)
     return [{f: _coerce(r.get(f), kind, f"{name}.{f}") for f, kind in schema.items()} for r in rows]
 
 
@@ -201,7 +217,8 @@ def _remote_read(names):
 
 def _remote_write(tables, backup):
     """PUT /db com cada tabela como texto JSON (o Worker guarda o texto como veio)."""
-    payload = {name: json.dumps(_typed_rows(name, rows), ensure_ascii=False) for name, rows in tables.items()}
+    payload = {name: json.dumps(_typed_rows(name, rows), ensure_ascii=False, separators=(",", ":"))
+               for name, rows in tables.items()}
     body = json.dumps({"backup": bool(backup), "tables": payload}, ensure_ascii=False)
     status, text = runtime.http_request("PUT", "/db", body)
     if status != 200:

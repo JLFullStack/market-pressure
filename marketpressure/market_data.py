@@ -27,7 +27,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from . import config, runtime
 from . import database as db
-from .core import iso_day_in
+from .core import day_of, in_session_hours, iso_day_in, last_close
 
 log = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ def _browser_json(url):
 
 
 def http_json(url):
-    if runtime.BROWSER:
+    if runtime.REMOTE:
         return _browser_json(url)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
@@ -145,26 +145,14 @@ def universe():
     return cached("universe", load_universe)
 
 
-def history_url(ticker: str, market: str = "b3") -> str:
+def history_url(ticker: str, market: str = "b3", range_: str = "5y") -> str:
     symbol = YAHOO_SYMBOL[market].format(ticker)
     return (f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}"
-            "?range=5y&interval=1d&events=div")
+            f"?range={range_}&interval=1d&events=div")
 
 
-def load_history(ticker: str, market: str = "b3") -> dict:
-    """Candles diários de 5 anos do Yahoo Finance (OHLC sem ajuste por proventos) e proventos.
-
-    market escolhe o símbolo do Yahoo (YAHOO_SYMBOL): "b3" -> PETR4.SA, "us" -> VOO,
-    "crypto" -> BTC-USD, "fx" -> USDBRL=X. Fora da B3 os preços vêm na moeda do ativo (US$
-    para EUA e cripto); a conversão para reais é feita em portfolio.convert_history.
-
-    5 anos dão ao backtest da estratégia (compra no pullback, venda abaixo das três médias)
-    mais operações por ativo — cada posição dura em média ~160 pregões. O screener não usa
-    adjustedClose; a carteira o usa só para a rentabilidade do BOVA11.
-    dividends: [{"date": ts, "amount": valor por cota}], em ordem de data. A data do Yahoo
-    é a data-ex (primeiro pregão sem direito); a data-com é o pregão anterior.
-    """
-    data = http_json(history_url(ticker, market))
+def parse_chart(data: dict, ticker: str) -> dict:
+    """Resposta do Yahoo (v8/chart) → {"candles": [...], "dividends": [...]} no formato bruto."""
     result = (data.get("chart") or {}).get("result") or []
     if not result:
         raise UpstreamError(f"Yahoo sem dados para {ticker}")
@@ -181,7 +169,218 @@ def load_history(ticker: str, market: str = "b3") -> dict:
     events = ((r.get("events") or {}).get("dividends") or {}).values()
     dividends = sorted(({"date": e["date"], "amount": e["amount"]} for e in events
                         if e.get("date") and e.get("amount")), key=lambda e: e["date"])
-    return {"ticker": ticker, "candles": candles, "dividends": dividends}
+    return {"candles": candles, "dividends": dividends}
+
+
+# ---------------------------------------------------------------- Histórico salvo no banco
+#
+# O histórico de cada ativo fica salvo (database: tabela history_{mercado}_{ticker}, Parquet
+# no servidor e D1 na versão publicada). A atualização diária (update.py, depois do fechamento)
+# acrescenta os candles que faltam; durante o dia, o que está salvo é usado como está:
+#
+# - salvo até o último pregão fechado (last_closed_day) e fora do horário do pregão: nenhuma
+#   requisição ao Yahoo;
+# - salvo em dia e pregão em andamento: pede só range=5d, para o candle do dia (não é salvo);
+# - salvo atrasado (a atualização diária não rodou, ou ativo fora dela, como os da carteira):
+#   pede o menor range que cobre do último candle salvo até hoje, com folga, e salva;
+# - nada salvo: os 5 anos.
+#
+# O fechamento do Yahoo é ajustado por desdobramentos e o adjustedClose, por proventos: um
+# evento novo muda o passado inteiro. Por isso os dias que o trecho novo e o salvo têm em comum
+# são comparados; qualquer diferença (desdobramento, grupamento, bonificação, provento novo,
+# correção) baixa de novo os 5 anos. Só candles de pregões já fechados são salvos.
+
+HISTORY_DAYS = 1826            # 5 anos: candles mais antigos são descartados
+HISTORY_OVERLAP_DAYS = 7       # folga: dias já salvos que o trecho novo também traz
+HISTORY_TOLERANCE = 1e-4       # diferença relativa de fechamento que conta como mudança do passado
+LIVE_RANGE = "5d"              # candle do dia, com alguns dias salvos para comparar
+# Ranges do Yahoo e quantos dias de calendário cada um cobre com certeza.
+HISTORY_RANGES = (("1mo", 28), ("3mo", 89), ("6mo", 181), ("1y", 365), ("2y", 730))
+# Fuso que define o dia de um candle: cripto fecha à meia-noite UTC; câmbio, à de Londres.
+DAY_ZONE = {"crypto": "UTC", "fx": "Europe/London"}
+
+_prefetched: dict[str, list] = {}  # linhas salvas já lidas em lote (varredura no navegador)
+
+
+def history_table(ticker: str, market: str = "b3") -> str | None:
+    """Nome da tabela do histórico salvo; None para ticker que não cabe num nome de tabela."""
+    if not ticker.isascii() or not ticker.isalnum() or len(ticker) > 12:
+        return None
+    return f"{db.HISTORY_PREFIX}{market}_{ticker.lower()}"
+
+
+def _day(ts: float, market: str) -> str:
+    return iso_day_in(ts, DAY_ZONE.get(market, "America/Sao_Paulo"))
+
+
+def _previous_weekday(day: date) -> date:
+    day -= timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day
+
+
+def last_closed_day(market: str, now: float) -> str:
+    """Dia do último candle já fechado do mercado (feriados não são conhecidos e contam como
+    dia de pregão): B3 e EUA, o último dia útil depois das 18h de Brasília; cripto, ontem em
+    UTC; câmbio, o dia útil anterior ao de hoje em Londres."""
+    if market == "crypto":
+        return iso_day_in(now - 86400, "UTC")
+    if market == "fx":
+        return _previous_weekday(date.fromisoformat(iso_day_in(now, "Europe/London"))).isoformat()
+    return day_of(last_close(now))
+
+
+def live_session(market: str, now: float) -> bool:
+    """Há um candle do dia em andamento? (cripto: sempre; câmbio: dia útil em Londres)."""
+    if market == "crypto":
+        return True
+    if market == "fx":
+        return date.fromisoformat(iso_day_in(now, "Europe/London")).weekday() < 5
+    return in_session_hours(now)
+
+
+def _rows_to_history(rows: list) -> dict:
+    candles = [{"date": r["date"], "open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"],
+                "volume": r["volume"] or 0, "adjustedClose": r["adj"]} for r in rows if r.get("dividend") is None]
+    dividends = [{"date": r["date"], "amount": r["dividend"]} for r in rows if r.get("dividend") is not None]
+    return {"candles": candles, "dividends": dividends}
+
+
+def _history_to_rows(hist: dict) -> list:
+    return ([{"date": c["date"], "open": c["open"], "high": c["high"], "low": c["low"], "close": c["close"],
+              "volume": int(c["volume"] or 0), "adj": c["adjustedClose"]} for c in hist["candles"]]
+            + [{"date": d["date"], "dividend": d["amount"]} for d in hist["dividends"]])
+
+
+def prefetch_stored(assets):
+    """Lê numa só consulta o histórico salvo de vários (ticker, mercado), para o próximo
+    stored_history de cada um (no navegador, uma ida ao D1 por lote da varredura)."""
+    names = [n for n in (history_table(t, m) for t, m in assets) if n]
+    _prefetched.clear()
+    if not names:
+        return
+    try:
+        _prefetched.update(db.read_tables(names))
+    except Exception:
+        log.warning("não foi possível ler os históricos salvos", exc_info=True)
+        _prefetched.update({n: [] for n in names})
+
+
+def stored_history(ticker: str, market: str = "b3", consume=False) -> dict | None:
+    """Histórico salvo no banco (formato bruto) ou None se não há. Falha do banco = None."""
+    name = history_table(ticker, market)
+    if name is None:
+        return None
+    if name in _prefetched:
+        rows = _prefetched.pop(name) if consume else _prefetched[name]
+    else:
+        try:
+            rows = db.read_table(name)
+        except Exception:
+            log.warning("não foi possível ler o histórico salvo de %s", ticker, exc_info=True)
+            rows = []
+    hist = _rows_to_history(rows)
+    return hist if hist["candles"] else None
+
+
+def update_range(stored: dict | None, market: str, now: float) -> str | None:
+    """Range a pedir ao Yahoo agora (ver acima); None = o salvo basta."""
+    if not stored:
+        return "5y"
+    last = stored["candles"][-1]["date"]
+    if _day(last, market) >= last_closed_day(market, now):
+        return LIVE_RANGE if live_session(market, now) else None
+    days = (now - last) / 86400 + HISTORY_OVERLAP_DAYS
+    for range_, covered in HISTORY_RANGES:
+        if days <= covered:
+            return range_
+    return "5y"
+
+
+def update_url(ticker: str, market: str = "b3", now: float | None = None) -> str | None:
+    """URL que load_history vai pedir agora; None se não vai pedir nada (histórico no cache em
+    memória, ou o salvo basta)."""
+    with _cache_lock:
+        hit = _cache.get(f"history:{market}:{ticker}")
+    now = time.time() if now is None else now
+    if hit and now - hit[0] < CACHE_TTL_SECONDS:
+        return None
+    range_ = update_range(stored_history(ticker, market), market, now)
+    return history_url(ticker, market, range_) if range_ else None
+
+
+def _differs(a, b) -> bool:
+    return abs(a - b) > HISTORY_TOLERANCE * max(abs(a), abs(b))
+
+
+def merge_history(stored: dict, fresh: dict, market: str) -> dict | None:
+    """Salvo + trecho novo. None quando o passado mudou (fechamento ou fechamento ajustado de
+    um dia em comum diferente) ou não há dia em comum: aí é preciso baixar os 5 anos."""
+    if not fresh["candles"]:
+        return None
+    first = _day(fresh["candles"][0]["date"], market)
+    fresh_by_day = {_day(c["date"], market): c for c in fresh["candles"]}
+    overlap = [c for c in stored["candles"] if _day(c["date"], market) >= first]
+    if not overlap:
+        return None
+    for c in overlap:
+        f = fresh_by_day.get(_day(c["date"], market))
+        if f and (_differs(c["close"], f["close"]) or _differs(c["adjustedClose"], f["adjustedClose"])):
+            return None
+    return {"candles": [c for c in stored["candles"] if _day(c["date"], market) < first] + fresh["candles"],
+            "dividends": [d for d in stored["dividends"] if _day(d["date"], market) < first] + fresh["dividends"]}
+
+
+def _save_history(ticker, market, stored, hist, now):
+    """Grava os candles de pregões já fechados (e os proventos), se mudaram desde o salvo."""
+    name = history_table(ticker, market)
+    if name is None:
+        return
+    last = last_closed_day(market, now)
+    closed = {"candles": [c for c in hist["candles"] if _day(c["date"], market) <= last],
+              "dividends": [d for d in hist["dividends"] if _day(d["date"], market) <= last]}
+    if not closed["candles"] or closed == stored:
+        return
+    try:
+        db.write_tables({name: _history_to_rows(closed)})
+    except Exception:
+        log.warning("não foi possível salvar o histórico de %s", ticker, exc_info=True)
+
+
+def load_history(ticker: str, market: str = "b3", now: float | None = None) -> dict:
+    """Candles diários de 5 anos do Yahoo Finance (OHLC sem ajuste por proventos) e proventos,
+    a partir do histórico salvo no banco mais o que falta (ver acima).
+
+    market escolhe o símbolo do Yahoo (YAHOO_SYMBOL): "b3" -> PETR4.SA, "us" -> VOO,
+    "crypto" -> BTC-USD, "fx" -> USDBRL=X. Fora da B3 os preços vêm na moeda do ativo (US$
+    para EUA e cripto); a conversão para reais é feita em portfolio.convert_history.
+
+    5 anos dão ao backtest da estratégia (compra no pullback, venda abaixo das três médias)
+    mais operações por ativo — cada posição dura em média ~160 pregões. O screener não usa
+    adjustedClose; a carteira o usa só para a rentabilidade do BOVA11.
+    dividends: [{"date": ts, "amount": valor por cota}], em ordem de data. A data do Yahoo
+    é a data-ex (primeiro pregão sem direito); a data-com é o pregão anterior.
+    """
+    now = time.time() if now is None else now
+    stored = stored_history(ticker, market, consume=True)
+    range_ = update_range(stored, market, now)
+    if range_ is None:
+        hist = stored
+    else:
+        hist = parse_chart(http_json(history_url(ticker, market, range_)), ticker)
+        if range_ != "5y":
+            merged = merge_history(stored, hist, market)
+            if merged is None:
+                log.info("histórico de %s mudou no passado (desdobramento ou provento); baixando 5 anos", ticker)
+                merged = parse_chart(http_json(history_url(ticker, market)), ticker)
+            hist = merged
+    start = now - HISTORY_DAYS * 86400
+    hist = {"candles": [c for c in hist["candles"] if c["date"] >= start],
+            "dividends": [d for d in hist["dividends"] if d["date"] >= start]}
+    if range_ is not None:
+        _save_history(ticker, market, stored, hist, now)
+    return {"ticker": ticker, **hist}
 
 
 def raw_history(ticker: str, market: str = "b3") -> dict:

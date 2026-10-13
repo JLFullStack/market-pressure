@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = join(root, "dist");
 // Só o servidor HTTP local fica de fora (no navegador as rotas vêm de browser.py).
-const SKIP = new Set(["__main__.py", "server.py"]);
+const SKIP = new Set(["__main__.py", "server.py", "update.py"]);
 
 // Esvazia dist/ sem apagar a pasta (no Windows o wrangler dev a mantém aberta).
 mkdirSync(dist, { recursive: true });

@@ -15,7 +15,7 @@ import time
 from . import database as db
 from . import market_data, runtime
 from .core import (SETUP, add_up, avg, clamp01, closed_candles, compute_indicators, day_of,
-                  evaluate_setup, exit_signal, fmt_num, session_in_progress)
+                  evaluate_setup, exit_signal, fmt_num, in_session_hours, last_close, session_in_progress)
 
 CONFIG = {
     # Universo: ações com volume financeiro médio (fechamento × volume) dos últimos pregões
@@ -388,8 +388,14 @@ class ScanJob:
             log.warning("não foi possível ler a varredura salva no banco", exc_info=True)
             return None
 
-    def _fresh(self):
-        return self.scan and time.time() * 1000 - self.scan["timestamp"] < CONFIG["cacheTtlMinutes"] * 60000
+    def _fresh(self, now=None):
+        """Válida por cacheTtlMinutes; a feita depois do último fechamento (a da atualização
+        diária, update.py) vale até a abertura do próximo pregão, pois nada muda até lá."""
+        if not self.scan:
+            return False
+        now = time.time() if now is None else now
+        made = self.scan["timestamp"] / 1000
+        return now - made < CONFIG["cacheTtlMinutes"] * 60 or (made >= last_close(now) and not in_session_hours(now))
 
     def _progress(self, done, total):
         self.done, self.total = done, total

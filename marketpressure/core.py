@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 SESSION_END_HOUR = 18  # após as 18h (Brasília) o candle do dia é tratado como fechado
+SESSION_START_HOUR = 10  # abertura da B3 (Brasília): antes disso não há candle do dia
 
 # Parâmetros do setup "Garrafa de Gás" (evaluate_setup). O CONFIG do screener os incorpora.
 SETUP = {
@@ -80,6 +81,25 @@ def session_in_progress(candles: list, now: float | None = None) -> bool:
 def closed_candles(candles: list, now: float | None = None) -> list:
     """Candles só de pregões fechados: descarta o candle do pregão em andamento."""
     return candles[:-1] if candles and session_in_progress(candles, now) else candles
+
+
+def in_session_hours(now: float | None = None) -> bool:
+    """Dia útil (seg–sex) entre a abertura e o fechamento da B3, quando existe candle do dia em
+    andamento. Os feriados não são conhecidos e contam como dia útil."""
+    t = local_time(time.time() if now is None else now)
+    return t.weekday() < 5 and SESSION_START_HOUR <= t.hour < SESSION_END_HOUR
+
+
+def last_close(now: float | None = None) -> float:
+    """Instante (unix) do último fechamento da B3 até now: SESSION_END_HOUR do último dia útil
+    (seg–sex) que já passou desse horário (feriados contam como dia útil)."""
+    t = local_time(time.time() if now is None else now)
+    close = t.replace(hour=SESSION_END_HOUR, minute=0, second=0, microsecond=0)
+    if close > t:
+        close -= timedelta(days=1)
+    while close.weekday() >= 5:
+        close -= timedelta(days=1)
+    return close.timestamp()
 
 
 # ---------------------------------------------------------------- Indicadores
