@@ -73,6 +73,10 @@ SCHEMAS = {
                             ("target", _f64)),
     "fixed_income_entries": _schema(("portfolio_id", _str), ("item_id", _str), ("id", _str), ("date", _str),
                                     ("type", _str), ("amount", _f64)),
+    "portfolio_goals": _schema(("portfolio_id", _str), ("id", _str), ("name", _str), ("kind", _str), ("target", _f64),
+                               ("withdrawal", _f64), ("initial", _f64), ("use_portfolio", _bool), ("monthly", _f64),
+                               ("rate", _f64), ("inflation", _f64), ("adjust", _bool), ("target_date", _str),
+                               ("created", _str)),
     # Screener
     "universe": _schema(("ticker", _str), ("name", _str), ("sector", _str), ("kind", _str), ("close", _f64),
                         ("volume", _f64), ("avg_volume", _f64)),

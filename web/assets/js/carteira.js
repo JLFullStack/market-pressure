@@ -9,6 +9,8 @@
 //   POST /api/carteira/{id}/aporte       -> plano da calculadora de aporte
 //   GET  /api/carteira/{id}/ativo, /api/cotacao  -> ticker novo, classe sugerida, preço e câmbio do dia
 //   POST /api/lote/totais                -> totais da lista de compras sugeridas
+//   GET  /api/carteira/{id}/metas        -> metas com a projeção de cada uma
+//   POST /api/carteira/{id}/metas/simular -> projeção de uma meta ainda não salva
 //   POST /api/carteira/acao              -> qualquer alteração (validada e gravada no servidor)
 
 // Mercados de um ativo (rótulo e moeda exibidos). Fora da B3 o preço é em US$.
@@ -23,7 +25,7 @@ const TAB_KEY = 'marketpressure_carteira_aba'; // última sub-aba, usada quando 
 const COLLAPSE_KEY = 'marketpressure_aporte_recolhido'; // "1" = calculadora de aporte recolhida
 // Sub-abas da página, na ordem da barra. Cada uma é #tab-{nome} (botão) e #panel-{nome} (seção);
 // a ativa fica no hash da URL (#visao, #aportes...), então recarregar e voltar/avançar a mantêm.
-const TABS = ['visao', 'aportes', 'proventos', 'configuracoes'];
+const TABS = ['visao', 'aportes', 'proventos', 'metas', 'configuracoes'];
 // Hashes (e valores salvos) das sub-abas antigas, que foram juntadas em "Aportes e lançamentos".
 const TAB_ALIASES = { aportar: 'aportes', lancamentos: 'aportes' };
 const HISTORY_LIMIT = 10; // lançamentos mostrados no histórico antes de "Ver todos"
@@ -35,9 +37,12 @@ const SERIES = [
 ];
 const PERIODS = ['6M', '1A', '2A', 'Tudo']; // os mesmos do servidor (portfolio.PERIODS)
 const APORTE_MODES = { todos: 'Todos os ativos da carteira', escolher: 'Escolher ativos', pullback: 'Pelas regras do pullback' };
-const STATUS_BADGE = { Vender: 'badge-hot', 'Atenção': 'badge-fill', Manter: 'badge-ok' };
+const STATUS_BADGE = { Vender: 'badge-hot', 'Realizar 50%': 'badge-info', 'Atenção': 'badge-fill', Manter: 'badge-ok' };
 const PLAN_BADGE = { sell: 'badge-hot', fixed: 'badge-low', setup: 'badge-ok', wait: 'badge-fill' };
 const AMOUNT_DELAY_MS = 250; // espera após a digitação do valor do aporte antes de recalcular
+// Rótulo do campo de valor da meta, conforme o tipo.
+const GOAL_TARGET_LABEL = { renda: 'Renda mensal desejada (R$)', patrimonio: 'Patrimônio desejado (R$)' };
+const GOAL_COLORS = { value: '#3987e5', contributed: '#8b949e', goal: '#e3b341' };
 
 // ================================================================ Estado
 
@@ -58,7 +63,11 @@ const state = {
     tab: 'visao',        // sub-aba ativa
     historyAll: false,   // histórico completo (true) ou só os HISTORY_LIMIT mais recentes
     batch: null,         // lista de compras sugeridas em conferência: { date, amount, rows }
-    chart: null
+    chart: null,
+    goals: null,         // resposta de /metas (null = ainda não carregada para a carteira atual)
+    goalsSeq: 0,         // descarta respostas de metas fora de ordem
+    goalCharts: [],      // gráficos dos cartões de meta (destruídos a cada redesenho)
+    editingGoal: null    // id da meta em edição no formulário (null = nova)
 };
 
 const $ = (id) => document.getElementById(id);
@@ -156,6 +165,13 @@ async function init() {
     $('batchBody').addEventListener('change', onBatchInput);
     $('batchConfirmBtn').addEventListener('click', confirmBatch);
     $('batchCancelBtn').addEventListener('click', () => { closeBatch(); $('aporteRegisterBtn').focus(); });
+    $('goalForm').addEventListener('submit', submitGoal);
+    $('goalPreviewBtn').addEventListener('click', previewGoal);
+    $('goalCancelBtn').addEventListener('click', resetGoalForm);
+    $('goalKind').addEventListener('change', updateGoalForm);
+    $('goalUsePortfolio').addEventListener('change', updateGoalForm);
+    $('goalsList').addEventListener('click', onGoalsClick);
+    updateGoalForm();
     let collapsed = false;
     try { collapsed = localStorage.getItem(COLLAPSE_KEY) === '1'; } catch (e) { /* sem preferência salva */ }
     setAporteCollapsed(collapsed);
@@ -181,6 +197,7 @@ async function init() {
 function selectPortfolio(id) {
     state.currentId = id;
     state.batch = null;
+    resetGoalForm();
     state.historyAll = false;
     try { if (id) localStorage.setItem(SELECTED_KEY, id); } catch (e) { /* preferência não salva */ }
     return refresh();
@@ -267,6 +284,7 @@ async function loadPortfolio(busy) {
     if (st) {
         for (const id of ['txDate', 'fiDate']) { if (!$(id).value) $(id).value = st.today; $(id).max = st.today; }
     }
+    state.goals = null; // as metas são pedidas de novo ao abrir a sub-aba (showTab)
     showTab(state.tab);
     renderFixedIncomeSelect(st);
     renderClassSelects(st);
@@ -347,6 +365,7 @@ function showTab(name) {
     try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* preferência não salva */ }
     // Um canvas desenhado enquanto a seção estava escondida fica com tamanho zero.
     if (has && name === 'visao' && state.chart) { state.chart.resize(); state.chart.update('none'); }
+    if (has && name === 'metas' && !state.goals) loadGoals();
 }
 
 // Troca de sub-aba pela URL: o hash vira uma entrada do histórico (voltar/avançar).
@@ -876,6 +895,7 @@ function renderPositions(a) {
     const rows = a.open.map(p => `
         <tr>
             <td><a href="https://br.tradingview.com/chart/?symbol=${encodeURIComponent(tradingViewSymbol(p.ticker, p.market))}" target="_blank" rel="noopener" class="ticker-link">${p.ticker}</a>
+                ${p.market === 'crypto' ? '' : `<a href="backtest.html?ticker=${encodeURIComponent(p.ticker)}&market=${p.market}" class="inline-link small" aria-label="Backtest de ${p.ticker}">backtest</a>`}
                 <div class="small muted">${escapeHTML(p.cls)}${p.market === 'b3' ? '' : ` · ${MARKETS[p.market].label}`}</div></td>
             <td class="r nowrap">${fmtQty(p.quantity)}</td>
             <td class="r nowrap">${fmtBRL(p.avgPrice)}</td>
@@ -886,7 +906,8 @@ function renderPositions(a) {
             <td class="r nowrap ${signClass(p.profit)}">${p.returnPct === null ? '—' : fmtPct(p.returnPct, 2)}</td>
             <td class="r nowrap">${fmtBRL(p.dividends)}</td>
             <td class="r nowrap">${fmtNum(p.weight)}%</td>
-            <td class="c">${p.status ? `<span class="badge ${STATUS_BADGE[p.status]}">${p.status}</span>` : '<span class="small muted">—</span>'}</td>
+            <td class="c">${p.status ? `<span class="badge ${STATUS_BADGE[p.status] || 'badge-low'}">${p.status}</span>` : '<span class="small muted">—</span>'}
+                ${p.partial ? `<div class="small muted nowrap">${fmtQty(p.partial.quantity)} de ${p.partial.lots} compra(s)</div>` : ''}</td>
         </tr>`);
     const fixedRows = a.fixed.map(f => `
         <tr class="fi-section">
@@ -1088,6 +1109,269 @@ async function submitFixedIncomeEntry(ev) {
     if (res.error) return setMsg('fiMsg', res.error, 'error');
     $('fiAmount').value = '';
     setSavedMsg('fiMsg', res.message);
+}
+
+// ---------------------------------------------------------------- Metas
+
+// Metas da carteira com a projeção de cada uma (tudo calculado no servidor, goals.py).
+async function loadGoals() {
+    const portfolio = current();
+    if (!portfolio) return;
+    const seq = ++state.goalsSeq;
+    $('goalsList').innerHTML = '<div class="panel"><p class="muted">Calculando as metas...</p></div>';
+    let res;
+    try {
+        res = await apiGet(`/carteira/${portfolio.id}/metas`);
+    } catch (e) {
+        if (seq === state.goalsSeq) $('goalsList').innerHTML = `<div class="panel"><p class="neg">Não foi possível calcular as metas (${escapeHTML(e.message)}).</p></div>`;
+        return;
+    }
+    if (seq !== state.goalsSeq || portfolio.id !== state.currentId) return;
+    state.goals = res;
+    renderGoals(res);
+}
+
+function renderGoals(res) {
+    for (const c of state.goalCharts) c.destroy();
+    state.goalCharts = [];
+    $('goalsWarning').innerText = res.warning || '';
+    $('goalsWarning').style.display = res.warning ? 'block' : 'none';
+    $('goalsList').innerHTML = res.goals.length ? res.goals.map(g => goalCard(g, true)).join('')
+        : '<div class="panel"><p class="muted">Nenhuma meta cadastrada. Preencha o formulário acima — por exemplo, a renda mensal que quer ter para se aposentar.</p></div>';
+    for (const g of res.goals) drawGoalChart(g, `goalChart-${g.id}`);
+}
+
+const money0 = (v) => `R$ ${fmtNum(v, 0)}`;
+const rate = (v, d = 2) => `${fmtNum(v, d)}%`;
+const monthYear = (iso) => `${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+
+function goalKpi(label, value, note = '') {
+    return `<div class="kpi"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-note">${note}</div></div>`;
+}
+
+// Cartão de uma meta (saved = tem botões de editar e excluir; a prévia não tem).
+function goalCard(g, saved) {
+    const r = g.result, reach = r.reach, by = r.byDate;
+    const head = g.kind === 'renda'
+        ? `Renda de ${fmtBRL(g.target)} por mês · retirada de ${rate(g.withdrawal, 1)} ao ano`
+        : `Patrimônio de ${fmtBRL(g.target)}`;
+    const start = g.usePortfolio ? 'patrimônio atual da carteira' : 'patrimônio inicial informado';
+    const kpis = [
+        goalKpi('Patrimônio necessário', money0(r.goalValue),
+            g.kind === 'renda' ? `para ${fmtBRL(g.target)}/mês com ${rate(g.withdrawal, 1)} ao ano`
+                : `renda possível: ${fmtBRL(r.income)}/mês (${rate(g.withdrawal, 1)} a.a.)`),
+        goalKpi('Patrimônio de partida', money0(r.current), `${start} · rende ${fmtBRL(r.incomeNow)}/mês hoje`),
+        goalKpi('Falta acumular', money0(r.missing), `${fmtNum(r.progress, 1)}% da meta já alcançado`),
+        goalKpi('Tempo para alcançar', reach ? escapeHTML(reach.text) : '+100 anos',
+            reach ? (reach.months ? `previsão: ${monthYear(reach.date)}` : 'meta já alcançada') : 'não alcança no ritmo atual'),
+        goalKpi('Aporte mensal', fmtBRL(g.monthly), g.adjust ? 'corrigido pela inflação todo ano' : 'valor fixo (perde poder de compra)'),
+        goalKpi('Rentabilidade real', `${rate(r.rates.realYear)} a.a.`,
+            `${rate(r.rates.realMonth, 3)} a.m. · nominal ${rate(r.rates.nominalYear)} a.a. (${rate(r.rates.nominalMonth, 3)} a.m.) · inflação ${rate(r.rates.inflationYear)} a.a.`),
+        reach ? goalKpi('Total aportado até a meta', money0(reach.contributed + r.current),
+            `aportes ${money0(reach.contributed)} + partida ${money0(r.current)} · aportes nominais ${money0(reach.nominalContributed)}`) : '',
+        reach ? goalKpi('Juros compostos', money0(reach.interest), `${fmtNum(reach.interestShare, 1)}% do patrimônio na meta vem dos juros`) : '',
+        goalKpi('Renda passiva na meta', `${fmtBRL(r.income)}/mês`, `juros reais de um mês na meta: ${fmtBRL(r.monthlyInterestAtGoal)}`),
+        goalKpi('Ponto de virada', r.turningPoint ? escapeHTML(r.turningPoint.text) : '—',
+            r.turningPoint ? `em ${monthYear(r.turningPoint.date)} os juros do mês passam o aporte` : 'os juros do mês não passam o aporte no horizonte'),
+        reach && reach.months ? goalKpi('Valor nominal na data', money0(reach.nominalValue), 'o patrimônio necessário corrigido pela inflação até lá') : ''
+    ].join('');
+    const milestones = r.milestones.map(m => `<span class="goal-chip${m.reached ? ' done' : ''}">${m.pct}% · ${escapeHTML(m.text)}${m.date && m.months ? ` (${monthYear(m.date)})` : ''}</span>`).join('');
+    const scen = r.scenarios;
+    const scenarios = `<table class="goal-scenarios"><thead><tr><th>Aporte mensal</th>${scen.rates.map(x => `<th class="r">${rate(x, 1)} a.a.</th>`).join('')}</tr></thead>
+        <tbody>${scen.rows.map(row => `<tr><td class="nowrap">${fmtBRL(row.monthly)}</td>${row.cells.map(c => `<td class="r nowrap${c.current ? ' goal-current' : ''}">${escapeHTML(c.text)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    const yearly = `<table><thead><tr><th class="r">Ano</th><th>Data</th><th class="r">Aportado (com a partida)</th><th class="r">Juros</th><th class="r">Patrimônio</th><th class="r">Renda possível/mês</th><th class="r">% da meta</th></tr></thead>
+        <tbody>${r.yearly.map(y => `<tr><td class="r">${y.year}</td><td class="nowrap">${monthYear(y.date)}</td><td class="r nowrap">${money0(y.contributed)}</td>
+        <td class="r nowrap">${money0(y.interest)}</td><td class="r nowrap"><strong>${money0(y.value)}</strong></td><td class="r nowrap">${fmtBRL(y.income)}</td><td class="r nowrap">${fmtNum(y.progress, 1)}%</td></tr>`).join('')}</tbody></table>`;
+    const actions = saved ? `<div class="batch-buttons"><button type="button" class="btn-secondary" data-goal-edit="${escapeHTML(g.id)}">Editar</button>
+        <button type="button" class="btn-secondary" data-goal-delete="${escapeHTML(g.id)}">Excluir</button></div>` : '<span class="badge badge-info">Prévia, não salva</span>';
+    return `<div class="panel goal-card">
+        <div class="panel-head"><div><h2>${escapeHTML(g.name)}</h2><div class="small muted">${escapeHTML(g.kindLabel)} · ${head}</div></div>${actions}</div>
+        <p class="goal-summary">${escapeHTML(r.summary)}</p>
+        <div class="goal-progress" role="img" aria-label="${fmtNum(r.progress, 1)}% da meta alcançado"><div style="width:${Math.max(0, Math.min(100, r.progress))}%"></div></div>
+        <div class="small muted">${fmtNum(r.progress, 1)}% · ${fmtBRL(r.current)} de ${fmtBRL(r.goalValue)}</div>
+        ${by ? `<p class="goal-bydate ${by.onTrack ? 'pos' : 'warn-text'}">${escapeHTML(by.summary)}</p>` : ''}
+        ${r.warnings.map(w => `<p class="warn-text small">${escapeHTML(w)}</p>`).join('')}
+        <div class="kpis goal-kpis">${kpis}</div>
+        ${goalTracking(g)}
+        ${goalProjections(r.projections)}
+        <h3>Marcos</h3><div class="goal-chips">${milestones}</div>
+        <h3>Evolução do patrimônio (valores de hoje)</h3>
+        <div class="chart-wrap goal-chart"><canvas id="goalChart-${escapeHTML(g.id)}" role="img" aria-label="Patrimônio projetado, valor aportado e meta, ano a ano"></canvas></div>
+        <h3>Tempo para alcançar em outros cenários</h3>
+        <div class="table-container">${scenarios}</div>
+        <details class="goal-details"><summary>Tabela ano a ano</summary><div class="table-container">${yearly}</div></details>
+    </div>`;
+}
+
+// Realizado × planejado desde a criação da meta (só nas que partem da carteira).
+function goalTracking(g) {
+    const t = g.result.tracking;
+    if (!t) return '';
+    if (!t.started) return `<h3>Realizado × planejado</h3><p class="small muted">${escapeHTML(t.summary)}</p>`;
+    return `<h3>Realizado × planejado <span class="small muted">desde ${fmtDate(t.created)}</span></h3>
+        <div class="kpis goal-kpis">
+            ${goalKpi('Planejado para hoje', fmtBRL(t.planned), `partindo de ${fmtBRL(t.startValue)} em ${fmtDate(t.created)}`)}
+            ${goalKpi('Patrimônio real', fmtBRL(t.actual), 'carteira com as cotações de agora')}
+            ${goalKpi(t.ahead ? 'À frente do plano' : 'Atrás do plano', `<span class="${t.ahead ? 'pos' : 'neg'}">${fmtBRL(Math.abs(t.diff))}</span>`,
+                t.diffPct === null ? '' : `${fmtPct(t.diffPct, 1)} em relação ao planejado`)}
+        </div>
+        <p class="goal-bydate ${t.ahead ? 'pos' : 'warn-text'}">${escapeHTML(t.summary)}</p>
+        <div class="chart-wrap goal-chart goal-chart-small"><canvas id="goalTrack-${escapeHTML(g.id)}" role="img" aria-label="Patrimônio real da carteira e o planejado pela meta, mês a mês"></canvas></div>`;
+}
+
+// Tempo para alcançar pelo plano e pelos dados reais da carteira (aporte médio, rentabilidade).
+function goalProjections(rows) {
+    if (!rows || rows.length < 2) return '';
+    return `<h3>Previsão pelo plano e pelos dados reais da carteira</h3>
+        <div class="table-container"><table>
+            <thead><tr><th>Cenário</th><th class="r">Aporte mensal</th><th class="r">Rentabilidade</th><th class="r">Tempo para alcançar</th><th class="r">Previsão</th></tr></thead>
+            <tbody>${rows.map(p => `<tr><td><strong>${escapeHTML(p.label)}</strong><div class="small muted">${escapeHTML(p.note)}</div></td>
+                <td class="r nowrap">${fmtBRL(p.monthly)}</td><td class="r nowrap">${rate(p.rate, 1)} a.a.</td>
+                <td class="r nowrap">${escapeHTML(p.text)}</td><td class="r nowrap">${p.date && p.months ? monthYear(p.date) : '—'}</td></tr>`).join('')}</tbody>
+        </table></div>`;
+}
+
+function drawTrackingChart(g) {
+    const t = g.result.tracking;
+    const canvas = $(`goalTrack-${g.id}`);
+    if (!t?.started || !canvas || typeof Chart === 'undefined') return;
+    state.goalCharts.push(new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: t.chart.labels.map(fmtDate),
+            datasets: [
+                { label: 'Patrimônio real', data: t.chart.actual, borderColor: GOAL_COLORS.value, borderWidth: 2, pointRadius: 2 },
+                { label: 'Planejado', data: t.chart.planned, borderColor: GOAL_COLORS.goal, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { labels: { color: '#c9d1d9', boxWidth: 12 } },
+                       tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtBRL(ctx.parsed.y)}` } } },
+            scales: { x: { ticks: { color: '#8b949e', maxTicksLimit: 12 }, grid: { color: '#21262d' } },
+                      y: { ticks: { color: '#8b949e', callback: (v) => fmtBRL(v) }, grid: { color: '#21262d' } } }
+        }
+    }));
+}
+
+function drawGoalChart(g, canvasId) {
+    drawTrackingChart(g);
+    const canvas = $(canvasId);
+    if (!canvas || typeof Chart === 'undefined') return;
+    const y = g.result.yearly;
+    const chart = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: y.map(p => p.date.slice(0, 4)),
+            datasets: [
+                { label: 'Patrimônio', data: y.map(p => p.value), borderColor: GOAL_COLORS.value, backgroundColor: 'rgba(57, 135, 229, 0.15)', fill: true, borderWidth: 2, pointRadius: 0 },
+                { label: 'Aportado (com a partida)', data: y.map(p => p.contributed), borderColor: GOAL_COLORS.contributed, borderWidth: 2, pointRadius: 0 },
+                { label: 'Meta', data: y.map(() => g.result.goalValue), borderColor: GOAL_COLORS.goal, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { labels: { color: '#c9d1d9', boxWidth: 12 } },
+                       tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtBRL(ctx.parsed.y)}` } } },
+            scales: { x: { ticks: { color: '#8b949e', maxTicksLimit: 12 }, grid: { color: '#21262d' } },
+                      y: { ticks: { color: '#8b949e', callback: (v) => `R$ ${fmtNum(v / 1000, 0)} mil` }, grid: { color: '#21262d' } } }
+        }
+    });
+    state.goalCharts.push(chart);
+}
+
+// Campos do formulário como digitados (o servidor valida e converte).
+function goalFields() {
+    return {
+        name: $('goalName').value, kind: $('goalKind').value, target: $('goalTarget').value, withdrawal: $('goalWithdrawal').value,
+        initial: $('goalInitial').value, usePortfolio: $('goalUsePortfolio').checked, monthly: $('goalMonthly').value,
+        rate: $('goalRate').value, inflation: $('goalInflation').value, targetDate: $('goalDate').value, adjust: $('goalAdjust').checked
+    };
+}
+
+function updateGoalForm() {
+    $('goalTargetLabel').innerText = GOAL_TARGET_LABEL[$('goalKind').value];
+    $('goalInitial').disabled = $('goalUsePortfolio').checked;
+}
+
+function resetGoalForm() {
+    state.editingGoal = null;
+    $('goalForm').reset();
+    $('goalFormTitle').innerText = '🎯 Nova meta';
+    $('goalSaveBtn').innerText = 'Salvar meta';
+    $('goalCancelBtn').hidden = true;
+    $('goalPreview').hidden = true;
+    $('goalPreview').innerHTML = '';
+    setMsg('goalMsg', '');
+    updateGoalForm();
+}
+
+function fillGoalForm(g) {
+    state.editingGoal = g.id;
+    $('goalName').value = g.name;
+    $('goalKind').value = g.kind;
+    $('goalTarget').value = g.target;
+    $('goalWithdrawal').value = g.withdrawal;
+    $('goalInitial').value = g.initial;
+    $('goalUsePortfolio').checked = g.usePortfolio;
+    $('goalMonthly').value = g.monthly;
+    $('goalRate').value = g.rate;
+    $('goalInflation').value = g.inflation;
+    $('goalDate').value = g.targetDate || '';
+    $('goalAdjust').checked = g.adjust;
+    $('goalFormTitle').innerText = `✏️ Editar meta "${g.name}"`;
+    $('goalSaveBtn').innerText = 'Salvar alterações';
+    $('goalCancelBtn').hidden = false;
+    setMsg('goalMsg', '');
+    updateGoalForm();
+    $('goalFormPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('goalName').focus();
+}
+
+async function submitGoal(ev) {
+    ev.preventDefault();
+    if (!current()) return;
+    const res = await act('salvar_meta', { ...goalFields(), goalId: state.editingGoal });
+    if (res.error) return setMsg('goalMsg', res.error, 'error');
+    resetGoalForm();
+    setMsg('goalMsg', res.message, 'ok');
+}
+
+// Projeção do que está no formulário, sem gravar.
+async function previewGoal() {
+    const portfolio = current();
+    if (!portfolio) return;
+    const busy = busyStart('Simulando a meta...');
+    let res;
+    try {
+        res = await apiPost(`/carteira/${portfolio.id}/metas/simular`, goalFields());
+    } catch (e) {
+        setMsg('goalMsg', e.message, 'error');
+        return;
+    } finally {
+        busy();
+    }
+    setMsg('goalMsg', res.warning || '', res.warning ? 'error' : '');
+    const box = $('goalPreview');
+    box.hidden = false;
+    box.innerHTML = goalCard(res.goal, false);
+    drawGoalChart(res.goal, `goalChart-${res.goal.id}`);
+}
+
+async function onGoalsClick(ev) {
+    const edit = ev.target.closest?.('[data-goal-edit]');
+    const del = ev.target.closest?.('[data-goal-delete]');
+    const goals = state.goals?.goals || [];
+    if (edit) {
+        const g = goals.find(x => x.id === edit.dataset.goalEdit);
+        if (g) fillGoalForm(g);
+    } else if (del) {
+        const g = goals.find(x => x.id === del.dataset.goalDelete);
+        if (!g || !confirm(`Excluir a meta "${g.name}"?`)) return;
+        const res = await act('excluir_meta', { goalId: g.id });
+        setMsg('goalMsg', res.error || res.message, res.error ? 'error' : 'ok');
+        if (!res.error && state.editingGoal === g.id) resetGoalForm();
+    }
 }
 
 function showError(text) { $('errorBanner').innerText = text; $('errorBanner').style.display = 'block'; }

@@ -11,6 +11,7 @@ import math
 import re
 from datetime import date
 
+from . import goals as gl
 from . import market_data, screener
 from . import portfolio as pf
 from . import portfolio_service as svc
@@ -96,6 +97,36 @@ def get_scan(req):
 def get_bova(req):
     return screener.bova_kpi(req.arg("mode", "fechamento"))
 
+
+def percent_arg(req, name, default, low, high):
+    """Parâmetro em % (aceita vírgula) → fração; fora de [low, high] = 400."""
+    value = pf.parse_number(req.arg(name), default)
+    if value is None or not low <= value <= high:
+        raise HTTPError(400, f"{name} deve ficar entre {low} e {high}%")
+    return value / 100
+
+
+@route("GET", "/api/backtest")
+def get_backtest(req):
+    """Aba Backtest: a estratégia lote a lote num ativo (ticker, market b3|us, target e fraction
+    em %, strict=1 exige o candle de rejeição, from/to = período, AAAA-MM-DD, opcionais)."""
+    market = req.arg("market", "b3")
+    if market not in screener.BACKTEST_MARKETS:
+        raise HTTPError(400, "market deve ser b3 ou us")
+    ticker = valid_ticker(pf.normalize_ticker(req.arg("ticker")))
+    target = percent_arg(req, "target", screener.CONFIG["partialTarget"] * 100, 0.5, 500)
+    fraction = percent_arg(req, "fraction", screener.CONFIG["partialFraction"] * 100, 0, 100)
+    start, end = req.arg("from") or None, req.arg("to") or None
+    for value in (start, end):
+        if value and not pf.is_iso_date(value):
+            raise HTTPError(400, "informe as datas do período como AAAA-MM-DD")
+    if start and end and start >= end:
+        raise HTTPError(400, "O início do período deve ser antes do fim.")
+    try:
+        return screener.backtest_view(ticker, market, target, fraction, req.arg("strict") == "1", start, end)
+    except ValueError as err:
+        raise HTTPError(400, str(err)) from None
+
 # Carteira
 
 
@@ -146,6 +177,20 @@ def post_contribution(req):
     body = req.json_object()
     return svc.contribution(portfolio_of(req, needs_entries=True), body.get("amount"), body.get("mode"),
                             body.get("base"), body.get("selected"))
+
+
+@route("GET", f"/api/carteira/{PORTFOLIO_ID}/metas")
+def get_goals(req):
+    return svc.goals_payload(portfolio_of(req))
+
+
+@route("POST", f"/api/carteira/{PORTFOLIO_ID}/metas/simular")
+def post_goal_preview(req):
+    portfolio = portfolio_of(req)
+    goal, error = gl.goal_from_form(req.json_object(), svc.today_iso())
+    if error:
+        raise HTTPError(400, error)
+    return svc.goal_preview(portfolio, goal)
 
 
 @route("GET", "/api/cotacao")

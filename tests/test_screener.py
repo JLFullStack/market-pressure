@@ -18,15 +18,44 @@ class AnalysisTest(unittest.TestCase):
 
     def test_backtest_buys_again_only_in_a_new_pullback(self):
         opens = {221: 100, 222: 102, 226: 110, 231: 105, 233: 90}
-        ind = {"candles": [{"o": opens.get(i, 1)} for i in range(240)]}
+        ind = {"candles": [{"o": opens.get(i, 1), "h": opens.get(i, 1)} for i in range(240)]}
         signals, exits = {220, 221, 225, 232}, {230}
         with mock.patch.object(screener, "evaluate_setup", lambda ind, i: {"ok": i in signals, "okStrict": False}), \
-                mock.patch.object(screener, "exit_signal", lambda ind, i: i in exits):
+                mock.patch.object(screener, "exit_signal", lambda ind, i: i in exits), \
+                mock.patch.dict(screener.CONFIG, {"partialFraction": 0}):
             bt = screener.backtest(ind, strict=False)
         # 100 e 110 vendidas a 105 (102 é o mesmo pullback da compra a 100); 90 segue aberta
         self.assertEqual((bt["wins"], bt["trades"]), (1, 2))
         self.assertAlmostEqual(bt["avgReturn"], (5 + (105 / 110 - 1) * 100) / 2)
         self.assertAlmostEqual(bt["winRate"], (1 + 2) / (2 + 4) * 100)
+
+    def test_partial_exit_sells_half_of_each_lot_at_the_target(self):
+        opens = {221: 100, 228: 200, 229: 216, 231: 105}
+        highs = {225: 111, 229: 230}
+        ind = {"candles": [{"o": opens.get(i, 100), "h": highs.get(i, opens.get(i, 100))} for i in range(240)]}
+        signals, exits = {220, 227}, {230}
+        with mock.patch.object(screener, "evaluate_setup", lambda ind, i: {"ok": i in signals, "okStrict": False}), \
+                mock.patch.object(screener, "exit_signal", lambda ind, i: i in exits):
+            lots = screener.backtest_lots(ind, strict=False)
+            bt = screener.backtest(ind, strict=False)
+        # Lote 1 (100): metade no alvo de 110 (máxima 111), resto a 105. Lote 2 (200): o pregão
+        # abriu a 216, abaixo do alvo de 220, e a máxima chegou a 230: metade a 220.
+        self.assertEqual([(lot["partial"]["i"], round(lot["partial"]["price"], 6)) for lot in lots], [(225, 110), (229, 220)])
+        self.assertEqual([lot["exit"]["price"] for lot in lots], [105, 105])
+        self.assertAlmostEqual(screener.lot_return(lots[0], 0.5), 0.5 * 0.10 + 0.5 * 0.05)
+        self.assertAlmostEqual(screener.lot_return(lots[1], 0.5), 0.5 * 0.10 + 0.5 * (105 / 200 - 1))
+        self.assertEqual((bt["wins"], bt["trades"]), (1, 2))
+
+    def test_partial_fill_uses_the_open_on_a_gap(self):
+        opens = {221: 100, 224: 115}
+        ind = {"candles": [{"o": opens.get(i, 100), "h": opens.get(i, 100) + 1} for i in range(240)]}
+        with mock.patch.object(screener, "evaluate_setup", lambda ind, i: {"ok": i == 220, "okStrict": False}), \
+                mock.patch.object(screener, "exit_signal", lambda ind, i: False):
+            lot, = screener.backtest_lots(ind, strict=False)
+        self.assertEqual((lot["partial"]["i"], lot["partial"]["price"]), (224, 115))
+        self.assertIsNone(lot["exit"])
+        self.assertIsNone(screener.lot_return(lot, 0.5))
+        self.assertAlmostEqual(screener.lot_return(lot, 0.5, mark=120), 0.5 * 0.15 + 0.5 * 0.20)
 
     def test_classifications(self):
         self.assertEqual([screener.bottle_state(p) for p in (80, 65, 10)], ["cheia", "quase", "enchendo"])

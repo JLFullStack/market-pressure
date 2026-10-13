@@ -1,11 +1,11 @@
 """Armazenamento das carteiras (tabelas do banco) e as alterações feitas pela página.
 
-O documento das carteiras ({"version", "portfolios": [...]}) é guardado em seis tabelas do
+O documento das carteiras ({"version", "portfolios": [...]}) é guardado em sete tabelas do
 banco (database.py): portfolios, portfolio_classes, portfolio_assets, transactions,
-fixed_income e fixed_income_entries, ligadas por portfolio_id (e item_id nos lançamentos de
-renda fixa). A ordem das linhas é a ordem do documento. Cada ação lê o documento, valida,
-altera e grava todas as tabelas de uma vez (temporários + os.replace, com a versão anterior
-em data/backup/). Se a validação falha, nada é gravado e a mensagem volta para a página
+fixed_income, fixed_income_entries e portfolio_goals (metas), ligadas por portfolio_id (e
+item_id nos lançamentos de renda fixa). A ordem das linhas é a ordem do documento. Cada ação
+lê o documento, valida, altera e grava todas as tabelas de uma vez (temporários + os.replace,
+com a versão anterior em data/backup/). Se a validação falha, nada é gravado e a mensagem volta para a página
 (ActionError). As regras são as mesmas dos formulários.
 """
 
@@ -13,13 +13,18 @@ import threading
 import uuid
 
 from . import database as db
+from . import goals as gl
 from . import portfolio as pf
 from . import portfolio_service as svc
 from .core import fmt_brl, fmt_qty, today_iso
 
 DOC_VERSION = 2
 PORTFOLIO_TABLES = ("portfolios", "portfolio_classes", "portfolio_assets", "transactions",
-                    "fixed_income", "fixed_income_entries")
+                    "fixed_income", "fixed_income_entries", "portfolio_goals")
+# Meta (documento) ↔ colunas de portfolio_goals.
+GOAL_COLUMNS = {"id": "id", "name": "name", "kind": "kind", "target": "target", "withdrawal": "withdrawal",
+                "initial": "initial", "usePortfolio": "use_portfolio", "monthly": "monthly", "rate": "rate",
+                "inflation": "inflation", "adjust": "adjust", "targetDate": "target_date", "created": "created"}
 
 _lock = threading.RLock()
 
@@ -67,8 +72,10 @@ def read_raw() -> dict:
         fixed_income = [{**_optional({"id": f["id"], "name": f["name"], "class": f["class"]}, "target", f["target"]),
                          "entries": entries.get((pid, f["id"]), [])}
                         for f in by_portfolio["fixed_income"].get(pid, [])]
+        goals = [{key: _num(g.get(col)) for key, col in GOAL_COLUMNS.items()}
+                 for g in by_portfolio["portfolio_goals"].get(pid, [])]
         portfolios.append({"id": pid, "name": p["name"], "assets": assets, "transactions": transactions,
-                           "fixedIncome": fixed_income,
+                           "fixedIncome": fixed_income, "goals": goals,
                            "classes": [{"name": c["name"], "target": _num(c["target"])}
                                        for c in by_portfolio["portfolio_classes"].get(pid, [])]})
     return {"version": DOC_VERSION, "portfolios": portfolios}
@@ -91,6 +98,8 @@ def doc_tables(document: dict) -> dict:
         for f in p["fixedIncome"]:
             tables["fixed_income"].append({"portfolio_id": pid, **f})
             tables["fixed_income_entries"] += [{"portfolio_id": pid, "item_id": f["id"], **e} for e in f["entries"]]
+        tables["portfolio_goals"] += [{"portfolio_id": pid, **{col: g.get(key) for key, col in GOAL_COLUMNS.items()}}
+                                      for g in p.get("goals") or []]
     return tables
 
 
@@ -373,6 +382,37 @@ def register_batch(doc, body):
     return {"message": f"{' e '.join(parts)} {done}."}
 
 
+def _goal(cur, goal_id):
+    goal = next((g for g in cur["goals"] if g["id"] == goal_id), None)
+    if not goal:
+        raise ActionError("Meta não encontrada.")
+    return goal
+
+
+def save_goal(doc, body):
+    """Formulário da sub-aba Metas: cria a meta, ou atualiza a de goalId."""
+    cur = _find(doc, body.get("id"))
+    goal_id = body.get("goalId")
+    if goal_id:
+        _goal(cur, goal_id)
+    goal, error = gl.goal_from_form(body, today_iso(), goal_id or new_id())
+    if error:
+        raise ActionError(error)
+    if goal_id:
+        # A data de criação fica: o realizado × planejado continua desde quando a meta foi criada.
+        cur["goals"] = [{**goal, "created": g.get("created")} if g["id"] == goal_id else g for g in cur["goals"]]
+        return {"goalId": goal_id, "message": f'Meta "{goal["name"]}" atualizada.'}
+    cur["goals"].append({**goal, "created": today_iso()})
+    return {"goalId": goal["id"], "message": f'Meta "{goal["name"]}" criada.'}
+
+
+def delete_goal(doc, body):
+    cur = _find(doc, body.get("id"))
+    goal = _goal(cur, body.get("goalId"))
+    cur["goals"] = [g for g in cur["goals"] if g["id"] != goal["id"]]
+    return {"message": f'Meta "{goal["name"]}" excluída.'}
+
+
 ACTIONS = {
     "criar_carteira": create_portfolio,
     "renomear_carteira": rename_portfolio,
@@ -388,6 +428,8 @@ ACTIONS = {
     "mover_ativo": move_asset,
     "meta_ativo": set_asset_target,
     "registrar_lote": register_batch,
+    "salvar_meta": save_goal,
+    "excluir_meta": delete_goal,
 }
 
 

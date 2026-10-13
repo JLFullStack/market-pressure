@@ -7,6 +7,7 @@ trocado por browser.py, que conduz a varredura em etapas (finish/fail no fim).
 O front-end só escolhe qual das visões prontas mostrar (base × candle de rejeição).
 """
 
+import bisect
 import logging
 import math
 import threading
@@ -14,8 +15,8 @@ import time
 
 from . import database as db
 from . import market_data, runtime
-from .core import (SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
-                  evaluate_setup, exit_signal, fmt_num, in_session_hours, last_close, session_in_progress)
+from .core import (EXIT, SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
+                  evaluate_setup, exit_signal, fmt_date, fmt_num, in_session_hours, last_close, session_in_progress)
 
 CONFIG = {
     # Universo: ativos da lista do Yahoo (market_data.load_universe) de quatro tipos, cada um com
@@ -46,9 +47,11 @@ CONFIG = {
     "cacheTtlMinutes": 60,
     "topN": 20,
     **SETUP,                  # parâmetros do setup (core.py): maxDistance, maxBelowDistance, minPullback, mm200SlopeLookback
+    **EXIT,                   # saída parcial de cada lote (core.py): partialTarget, partialFraction
     # Backtest da estratégia: compra no pullback (entrada na abertura seguinte), recompra em
-    # pullbacks novos e venda de tudo só quando o fechamento fica abaixo de MM20, MM50 e MM200
-    # com MM50 < MM200 (ver exit_signal).
+    # pullbacks novos; cada compra vende partialFraction ao atingir +partialTarget e o restante
+    # de todas sai quando o fechamento fica abaixo de MM20, MM50 e MM200 com MM50 < MM200
+    # (ver exit_signal).
     "backtestStart": 220,     # primeiro candle com MM200 e inclinação disponíveis
     "reentryDistance": 0.05,  # recompra só a 5%+ do preço de cada compra da posição aberta (outro pullback)
     "priorWinRate": 0.5,      # base neutra para suavizar taxas de acerto com poucas amostras
@@ -59,7 +62,7 @@ CONFIG = {
 
 log = logging.getLogger(__name__)
 
-SCAN_VERSION = 3  # mude se o formato das análises mudar (descarta a varredura salva no banco)
+SCAN_VERSION = 4  # mude se o formato das análises mudar (descarta a varredura salva no banco)
 MODES = ("fechamento", "intradiario")
 KINDS = ("acoes", "fundos", "etfs", "bdrs")  # tipos de ativo (market_data.asset_kind), um ranking cada
 
@@ -166,34 +169,65 @@ def pressure(ind, i, setup, live=False, weights=None):
     }
 
 
-def backtest(ind, strict):
-    """Repete a estratégia no histórico do ativo: compra na abertura seguinte ao sinal do setup e
-    recompra a cada pullback novo enquanto a posição está aberta; o mesmo pullback não gera nova
-    compra (preço a menos de reentryDistance de alguma compra da posição). Quando o fechamento
-    dispara exit_signal, todas as compras são vendidas na abertura seguinte. Cada compra é uma
-    operação; acerto = venda acima daquela compra. Compras ainda abertas no fim não contam."""
-    wins = trades = 0
-    returns = []
+def backtest_lots(ind, strict, target=None, fraction=None, start=None):
+    """Repete a estratégia no histórico do ativo, lote a lote: compra na abertura seguinte ao sinal
+    do setup e recompra a cada pullback novo enquanto a posição está aberta; o mesmo pullback não
+    gera nova compra (preço a menos de reentryDistance de alguma compra da posição). Cada compra
+    vende `fraction` ao atingir +`target` (máxima de um candle depois do da compra; preenchida no
+    alvo, ou na abertura se ela já abriu acima). Quando o fechamento dispara exit_signal, o
+    restante de todas as compras é vendido na abertura seguinte.
+    Lote: {"entry": {"i", "price"}, "partial": {"i", "price"} | None, "exit": {"i", "price"} | None}
+    (i = índice do candle da execução). fraction 0 = só a regra B. start: primeiro candle em que
+    um sinal pode comprar (nunca antes de backtestStart, quando a MM200 e a inclinação existem)."""
+    target = CONFIG["partialTarget"] if target is None else target
+    fraction = CONFIG["partialFraction"] if fraction is None else fraction
     candles = ind["candles"]
     last = len(candles) - 1
-    entries = []  # preços de compra da posição aberta
-    for i in range(CONFIG["backtestStart"], last):
-        if entries and exit_signal(ind, i):
-            exit_price = candles[i + 1]["o"]
-            for entry in entries:
-                ret = exit_price / entry - 1
-                trades += 1
-                returns.append(ret)
-                if ret > 0:
-                    wins += 1
-            entries = []
+    lots, held = [], []
+    for i in range(max(CONFIG["backtestStart"], start or 0), last + 1):
+        c = candles[i]
+        if fraction > 0:
+            for lot in held:
+                goal = lot["entry"]["price"] * (1 + target)
+                if lot["partial"] is None and i > lot["entry"]["i"] and c["h"] >= goal:
+                    lot["partial"] = {"i": i, "price": max(goal, c["o"])}
+        if i == last:
+            break
+        if held and exit_signal(ind, i):
+            for lot in held:
+                lot["exit"] = {"i": i + 1, "price": candles[i + 1]["o"]}
+            held = []
             continue
         setup = evaluate_setup(ind, i)
         if not (setup["okStrict"] if strict else setup["ok"]):
             continue
         price = candles[i + 1]["o"]
-        if all(abs(price / entry - 1) >= CONFIG["reentryDistance"] for entry in entries):
-            entries.append(price)
+        if all(abs(price / lot["entry"]["price"] - 1) >= CONFIG["reentryDistance"] for lot in held):
+            lot = {"entry": {"i": i + 1, "price": price}, "partial": None, "exit": None}
+            held.append(lot)
+            lots.append(lot)
+    return lots
+
+
+def lot_return(lot, fraction, mark=None):
+    """Retorno do lote (fração): parte vendida no alvo + restante na saída. Lote ainda aberto:
+    None, ou, com mark, o restante marcado a esse preço."""
+    entry = lot["entry"]["price"]
+    end = lot["exit"]["price"] if lot["exit"] else mark
+    if end is None:
+        return None
+    if lot["partial"]:
+        return fraction * (lot["partial"]["price"] / entry - 1) + (1 - fraction) * (end / entry - 1)
+    return end / entry - 1
+
+
+def backtest(ind, strict):
+    """Resumo de backtest_lots: cada compra encerrada é uma operação; acerto = retorno do lote
+    (parcial + saída) positivo. Compras ainda abertas no fim não contam."""
+    fraction = CONFIG["partialFraction"]
+    returns = [r for r in (lot_return(lot, fraction) for lot in backtest_lots(ind, strict)) if r is not None]
+    trades = len(returns)
+    wins = sum(1 for r in returns if r > 0)
     smoothed = (wins + CONFIG["priorWinRate"] * CONFIG["priorWeight"]) / (trades + CONFIG["priorWeight"]) * 100
     return {"wins": wins, "trades": trades, "winRate": smoothed,
             "avgReturn": add_up(returns) / trades * 100 if trades else None}
@@ -545,6 +579,180 @@ scan_job = ScanJob()
 
 
 # ---------------------------------------------------------------- KPI do BOVA11
+
+# ---------------------------------------------------------------- Aba Backtest
+
+BACKTEST_MARKETS = {"b3": "R$", "us": "US$"}
+KIND_LABEL = {"acoes": "Ação", "fundos": "Fundo listado (FII, Fiagro, FI-Infra)", "etfs": "ETF", "bdrs": "BDR",
+              "us": "Ativo dos EUA"}
+MARKER_LETTER = {"buy": "C", "partial": "P", "exit": "V"}
+MARKER_ORDER = ("buy", "partial", "exit")
+LOT_MARGIN = 40  # pregões mostrados antes e depois de um lote ao focá-lo no gráfico
+
+
+def _lot_numbers(numbers):
+    """Rótulo dos lotes de um marcador: "3", "1–4" (seguidos) ou "2, 5"."""
+    if len(numbers) == 1:
+        return str(numbers[0])
+    if numbers == list(range(numbers[0], numbers[-1] + 1)):
+        return f"{numbers[0]}–{numbers[-1]}"
+    return ", ".join(map(str, numbers))
+
+
+def _pct_label(v):
+    """0,1 → "10"; 0,125 → "12,5"."""
+    v = round(v * 100, 4)
+    return fmt_num(v, 0 if float(v).is_integer() else 1)
+
+
+def _asset_info(ticker, market):
+    """Nome e tipo do ativo pela última lista do screener (tabela universe); sem ela, pelo código."""
+    if market != "b3":
+        return ticker, "us"
+    try:
+        row = next((u for u in db.read_table("universe") if u["ticker"] == ticker), None)
+    except Exception:
+        log.warning("não foi possível ler a lista de ativos salva", exc_info=True)
+        row = None
+    if row:
+        return row.get("name") or ticker, row.get("kind") or "acoes"
+    return ticker, market_data.asset_kind(ticker) or "acoes"
+
+
+def _backtest_summary(lots, fraction, mark):
+    """Resumo dos lotes: encerrados (acerto, médio, mediana, melhor, pior) e a soma de todos,
+    com os abertos marcados pelo último fechamento (mark)."""
+    closed = sorted(r for r in (lot_return(lot, fraction) for lot in lots) if r is not None)
+    wins = sum(1 for r in closed if r > 0)
+    return {
+        "lots": len(lots), "closed": len(closed), "open": len(lots) - len(closed), "wins": wins,
+        "winRate": wins / len(closed) * 100 if closed else None,
+        "winRateSmoothed": (wins + CONFIG["priorWinRate"] * CONFIG["priorWeight"])
+                           / (len(closed) + CONFIG["priorWeight"]) * 100,
+        "avgReturn": add_up(closed) / len(closed) * 100 if closed else None,
+        "medianReturn": closed[len(closed) // 2] * 100 if closed else None,
+        "best": closed[-1] * 100 if closed else None,
+        "worst": closed[0] * 100 if closed else None,
+        "sumReturn": add_up(lot_return(lot, fraction, mark) for lot in lots) * 100,
+    }
+
+
+def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False, start=None, end=None):
+    """Tudo o que a aba Backtest mostra de um ativo: candles e médias (pregões fechados; fundos no
+    preço ajustado por proventos, como no screener), cada lote com compra, venda parcial e saída,
+    marcadores do gráfico, resultado acumulado e o resumo, também com só a regra B para comparar.
+    target e fraction em fração (0,10 = 10%); None = os do CONFIG. start/end (AAAA-MM-DD, opcionais):
+    período do backtest. As médias usam o histórico anterior a start; compras só a partir de start
+    (ajustado para o primeiro pregão com MM200, se for antes) e o que estiver aberto em end é
+    marcado pelo fechamento desse dia. ValueError se o histórico ou o período não bastam."""
+    target = CONFIG["partialTarget"] if target is None else target
+    fraction = CONFIG["partialFraction"] if fraction is None else fraction
+    name, kind = _asset_info(ticker, market)
+    candles = closed_candles(market_data.history(ticker, market)["candles"])
+    if len(candles) < CONFIG["minCandles"]:
+        raise ValueError(f"{ticker}: histórico insuficiente ({len(candles)} pregões; "
+                         f"são necessários {CONFIG['minCandles']}).")
+    adjusted = kind in CONFIG["adjustDividends"]
+    if adjusted:
+        candles = adjusted_candles(candles)
+    days = [day_of(c["date"]) for c in candles]
+    first_day, last_day = days[CONFIG["backtestStart"]], days[-1]
+    if end:
+        cut = bisect.bisect_right(days, end)
+        if cut <= CONFIG["backtestStart"] + 1:
+            raise ValueError(f"O fim do período deve ser depois de {fmt_date(first_day)}: as médias precisam de "
+                             f"{CONFIG['backtestStart']} pregões de histórico antes da primeira compra.")
+        candles, days = candles[:cut], days[:cut]
+    ind = compute_indicators(candles)
+    last = len(candles) - 1
+    closes = ind["closes"]
+    first = max(CONFIG["backtestStart"], bisect.bisect_left(days, start) if start else 0)
+    if first >= last:
+        raise ValueError("O período não tem pregões suficientes; escolha um início anterior ao fim.")
+    note = None
+    if start and days[first] > start and start < first_day:
+        note = (f"Início ajustado para {fmt_date(days[first])}: o histórico do Yahoo começa em {fmt_date(days[0])} "
+                f"e as médias precisam de {CONFIG['backtestStart']} pregões antes da primeira compra.")
+    lots = backtest_lots(ind, strict, target, fraction, first)
+
+    rows, markers = [], {}
+    for n, lot in enumerate(lots, 1):
+        e, p, x = lot["entry"], lot["partial"], lot["exit"]
+        end = x["i"] if x else last
+        peak_close = max(closes[e["i"]:end + 1])
+        peak_high = max(c["h"] for c in candles[e["i"]:end + 1])
+        if x is None:
+            status = "Aberto, parcial realizada" if p else "Aberto"
+        else:
+            status = "Encerrado"
+        rows.append({
+            "n": n,
+            "entry": {"date": days[e["i"]], "price": e["price"]},
+            "partial": p and {"date": days[p["i"]], "price": p["price"], "return": (p["price"] / e["price"] - 1) * 100},
+            "exit": x and {"date": days[x["i"]], "price": x["price"], "return": (x["price"] / e["price"] - 1) * 100},
+            "open": x is None,
+            "return": lot_return(lot, fraction, closes[last]) * 100,
+            "days": end - e["i"],
+            "maxGain": (peak_high / e["price"] - 1) * 100,
+            "giveback": (1 - x["price"] / peak_close) * 100 if x else None,
+            "status": status,
+            "range": {"from": days[max(first, e["i"] - LOT_MARGIN)], "to": days[min(last, end + LOT_MARGIN)]},
+        })
+        for key, point in (("buy", e), ("partial", p), ("exit", x)):
+            if point:
+                markers.setdefault((point["i"], key), {"price": point["price"], "lots": []})["lots"].append(n)
+    marker_list = [{"time": days[i], "kind": key, "price": m["price"],
+                    "text": f"{MARKER_LETTER[key]}{_lot_numbers(m['lots'])}"}
+                   for (i, key), m in sorted(markers.items(), key=lambda kv: (kv[0][0], MARKER_ORDER.index(kv[0][1])))]
+
+    # Resultado acumulado: soma do retorno de cada lote (em % de um lote) dia a dia; a parte ainda
+    # aberta de cada lote é marcada pelo fechamento do dia.
+    equity = []
+    for i in range(first, len(candles)):
+        total = 0.0
+        for lot in lots:
+            e, p, x = lot["entry"], lot["partial"], lot["exit"]
+            if e["i"] > i:
+                continue
+            rest = 1.0
+            if p and p["i"] <= i:
+                total += fraction * (p["price"] / e["price"] - 1)
+                rest -= fraction
+            end_price = x["price"] if x and x["i"] <= i else closes[i]
+            total += rest * (end_price / e["price"] - 1)
+        equity.append({"time": days[i], "value": total * 100})
+
+    closed_rows = [r for r in rows if not r["open"]]
+    stats = _backtest_summary(lots, fraction, closes[last])
+    stats.update({
+        "partialHits": sum(1 for r in rows if r["partial"]),
+        "avgDays": add_up(r["days"] for r in closed_rows) / len(closed_rows) if closed_rows else None,
+        "avgGiveback": add_up(r["giveback"] for r in closed_rows) / len(closed_rows) if closed_rows else None,
+        "avgMaxGain": add_up(r["maxGain"] for r in rows) / len(rows) if rows else None,
+        "exits": len({lot["exit"]["i"] for lot in lots if lot["exit"]}),
+        "buyHold": (closes[last] / lots[0]["entry"]["price"] - 1) * 100 if lots else None,
+        "buyHoldFrom": days[lots[0]["entry"]["i"]] if lots else None,
+    })
+    only_b = _backtest_summary(backtest_lots(ind, strict, target, 0, first), 0, closes[last]) if fraction > 0 else None
+
+    rule_b = "quando o fechamento fica abaixo de MM20, MM50 e MM200 com MM50 < MM200 (regra B)"
+    if fraction > 0:
+        rule = f"Vende {_pct_label(fraction)}% de cada compra em +{_pct_label(target)}%; o restante {rule_b}."
+    else:
+        rule = f"Vende tudo {rule_b}."
+    return {
+        "ticker": ticker, "market": market, "name": name, "kind": kind, "kindLabel": KIND_LABEL.get(kind, kind),
+        "currency": BACKTEST_MARKETS[market], "adjusted": adjusted, "strict": strict,
+        "rule": {"target": target * 100, "fraction": fraction * 100, "text": rule},
+        "period": f"{fmt_date(days[first])} a {fmt_date(days[last])}", "lastDate": days[last], "lastClose": closes[last],
+        "bounds": {"min": first_day, "max": last_day, "from": days[first], "to": days[last]}, "note": note,
+        "candles": [{"time": days[i], "open": c["o"], "high": c["h"], "low": c["l"], "close": c["c"]}
+                    for i, c in enumerate(candles) if i >= first],
+        "ma": {k: [{"time": days[i], "value": v} for i, v in enumerate(ind[k]) if v is not None and i >= first]
+               for k in ("mm20", "mm50", "mm200")},
+        "markers": marker_list, "equity": equity, "lots": rows, "stats": stats, "onlyB": only_b,
+    }
+
 
 def bova_kpi(mode):
     """Variação do BOVA11 nos últimos bovaLookback pregões e posição do fechamento frente às

@@ -198,6 +198,7 @@ function tableRows(top, kind) {
         <tr>
             <td class="c nowrap" style="font-weight: bold;">${medals[index] || ''} ${index + 1}º</td>
             <td><a href="https://br.tradingview.com/chart/?symbol=BMFBOVESPA:${a.ticker}" target="_blank" rel="noopener" class="ticker-link">${a.ticker}</a>
+                <a href="backtest.html?ticker=${encodeURIComponent(a.ticker)}" class="inline-link small" aria-label="Backtest de ${a.ticker}">backtest</a>
                 <div class="small muted">${escapeHTML(a.sector || a.name || '')}</div></td>
             <td class="c" style="font-weight: bold; color: var(--accent);">${fmtNum(a.score)}</td>
             <td class="c nowrap">${fmtBRL(a.price)}<div class="small" style="color: ${a.change >= 0 ? 'var(--success)' : 'var(--danger)'};">${a.change >= 0 ? '+' : ''}${fmtNum(a.change, 2)}%</div></td>

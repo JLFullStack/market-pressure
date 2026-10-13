@@ -33,7 +33,8 @@ class ServerTest(DatabaseTestCase):
         return response.status, json.loads(raw) if is_json else raw, response
 
     def test_pages_and_assets_are_served(self):
-        for path in ("/", "/carteira", "/assets/js/core.js", "/assets/css/styles.css"):
+        for path in ("/", "/carteira", "/backtest", "/assets/js/core.js", "/assets/js/backtest.js",
+                     "/assets/css/styles.css"):
             self.assertEqual(self.request("GET", path)[0], 200, path)
 
     def test_code_and_database_are_private(self):
@@ -76,6 +77,44 @@ class ServerTest(DatabaseTestCase):
     def test_nan_becomes_null(self):
         with mock.patch.object(market_data, "universe", return_value=[{"close": float("nan")}]):
             self.assertEqual(self.request("GET", "/api/universe")[1], [{"close": None}])
+
+    def test_backtest_route(self):
+        status, data, _ = self.request("GET", "/api/backtest?ticker=petr4&target=10&fraction=50")
+        self.assertEqual(status, 200)
+        self.assertEqual((data["ticker"], data["kind"], data["rule"]["fraction"]), ("PETR4", "acoes", 50))
+        self.assertEqual(len(data["candles"]), len(data["equity"]))
+        self.assertTrue(data["lots"])
+        self.assertEqual(data["stats"]["lots"], len(data["lots"]))
+        self.assertIsNotNone(data["onlyB"])
+        status, period, _ = self.request("GET", "/api/backtest?ticker=PETR4&from=2021-10-01&to=2021-12-31")
+        self.assertEqual(status, 200)
+        self.assertEqual((period["bounds"]["from"], period["candles"][-1]["time"]), ("2021-10-01", "2021-12-31"))
+        self.assertEqual(period["candles"][0]["time"], "2021-10-01")
+        self.assertTrue(all("2021-10-01" < lot["entry"]["date"] <= "2021-12-31" for lot in period["lots"]))
+        self.assertLess(len(period["lots"]), len(data["lots"]))
+        self.assertIsNone(period["note"])
+        early = self.request("GET", "/api/backtest?ticker=PETR4&from=2020-01-01")[1]
+        self.assertEqual(early["bounds"]["from"], data["bounds"]["min"])  # ajustado: as médias precisam de 220 pregões
+        self.assertIn("Início ajustado", early["note"])
+        for query in ("ticker=PETR4&market=xx", "ticker=PETR4&target=abc", "ticker=&market=b3",
+                      "ticker=PETR4&fraction=150", "ticker=PETR4&from=ontem", "ticker=PETR4&from=2021-12-01&to=2021-11-01",
+                      "ticker=PETR4&to=2021-02-01"):
+            self.assertEqual(self.request("GET", f"/api/backtest?{query}")[0], 400, query)
+
+    def test_goal_routes(self):
+        pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "Metas"})[1]["id"]
+        status, data, _ = self.request("GET", f"/api/carteira/{pid}/metas")
+        self.assertEqual((status, data["goals"]), (200, []))
+        fields = {"name": "Casa", "kind": "patrimonio", "target": "300000", "monthly": "2000", "rate": "10",
+                  "inflation": "4", "usePortfolio": True, "adjust": True}
+        status, data, _ = self.request("POST", f"/api/carteira/{pid}/metas/simular", fields)
+        self.assertEqual(status, 200)
+        self.assertEqual((data["portfolioValue"], data["goal"]["result"]["current"]), (0, 0))
+        self.assertEqual(self.request("POST", f"/api/carteira/{pid}/metas/simular", {**fields, "target": "0"})[0], 400)
+        self.request("POST", "/api/carteira/acao", {"action": "salvar_meta", "id": pid, **fields})
+        status, data, _ = self.request("GET", f"/api/carteira/{pid}/metas")
+        self.assertEqual([g["name"] for g in data["goals"]], ["Casa"])
+        self.assertGreater(data["goals"][0]["result"]["reach"]["months"], 0)
 
 
 if __name__ == "__main__":

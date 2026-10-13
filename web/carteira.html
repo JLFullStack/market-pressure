@@ -12,6 +12,7 @@
     <nav class="tabs" aria-label="Seções do MarketPressure">
         <a href="analise_quantitativa_b3.html" class="tab">Screener</a>
         <a href="carteira.html" class="tab" aria-current="page">Carteira</a>
+        <a href="backtest.html" class="tab">Backtest</a>
         <a href="conta.html" class="tab" data-auth hidden>Conta</a>
         <div class="tabs-user" data-auth hidden>
             <span id="userName"></span>
@@ -49,6 +50,7 @@
         <button type="button" class="subtab" role="tab" id="tab-visao" data-tab="visao" aria-controls="panel-visao" aria-selected="true">Visão geral</button>
         <button type="button" class="subtab" role="tab" id="tab-aportes" data-tab="aportes" aria-controls="panel-aportes" aria-selected="false" tabindex="-1">Aportes e lançamentos</button>
         <button type="button" class="subtab" role="tab" id="tab-proventos" data-tab="proventos" aria-controls="panel-proventos" aria-selected="false" tabindex="-1">Proventos</button>
+        <button type="button" class="subtab" role="tab" id="tab-metas" data-tab="metas" aria-controls="panel-metas" aria-selected="false" tabindex="-1">Metas</button>
         <button type="button" class="subtab" role="tab" id="tab-configuracoes" data-tab="configuracoes" aria-controls="panel-configuracoes" aria-selected="false" tabindex="-1">Configurações</button>
     </div>
 
@@ -159,7 +161,7 @@
                         <tbody id="positionsBody"></tbody>
                     </table>
                 </div>
-                <p class="small muted">Lucro e rentabilidade incluem valorização, vendas e proventos (base: total comprado do ativo). Situação: <strong>Vender</strong> quando o fechamento fica abaixo da MM20, da MM50 e da MM200 com a MM50 abaixo da MM200; <strong>Atenção</strong> quando o fechamento perdeu as três médias sem esse cruzamento, ou está abaixo da MM200. Usa o último pregão fechado.</p>
+                <p class="small muted">Lucro e rentabilidade incluem valorização, vendas e proventos (base: total comprado do ativo). Situação: <strong>Vender</strong> quando o fechamento fica abaixo da MM20, da MM50 e da MM200 com a MM50 abaixo da MM200; <strong>Realizar 50%</strong> quando alguma compra já subiu 10% (máxima de um pregão depois dela) e metade dela ainda não foi vendida (a quantidade aparece abaixo; as vendas abatem primeiro essas parciais); <strong>Atenção</strong> quando o fechamento perdeu as três médias sem esse cruzamento, ou está abaixo da MM200. Usa o último pregão fechado.</p>
             </div>
         </div>
 
@@ -437,6 +439,70 @@
                 </table>
             </div>
             <p class="small muted">Valores brutos estimados pela data-com e pelos proventos informados pelo Yahoo Finance (data-ex). JCP tem 15% de IR retido na fonte; dividendos de ativos dos EUA aparecem brutos, sem os 30% de IR retidos lá, convertidos pelo câmbio USDBRL da data-ex. Os valores podem diferir do extrato da corretora.</p>
+        </div>
+    </section>
+
+    <!-- ============================================================ Metas -->
+    <section id="panel-metas" role="tabpanel" aria-labelledby="tab-metas" tabindex="0" hidden>
+        <div class="panel" id="goalFormPanel">
+            <h2 id="goalFormTitle">🎯 Nova meta</h2>
+            <form id="goalForm" novalidate>
+                <div class="form-grid">
+                    <label class="field">Nome da meta
+                        <input type="text" id="goalName" class="select" maxlength="60" placeholder="Ex.: Aposentadoria" autocomplete="off" required>
+                    </label>
+                    <label class="field">Tipo
+                        <select id="goalKind" class="select">
+                            <option value="renda">Renda mensal (viver de renda)</option>
+                            <option value="patrimonio">Patrimônio (valor acumulado)</option>
+                        </select>
+                    </label>
+                    <label class="field"><span id="goalTargetLabel">Renda mensal desejada (R$)</span>
+                        <input type="number" id="goalTarget" class="select" min="0" step="100" inputmode="decimal" placeholder="Ex.: 10000" required>
+                    </label>
+                    <label class="field">Taxa de retirada (% ao ano)
+                        <input type="number" id="goalWithdrawal" class="select" min="0.5" max="20" step="0.5" value="4" inputmode="decimal" aria-describedby="goalWithdrawalHint">
+                        <span class="field-hint" id="goalWithdrawalHint">% do patrimônio retirado por ano (4% é o usual)</span>
+                    </label>
+                    <label class="field">Patrimônio inicial (R$)
+                        <input type="number" id="goalInitial" class="select" min="0" step="100" value="0" inputmode="decimal">
+                    </label>
+                    <label class="field">Aporte mensal (R$)
+                        <input type="number" id="goalMonthly" class="select" min="0" step="100" inputmode="decimal" placeholder="Ex.: 2000">
+                    </label>
+                    <label class="field">Rentabilidade esperada (% ao ano)
+                        <input type="number" id="goalRate" class="select" min="-19" max="100" step="0.5" value="10" inputmode="decimal">
+                    </label>
+                    <label class="field">Inflação esperada (% ao ano)
+                        <input type="number" id="goalInflation" class="select" min="0" max="50" step="0.5" value="4" inputmode="decimal">
+                    </label>
+                    <label class="field">Data alvo (opcional)
+                        <input type="date" id="goalDate" class="select">
+                    </label>
+                </div>
+                <div class="goal-checks">
+                    <label class="toggle"><input type="checkbox" id="goalUsePortfolio"> Partir do patrimônio atual desta carteira</label>
+                    <label class="toggle"><input type="checkbox" id="goalAdjust" checked> Corrigir o aporte pela inflação todo ano</label>
+                </div>
+                <div class="batch-buttons">
+                    <button type="submit" class="btn" id="goalSaveBtn">Salvar meta</button>
+                    <button type="button" class="btn-secondary" id="goalPreviewBtn">Simular sem salvar</button>
+                    <button type="button" class="btn-secondary" id="goalCancelBtn" hidden>Cancelar edição</button>
+                </div>
+                <div class="form-msg" id="goalMsg" role="status" aria-live="polite"></div>
+            </form>
+            <div id="goalPreview" hidden></div>
+        </div>
+
+        <p class="banner" id="goalsWarning" role="status"></p>
+        <div id="goalsList"></div>
+
+        <div class="panel footnote">
+            <strong>Como as metas são calculadas.</strong> Projeção mês a mês em valores de hoje: o patrimônio rende a taxa real (a rentabilidade esperada descontada a inflação) e recebe o aporte no fim de cada mês.
+            Com "corrigir o aporte pela inflação", o aporte mantém o poder de compra; sem isso, o mesmo valor nominal vale um pouco menos a cada mês.
+            Meta de renda: patrimônio necessário = renda mensal × 12 ÷ taxa de retirada. Valores nominais (do futuro) aparecem à parte.
+            Ponto de virada: o mês em que os juros do mês superam o aporte. Sem impostos e custos; a rentabilidade real não é garantida.
+            Ferramenta de estudo — não constitui recomendação de investimento.
         </div>
     </section>
 

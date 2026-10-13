@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 
 from marketpressure import portfolio as pf
 
@@ -73,6 +74,51 @@ class ContributionTest(unittest.TestCase):
         result = pf.batch_totals(rows, 200)
         self.assertEqual(result["rows"], [25, 100, None])
         self.assertEqual((result["total"], result["complete"], result["included"], result["diff"]), (125, True, 2, 75))
+
+
+def day_candles(highs):
+    """Candles diários a partir de {AAAA-MM-DD: máxima} (meio-dia em Brasília)."""
+    out = []
+    for iso, high in sorted(highs.items()):
+        ts = int(datetime.fromisoformat(f"{iso}T15:00:00").replace(tzinfo=timezone.utc).timestamp())
+        out.append({"date": ts, "o": high, "h": high, "l": high, "c": high, "v": 1, "adj": high})
+    return out
+
+
+class PartialExitTest(unittest.TestCase):
+    CANDLES = day_candles({"2024-01-02": 12, "2024-01-03": 10.5, "2024-01-04": 11.2, "2024-01-05": 11,
+                           "2024-01-08": 19, "2024-01-09": 20.5})
+
+    def test_target_is_counted_only_after_the_purchase_day(self):
+        lots = pf.open_lots([tx("2024-01-02", "compra", 100, 10)], "PETR4", self.CANDLES)
+        self.assertEqual(lots[0]["hitDate"], "2024-01-04")  # a máxima de 12 no dia da compra não conta
+        self.assertEqual(pf.partial_to_sell(lots, "b3"), {"quantity": 50, "lots": 1, "target": 10.0, "fraction": 50.0})
+
+    def test_sale_after_the_target_settles_the_partial(self):
+        txs = [tx("2024-01-02", "compra", 100, 10), tx("2024-01-05", "venda", 50, 11)]
+        lots = pf.open_lots(txs, "PETR4", self.CANDLES)
+        self.assertEqual((lots[0]["remaining"], lots[0]["pending"]), (50, 0))
+        self.assertIsNone(pf.partial_to_sell(lots, "b3"))
+
+    def test_sales_settle_pending_partials_first_then_oldest_lots(self):
+        txs = [tx("2024-01-02", "compra", 100, 10), tx("2024-01-03", "compra", 100, 20),
+               tx("2024-01-05", "venda", 30, 11)]
+        lots = pf.open_lots(txs, "PETR4", self.CANDLES)
+        self.assertEqual([(lot["remaining"], lot["pending"]) for lot in lots], [(70, 20), (100, 0)])
+        txs[-1] = tx("2024-01-05", "venda", 150, 11)
+        lots = pf.open_lots(txs, "PETR4", self.CANDLES)
+        self.assertEqual([(lot["price"], lot["remaining"], lot["pending"]) for lot in lots], [(20, 50, 0)])
+
+    def test_whole_shares_on_b3_and_status(self):
+        lots = pf.open_lots([tx("2024-01-02", "compra", 3, 10)], "PETR4", self.CANDLES)
+        partial = pf.partial_to_sell(lots, "b3")
+        self.assertEqual(partial["quantity"], 1)
+        self.assertEqual(pf.partial_to_sell(lots, "us")["quantity"], 1.5)
+        ind = {"closes": [10], "mm20": [9], "mm50": [9], "mm200": [8]}
+        self.assertEqual(pf.position_status(ind, 0, partial), "Realizar 50%")
+        self.assertEqual(pf.position_status(ind, 0, None), "Manter")
+        sell = {"closes": [7], "mm20": [9], "mm50": [8], "mm200": [8.5]}
+        self.assertEqual(pf.position_status(sell, 0, partial), "Vender")  # a regra B vem antes
 
 
 if __name__ == "__main__":

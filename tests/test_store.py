@@ -1,6 +1,7 @@
 """Ações da Carteira gravando num banco temporário."""
 
 import unittest
+from unittest import mock
 
 from marketpressure import database, portfolio_store as store
 from tests.support import DatabaseTestCase
@@ -72,9 +73,32 @@ class ActionsTest(DatabaseTestCase):
     def test_tables_round_trip(self):
         pid = self.new_portfolio()
         self.buy(pid)
+        self.act("salvar_meta", id=pid, **GOAL)
         doc = store.read_doc()
         store.write_doc(doc)
         self.assertEqual(store.read_doc(), doc)
+
+    def test_goal_is_created_edited_and_deleted(self):
+        pid = self.new_portfolio()
+        result = self.act("salvar_meta", id=pid, **GOAL)
+        self.assertEqual(result["message"], 'Meta "Aposentadoria" criada.')
+        goal = store.get_portfolio(pid)["goals"][0]
+        self.assertEqual((goal["id"], goal["target"], goal["usePortfolio"], goal["adjust"], goal["targetDate"]),
+                         (result["goalId"], 10000, False, True, None))
+        self.assertEqual(goal["created"], store.today_iso())
+        with mock.patch.object(store, "today_iso", return_value="2030-01-01"):
+            self.act("salvar_meta", id=pid, goalId=goal["id"], **{**GOAL, "name": "Liberdade", "targetDate": "2050-01-01"})
+        self.assertEqual([(g["name"], g["targetDate"], g["created"]) for g in store.get_portfolio(pid)["goals"]],
+                         [("Liberdade", "2050-01-01", goal["created"])])  # editar não muda a data de criação
+        with self.assertRaises(store.ActionError):
+            self.act("salvar_meta", id=pid, **{**GOAL, "monthly": "-5"})
+        self.assertEqual(len(store.get_portfolio(pid)["goals"]), 1)
+        self.act("excluir_meta", id=pid, goalId=goal["id"])
+        self.assertEqual(store.get_portfolio(pid)["goals"], [])
+
+
+GOAL = {"name": "Aposentadoria", "kind": "renda", "target": "10000", "withdrawal": "4", "initial": "1000",
+        "usePortfolio": False, "monthly": "2000", "rate": "10", "inflation": "4", "adjust": True}
 
 
 if __name__ == "__main__":

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MarketPressure — Backtest</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<div class="container">
+    <nav class="tabs" aria-label="Seções do MarketPressure">
+        <a href="analise_quantitativa_b3.html" class="tab">Screener</a>
+        <a href="carteira.html" class="tab">Carteira</a>
+        <a href="backtest.html" class="tab" aria-current="page">Backtest</a>
+        <a href="conta.html" class="tab" data-auth hidden>Conta</a>
+        <div class="tabs-user" data-auth hidden>
+            <span id="userName"></span>
+            <button type="button" class="link-btn" id="logoutBtn">Sair</button>
+        </div>
+    </nav>
+
+    <div class="panel">
+        <div class="header-panel">
+            <div>
+                <h1>🧪 Backtest</h1>
+                <div class="subtitle">Cada compra (lote) do setup no histórico do ativo, com a venda parcial e a saída pela regra B</div>
+            </div>
+        </div>
+        <form id="btForm" novalidate>
+            <div class="form-grid bt-form">
+                <label class="field">Ativo
+                    <input type="text" id="btTicker" class="select" placeholder="Ex.: PETR4" autocomplete="off" spellcheck="false" required>
+                </label>
+                <label class="field">Mercado
+                    <select id="btMarket" class="select">
+                        <option value="b3">B3</option>
+                        <option value="us">EUA</option>
+                    </select>
+                </label>
+                <label class="field">Alvo da venda parcial (%)
+                    <input type="number" id="btTarget" class="select" min="0.5" max="500" step="0.5" value="10" inputmode="decimal">
+                </label>
+                <label class="field">Parte vendida no alvo (%)
+                    <input type="number" id="btFraction" class="select" min="0" max="100" step="5" value="50" inputmode="decimal">
+                </label>
+                <label class="field">De
+                    <input type="date" id="btFrom" class="select">
+                </label>
+                <label class="field">Até
+                    <input type="date" id="btTo" class="select">
+                </label>
+                <label class="toggle bt-check"><input type="checkbox" id="btStrict"> Exigir candle de rejeição</label>
+                <div><button type="submit" class="btn">Rodar backtest</button></div>
+            </div>
+            <p class="small muted">Parte vendida 0% = só a regra B (vende tudo quando o fechamento fica abaixo de MM20, MM50 e MM200 com MM50 &lt; MM200). Os padrões (10% e 50%) são as regras do screener e da Carteira. Período em branco = todo o histórico disponível (cerca de 4 anos: o Yahoo guarda 5 e as médias precisam de 220 pregões antes da primeira compra).</p>
+            <div class="form-msg" id="btMsg" role="status" aria-live="polite"></div>
+        </form>
+    </div>
+
+    <div id="btResult" hidden>
+        <div class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2 id="btTitle"></h2>
+                    <div class="small muted" id="btSubtitle"></div>
+                </div>
+                <div class="seg" role="group" aria-label="Tipo de gráfico" id="chartType">
+                    <button type="button" data-type="candles" aria-pressed="true">Candles</button>
+                    <button type="button" data-type="line" aria-pressed="false">Linha</button>
+                </div>
+            </div>
+            <div class="bt-legend" id="btLegend"></div>
+            <div class="bt-chart" id="priceChart" role="img" aria-label="Gráfico de preço com médias móveis e as compras e vendas de cada lote"></div>
+            <h3 class="bt-subhead">Resultado acumulado das operações</h3>
+            <div class="bt-chart bt-chart-small" id="equityChart" role="img" aria-label="Soma do resultado dos lotes ao longo do tempo"></div>
+            <p class="small muted" id="btChartNote"></p>
+        </div>
+
+        <div class="panel">
+            <h2>Resumo</h2>
+            <div class="kpis" id="btKpis"></div>
+            <p class="small muted" id="btCompare"></p>
+        </div>
+
+        <div class="panel">
+            <h2>Lotes</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="c">Lote</th>
+                            <th>Compra</th>
+                            <th>Venda parcial</th>
+                            <th>Saída (regra B)</th>
+                            <th class="r">Resultado</th>
+                            <th class="r">Pregões</th>
+                            <th class="r">Alta máxima</th>
+                            <th class="r">Devolvido do topo</th>
+                            <th>Situação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lotsBody"></tbody>
+                </table>
+            </div>
+            <p class="small muted">Clique num lote para focá-lo no gráfico. Resultado = parte vendida no alvo + restante na saída (lotes abertos: restante pelo último fechamento). Alta máxima: maior máxima desde a compra. Devolvido do topo: queda do maior fechamento até o preço da saída.</p>
+        </div>
+
+        <div class="panel footnote">
+            <strong>Como o backtest funciona.</strong> Compra na abertura do pregão seguinte ao sinal do setup (o mesmo do screener) e recompra a cada novo pullback enquanto a posição está aberta, a pelo menos 5% do preço de todas as compras abertas.
+            Cada compra vende a parte escolhida quando a máxima de um pregão posterior ao da compra atinge o alvo (pelo alvo, ou pela abertura se o pregão já abriu acima).
+            O restante de todas as compras sai na abertura seguinte ao fechamento que dispara a regra B. Só pregões fechados; fundos listados usam o preço ajustado por proventos, como no screener.
+            Sem custos, impostos e proventos. Ferramenta de estudo — não constitui recomendação de investimento.
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="assets/js/core.js"></script>
+<script src="assets/js/backtest.js"></script>
+
+</body>
+</html>

@@ -55,6 +55,8 @@ PAGES = {
     "/analise_quantitativa_b3.html": "analise_quantitativa_b3.html",
     "/carteira": "carteira.html",
     "/carteira.html": "carteira.html",
+    "/backtest": "backtest.html",
+    "/backtest.html": "backtest.html",
 }
 # Só arquivos de web/ com estas extensões são servidos; o código e o banco (data/) ficam fora.
 CONTENT_TYPES = {

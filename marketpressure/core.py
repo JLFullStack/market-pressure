@@ -235,6 +235,16 @@ def compute_indicators(candles):
     }
 
 
+# Saída parcial de cada compra (lote): quando a máxima atinge +partialTarget sobre o preço da
+# compra, vende-se partialFraction do lote; o restante sai pela regra B (exit_signal). Os
+# backtests da carteira (aportes mensais, prioridade pelo Score) deram a "50% em +10% + B" como
+# a saída mais consistente entre as testadas. O CONFIG do screener os incorpora.
+EXIT = {
+    "partialTarget": 0.10,
+    "partialFraction": 0.5,
+}
+
+
 def exit_signal(ind, i):
     """Regra de venda (regra "B"): fechamento abaixo de MM20, MM50 e MM200 E tendência de baixa
     formada (MM50 < MM200). Usada no backtest do screener e na situação das posições da carteira."""

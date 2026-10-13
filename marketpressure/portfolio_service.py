@@ -4,17 +4,23 @@
 """
 
 import json
+import logging
 import threading
 import time
 from datetime import date
 
+from . import goals as gl
 from . import market_data, runtime
-from .core import add_up, day_of, session_in_progress, today_iso
+from .core import add_up, day_of, fmt_date, session_in_progress, today_iso
 from .portfolio import (APORTE_MODES, BENCHMARK, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
                         analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_items,
                         contribution_plan, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
-                        market_of, normalize_ticker, parse_number, period_start, rebase_series, suggest_class,
+                        market_of, net_flows, normalize_ticker, parse_number, period_start, rebase_series, suggest_class,
                         targets_off, tx_flow)
+
+log = logging.getLogger(__name__)
+
+
 def structure(portfolio):
     """Partes da página que dependem só da carteira (sem cotações): classes e o que há nelas,
     histórico de lançamentos, opções dos seletores e as classes padrão dos formulários."""
@@ -118,7 +124,8 @@ _analysis_lock = threading.Lock()
 
 
 def _signature(portfolio):
-    return json.dumps(portfolio, sort_keys=True, ensure_ascii=False)
+    """O que muda a análise: tudo menos as metas (editar uma meta não recarrega cotações)."""
+    return json.dumps({k: v for k, v in portfolio.items() if k != "goals"}, sort_keys=True, ensure_ascii=False)
 
 
 def full_analysis(portfolio, reuse=False):
@@ -220,3 +227,58 @@ def receivables(portfolio):
     return {"rows": rows, "failed": failed, "total": add_up(r["total"] for r in rows),
             "net": add_up(r["net"] for r in rows), "expected": add_up(r["total"] for r in rows if not r["confirmed"]),
             "jcpTax": JCP_TAX}
+
+
+def _portfolio_data(portfolio, today):
+    """O que as metas que partem da carteira usam: patrimônio atual, série diária, aporte médio
+    real e rentabilidade real anualizada. Sem lançamentos, tudo vazio; cotações indisponíveis =
+    patrimônio 0 com aviso."""
+    data = {"value": 0.0, "series": None, "contribution": None, "realReturn": None, "warning": None}
+    if not has_entries(portfolio):
+        return data
+    data["contribution"] = gl.average_contribution(net_flows(portfolio), today)
+    try:
+        a = full_analysis(portfolio, reuse=True)
+    except Exception as err:
+        log.warning("patrimônio da carteira indisponível para as metas", exc_info=True)
+        data["warning"] = f"Patrimônio atual indisponível ({err}); as metas que partem dele usam R$ 0,00."
+        return data
+    data["value"], data["series"] = a["kpis"]["total"], a["series"]
+    last12 = a["kpis"].get("last12")
+    if a["series"] and last12:
+        end = a["series"]["dates"][-1]
+        rate = gl.annualized_return(last12["portfolio"], last12["from"], end)
+        if rate is not None:
+            full = add_months(end, -12) >= a["series"]["dates"][0]
+            note = ("rentabilidade da carteira nos últimos 12 meses" if full
+                    else f"rentabilidade da carteira desde {fmt_date(last12['from'])}, anualizada")
+            data["realReturn"] = {"rate": rate, "note": note}
+    return data
+
+
+def _goal_view(goal, data, today):
+    uses = goal["usePortfolio"]
+    current = data["value"] if uses else goal["initial"]
+    result = gl.project(goal, current, today)
+    if uses:
+        result["projections"] = gl.projections(goal, current, today, data["contribution"], data["realReturn"])
+        if goal.get("created"):
+            result["tracking"] = gl.tracking(goal, data["series"], current, today)
+    return {**goal, "kindLabel": gl.KINDS[goal["kind"]], "result": result}
+
+
+def goals_payload(portfolio):
+    """Sub-aba Metas: cada meta com a projeção e, nas que partem da carteira, o realizado ×
+    planejado e as previsões pelo aporte e pela rentabilidade reais."""
+    goals = portfolio.get("goals") or []
+    today = today_iso()
+    data = _portfolio_data(portfolio, today) if any(g["usePortfolio"] for g in goals) else _portfolio_data({}, today)
+    return {"today": today, "portfolioValue": data["value"], "warning": data["warning"],
+            "goals": [_goal_view(g, data, today) for g in goals]}
+
+
+def goal_preview(portfolio, goal):
+    """Projeção de uma meta ainda não salva (o formulário já validado por goals.goal_from_form)."""
+    today = today_iso()
+    data = _portfolio_data(portfolio, today) if goal["usePortfolio"] else _portfolio_data({}, today)
+    return {"warning": data["warning"], "portfolioValue": data["value"], "goal": _goal_view(goal, data, today)}

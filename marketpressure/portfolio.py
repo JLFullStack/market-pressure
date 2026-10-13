@@ -11,7 +11,7 @@ import time
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from .core import (add_up, closed_candles, compute_indicators, day_of, evaluate_setup, exit_signal,
+from .core import (EXIT, add_up, closed_candles, compute_indicators, day_of, evaluate_setup, exit_signal,
                   fmt_date, fmt_num, fmt_qty, iso_day_in, js_round, today_iso)
 
 # Classes sugeridas para uma carteira nova (método ARCA). O usuário cria, renomeia e remove.
@@ -163,7 +163,8 @@ def normalize_portfolio(p):
             classes.append({"name": name, "target": 0})
     rest = {k: v for k, v in p.items() if k != "targets"}
     return {**rest, "classes": classes, "assets": assets, "transactions": p.get("transactions") or [],
-            "fixedIncome": fixed_income}
+            "fixedIncome": fixed_income,
+            "goals": [{**g, "created": g.get("created") or today_iso()} for g in p.get("goals") or []]}
 
 
 def normalize_doc(doc):
@@ -330,12 +331,68 @@ def dividends_to_receive(transactions, ticker, events, today=None):
     return out
 
 
-def position_status(ind, i):
-    """Situação da posição pela regra de saída do setup: "Vender" (exit_signal); "Atenção" se o
-    fechamento perdeu as três médias (sem MM50 < MM200 ainda) ou só a MM200; senão "Manter"."""
+def open_lots(transactions, ticker, candles, target=EXIT["partialTarget"], fraction=EXIT["partialFraction"]):
+    """Compras (lotes) ainda abertas de um ticker e quanto falta vender de cada uma pela saída
+    parcial. Um lote atinge o alvo no primeiro pregão depois da compra cuja máxima chega a
+    +target sobre o preço dela (candles e preço na moeda do ativo). Cada venda abate primeiro a
+    parcial pendente dos lotes que já tinham atingido o alvo na data da venda (até `fraction` do
+    lote); o que sobra sai das compras mais antigas. pending = quantidade a vender agora."""
+    days = [day_of(c["date"]) for c in candles]
+    lots = []
+    for tx in by_date(t for t in transactions if t["ticker"] == ticker):
+        if tx["type"] == "compra":
+            goal = tx["price"] * (1 + target)
+            k = lower_bound(days, tx["date"])
+            k += k < len(days) and days[k] == tx["date"]  # a partir do pregão seguinte ao da compra
+            hit = next((days[j] for j in range(k, len(days)) if candles[j]["h"] >= goal), None)
+            lots.append({"date": tx["date"], "price": tx["price"], "quantity": tx["quantity"],
+                         "remaining": tx["quantity"], "realized": 0.0, "hitDate": hit})
+            continue
+        left = tx["quantity"]
+        for lot in lots:
+            if left > EPS and lot["hitDate"] and lot["hitDate"] <= tx["date"]:
+                take = min(left, lot["remaining"], max(0.0, lot["quantity"] * fraction - lot["realized"]))
+                lot["realized"] += take
+                lot["remaining"] -= take
+                left -= take
+        for lot in lots:
+            take = min(left, lot["remaining"])
+            lot["remaining"] -= take
+            left -= take
+    out = []
+    for lot in lots:
+        if lot["remaining"] <= EPS:
+            continue
+        due = lot["quantity"] * fraction - lot["realized"] if lot["hitDate"] else 0.0
+        out.append({**lot, "pending": min(lot["remaining"], max(0.0, due))})
+    return out
+
+
+def partial_to_sell(lots, market):
+    """Quantidade a vender pela saída parcial (lotes que atingiram o alvo e ainda não venderam a
+    parte deles); inteira na B3. None quando não há."""
+    pending = add_up(lot["pending"] for lot in lots if lot["pending"] > EPS)
+    if market == "b3":
+        pending = math.floor(pending + EPS)
+    if pending <= EPS:
+        return None
+    return {"quantity": pending, "lots": sum(1 for lot in lots if lot["pending"] > EPS),
+            "target": EXIT["partialTarget"] * 100, "fraction": EXIT["partialFraction"] * 100}
+
+
+PARTIAL_STATUS = f"Realizar {fmt_num(EXIT['partialFraction'] * 100, 0)}%"
+
+
+def position_status(ind, i, partial=None):
+    """Situação da posição pelas regras de saída: "Vender" (exit_signal); "Realizar 50%" quando
+    alguma compra atingiu o alvo da saída parcial e a parte dela ainda não foi vendida
+    (partial_to_sell); "Atenção" se o fechamento perdeu as três médias (sem MM50 < MM200 ainda)
+    ou só a MM200; senão "Manter"."""
     c = ind["closes"][i]
     if exit_signal(ind, i):
         return "Vender"
+    if partial:
+        return PARTIAL_STATUS
     # Abaixo das três médias implica abaixo da MM200: as duas condições se resumem a c < MM200.
     if c < ind["mm200"][i]:
         return "Atenção"
@@ -744,12 +801,14 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None):
         value = p["quantity"] * price
         dividends_total = div_by_ticker.get(p["ticker"], 0)
         profit = value + p["soldProceeds"] + dividends_total - p["bought"]
-        status = setup = None
+        status = setup = partial = None
         if n:
             memo = {}
             closed = closed_for(raw, market, now)
+            if p["quantity"] > 0:
+                partial = partial_to_sell(open_lots(txs, p["ticker"], raw), market)
             if len(closed) >= 200:
-                status = position_status(indicators_memo(closed, memo), len(closed) - 1)
+                status = position_status(indicators_memo(closed, memo), len(closed) - 1, partial)
             setup = {mode: setup_now(raw, market, mode, now, memo) for mode in ("fechamento", "intradiario")}
         positions.append({
             **p, "market": market, "currency": MARKETS[market]["currency"],
@@ -762,6 +821,7 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None):
             "dayValue": 0 if day_change is None else p["quantity"] * (candles[-1]["c"] - candles[-2]["c"]),
             "value": value, "dividends": dividends_total, "profit": profit,
             "returnPct": profit / p["bought"] * 100 if p["bought"] else None, "status": status, "setup": setup,
+            "partial": partial if status == PARTIAL_STATUS else None,
         })
     open_ = sorted((p for p in positions if p["quantity"] > 0), key=lambda p: -p["value"])
     fixed = [s for s in (fixed_income_summary(f, as_of) for f in portfolio.get("fixedIncome") or []) if s["entries"]]
@@ -912,6 +972,17 @@ def class_members(portfolio, name):
     """Ativos e títulos que impedem a remoção de uma classe (é preciso movê-los antes)."""
     return ([t for t, a in (portfolio.get("assets") or {}).items() if a.get("class") == name]
             + [f["name"] for f in portfolio.get("fixedIncome") or [] if f.get("class") == name])
+
+
+def net_flows(portfolio):
+    """Aportes líquidos em reais por lançamento: compras e aportes de renda fixa positivos, vendas
+    e resgates negativos ("valor atual" não é fluxo). [(data, valor)]."""
+    flows = [(tx["date"], tx_flow(tx)) for tx in portfolio.get("transactions") or []]
+    for f in portfolio.get("fixedIncome") or []:
+        for e in f.get("entries") or []:
+            if e["type"] in ("aporte", "resgate"):
+                flows.append((e["date"], e["amount"] if e["type"] == "aporte" else -e["amount"]))
+    return flows
 
 
 def has_entries(portfolio):

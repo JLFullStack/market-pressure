@@ -174,6 +174,7 @@ tr:hover { background-color: rgba(56, 139, 253, 0.03); }
 .badge-fill { background-color: rgba(219, 109, 40, 0.15); color: var(--warning); border: 1px solid rgba(219, 109, 40, 0.3); }
 .badge-low { background-color: rgba(139, 148, 158, 0.15); color: var(--text-muted); border: 1px solid rgba(139, 148, 158, 0.3); }
 .badge-ok { background-color: rgba(46, 160, 67, 0.15); color: var(--success); border: 1px solid rgba(46, 160, 67, 0.3); }
+.badge-info { background-color: rgba(56, 139, 253, 0.15); color: var(--accent); border: 1px solid rgba(56, 139, 253, 0.3); }
 
 /* Abas no topo das páginas */
 .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); }
@@ -297,6 +298,40 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 .batch-error td { background-color: rgba(248, 81, 73, 0.08); }
 .history-toggle { margin-top: 12px; }
 
+/* ------------------------------------------------------------ Carteira: sub-aba Metas */
+.goal-checks { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 12px 0 4px; }
+.goal-card h3 { margin-top: 18px; }
+.goal-summary { font-size: 15px; margin: 4px 0 12px; }
+.goal-progress { height: 10px; background: var(--border-color); border-radius: 5px; overflow: hidden; margin-bottom: 6px; }
+.goal-progress div { height: 100%; background: var(--success); }
+.goal-bydate { font-size: 13px; margin: 10px 0 0; }
+.goal-kpis { margin-top: 14px; }
+.goal-kpis .kpi-value { font-size: 20px; }
+.goal-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.goal-chip { border: 1px solid var(--border-color); border-radius: 14px; padding: 4px 10px; font-size: 12px; color: var(--text-muted); }
+.goal-chip.done { border-color: rgba(46, 160, 67, 0.4); color: var(--success); }
+.goal-chart { height: 280px; }
+.goal-chart-small { height: 220px; }
+.goal-scenarios td.goal-current { color: var(--accent); font-weight: 700; }
+.goal-details { margin-top: 16px; }
+.goal-details summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px; }
+.goal-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#goalPreview { margin-top: 16px; }
+#goalPreview .goal-card { margin-bottom: 0; border-style: dashed; }
+
+/* ------------------------------------------------------------ Aba Backtest */
+.bt-form .bt-check { align-self: center; padding-bottom: 8px; }
+.bt-chart { position: relative; height: 460px; margin-top: 10px; }
+.bt-chart-small { height: 200px; }
+.bt-subhead { margin: 18px 0 0; }
+.bt-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+.bt-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch-line { display: inline-block; width: 14px; height: 2px; }
+.swatch-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.lot-row { cursor: pointer; }
+.lot-row.selected td { background-color: rgba(56, 139, 253, 0.1); }
+.lot-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
 @media (max-width: 640px) {
     body { padding: 16px; }
     .tab { padding: 10px 12px; }
@@ -306,6 +341,9 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
     .class-input { width: 130px; }
     .num-input { width: 90px; }
     th, td { padding: 10px; }
+    .bt-chart { height: 340px; }
+    .goal-chart { height: 220px; }
+    .bt-chart-small { height: 160px; }
 }
 
 /* ------------------------------------------------------------ Login e conta (versão publicada) */
