@@ -87,14 +87,16 @@ function render(scan) {
     const top = result.top;
 
     const refDate = fmtDate(view.refDate);
+    const liquidity = `R$ ${fmtNum(scan.minAvgVolume / 1e6, 0)} mi por pregão`;
     const basis = mode === 'fechamento'
         ? `Base: fechamento de ${refDate}`
         : scan.liveSession
             ? `Base: intradiário de ${refDate} (pregão em andamento; dados até ${new Date(scan.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})`
             : `Base: intradiário — sem pregão em andamento, usando o fechamento de ${refDate}`;
     document.getElementById('lastUpdate').innerText =
-        `${basis} · varredura de ${new Date(scan.timestamp).toLocaleString('pt-BR')} · universo das ${scan.universeSize} ações mais líquidas da B3`;
+        `${basis} · varredura de ${new Date(scan.timestamp).toLocaleString('pt-BR')} · universo de ${scan.universeSize} ações da B3 com volume médio acima de ${liquidity}`;
     document.getElementById('fnUniverse').innerText = scan.universeSize;
+    document.getElementById('fnLiquidity').innerText = liquidity;
 
     const info = document.getElementById('infoBanner');
     info.style.display = top.length < scan.topN ? "block" : "none";

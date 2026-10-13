@@ -109,13 +109,13 @@
     </div>
 
     <div class="panel footnote">
-        <strong>Metodologia.</strong> Universo: as <span id="fnUniverse"></span> ações mais negociadas da B3 por volume financeiro (lista da brapi, sem fracionários).
+        <strong>Metodologia.</strong> Universo: as <span id="fnUniverse"></span> ações da B3 (lista da brapi, sem fracionários) com volume financeiro médio dos últimos 20 pregões acima de <span id="fnLiquidity"></span>; a média evita que uma ação saia do universo por causa de um único dia fraco.
         Candles diários de 5 anos do Yahoo Finance, sem ajuste por proventos (mesma base do gráfico padrão do TradingView). Tendência: MM200 ascendente, com preço, MM20 e MM50 acima dela. Pullback: correção mínima de 3% desde o topo de 20 pregões, fechamento atual até 3% acima da média testada (no intradiário, o último pregão também acima dela) e fechamentos anteriores do pullback no máximo 3% abaixo dela. Pressão = Volume 25% (OBV acima do preço em 60 dias, volume forte nos dias de alta do avanço até o topo e volume secando no pullback; no intradiário, o volume parcial do dia é ignorado) +
         Momentum 30% (RSI 14 preservando a faixa de 40 no pullback, recuo do RSI desde o topo, Estocástico 14 que chegou perto da sobrevenda e divergência oculta de alta) +
         Tendência 25% (histograma MACD recuperando a força vendedora do pullback, MACD vs. linha zero medido em ATR, distância da média) +
         Estrutura 20% (largura das Bandas de Bollinger no percentil de 120 dias + amplitude dos últimos 5 pregões em ATR).
         A pressão descreve o padrão do pullback; não é uma probabilidade de acerto.
-        Taxa de acerto: backtest da estratégia de compra no pullback e venda quando o fechamento fica abaixo da MM20, da MM50 e da MM200 com a MM50 abaixo da MM200, nos 5 anos de histórico do próprio ativo.
+        Taxa de acerto: backtest da estratégia de compra no pullback, com recompra a cada pullback novo (a pelo menos 5% do preço das compras anteriores da posição), e venda de tudo quando o fechamento fica abaixo da MM20, da MM50 e da MM200 com a MM50 abaixo da MM200, nos 5 anos de histórico do próprio ativo.
         Compra e venda na abertura do pregão seguinte ao sinal, sem custos; acerto = venda acima da compra; operações ainda abertas não contam.
         A taxa é suavizada para uma base de 50% quando há poucas operações; entre parênteses, acertos/operações e o retorno médio por operação.
         Ferramenta de estudo — não constitui recomendação de investimento.

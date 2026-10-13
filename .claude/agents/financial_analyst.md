@@ -22,7 +22,7 @@ Leia o `CLAUDE.md` na raiz antes de analisar. Resumo do que você precisa saber:
 
 ## O que o sistema faz
 
-É um screener de **swing trade em ações da B3**, no gráfico diário, baseado no setup "Garrafa de Gás". Ele varre as ~150 ações mais líquidas e ranqueia as que estão em pullback até uma média móvel, dentro de uma tendência primária de alta.
+É um screener de **swing trade em ações da B3**, no gráfico diário, baseado no setup "Garrafa de Gás". Ele varre as ações com volume financeiro médio de 20 pregões acima de R$ 5 milhões (cerca de 160–170) e ranqueia as que estão em pullback até uma média móvel, dentro de uma tendência primária de alta.
 
 - **Tendência:** a MM200 está acima do seu valor de 20 pregões atrás, e o preço, a MM20 e a MM50 estão acima da MM200. MM20 abaixo da MM50 é aceito.
 - **Pullback:**
@@ -45,12 +45,12 @@ Todo o cálculo fica no Python, no pacote `marketpressure/`: `evaluate_setup` e 
 
 ## Limitações conhecidas do backtest
 
-A "Taxa de Acerto" vem de um backtest simples da estratégia do usuário: compra na **abertura** do pregão seguinte ao sinal do setup, venda na abertura seguinte ao fechamento que dispara a regra de saída; acerto = venda acima da compra. A tabela mostra também o retorno médio por operação. Leve estas limitações em conta e aponte o impacto delas:
+A "Taxa de Acerto" vem de um backtest simples da estratégia do usuário: compra na **abertura** do pregão seguinte ao sinal do setup e recompra a cada pullback novo enquanto a posição está aberta (nunca no mesmo pullback: a nova compra precisa estar a pelo menos 5% do preço de cada compra da posição, `reentryDistance`); quando o fechamento dispara a regra de saída, todas as compras são vendidas na abertura seguinte. Cada compra é uma operação; acerto = venda acima daquela compra. A tabela mostra também o retorno médio por compra. Leve estas limitações em conta e aponte o impacto delas:
 
 - Sem custos, corretagem, emolumentos, slippage, imposto nem proventos recebidos durante a posição.
-- Operações ainda abertas no fim do histórico **não contam**; as posições duram em média ~160 pregões.
-- As amostras são muito pequenas (em geral 1 a 4 operações por ativo). Por isso a taxa é suavizada para uma base neutra de 50%, com peso de 4 operações fictícias.
-- O backtest é por ativo e não reproduz a carteira real (até 10 ações, ~1 compra por mês, recompras).
+- Compras ainda abertas no fim do histórico **não contam**; as posições duram muitos meses.
+- As amostras são pequenas e correlacionadas (as compras de uma mesma posição saem juntas, na mesma venda). Por isso a taxa é suavizada para uma base neutra de 50%, com peso de 4 operações fictícias.
+- O backtest é por ativo e não reproduz a carteira real (até 10 ações, ~1 compra por mês).
 - **Viés de sobrevivência:** o universo é formado pelas ações mais líquidas de *hoje*, aplicado a um histórico de 5 anos.
 - Os parâmetros (3%, regra de saída, pesos da pressão) foram definidos por julgamento, não otimizados. Desconfie de qualquer sugestão de otimizá-los olhando o mesmo histórico (overfitting).
 - O ranking **nunca** é completado com ativos que não atendem aos critérios.

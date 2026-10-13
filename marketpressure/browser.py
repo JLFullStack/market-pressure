@@ -69,7 +69,9 @@ def scan_begin():
 def scan_step(index):
     asset = _scan["universe"][index]
     try:
-        _scan["analyses"].append(screener.analyze_ticker(asset))
+        analysis = screener.analyze_ticker(asset)
+        if analysis is not None:  # None = abaixo do piso de liquidez
+            _scan["analyses"].append(analysis)
     except Exception as err:
         _scan["failures"].append({"ticker": asset["ticker"], "reason": str(err)})
     screener.scan_job._progress(index + 1, len(_scan["universe"]))
@@ -77,7 +79,7 @@ def scan_step(index):
 
 def scan_end():
     try:
-        scan = screener.build_scan(_scan["universe"], _scan["analyses"], _scan["failures"])
+        scan = screener.build_scan(_scan["analyses"], _scan["failures"])
         screener.scan_job.finish(scan)
     except Exception as err:
         screener.scan_job.fail(err)

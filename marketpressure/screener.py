@@ -18,14 +18,21 @@ from .core import (SETUP, add_up, avg, clamp01, closed_candles, compute_indicato
                   evaluate_setup, exit_signal, fmt_num, session_in_progress)
 
 CONFIG = {
-    "universeSize": 150,      # ações mais líquidas analisadas
+    # Universo: ações com volume financeiro médio (fechamento × volume) dos últimos pregões
+    # fechados acima do piso. A média evita que um ativo saia por causa de um único dia fraco;
+    # o volume do dia (lista da brapi) só descarta antes os que estão muito longe do piso.
+    "minAvgVolume": 5_000_000,  # R$ por pregão
+    "liquidityWindow": 20,      # pregões da média
+    "prefilterRatio": 0.25,     # candidato: volume do dia >= 25% do piso
     "batchSize": 8,           # requisições simultâneas ao Yahoo
     "cacheTtlMinutes": 60,
     "topN": 20,
     **SETUP,                  # parâmetros do setup (core.py): maxDistance, maxBelowDistance, minPullback, mm200SlopeLookback
-    # Backtest da estratégia: compra no pullback (entrada na abertura seguinte) e venda só
-    # quando o fechamento fica abaixo de MM20, MM50 e MM200 com MM50 < MM200 (ver exit_signal).
+    # Backtest da estratégia: compra no pullback (entrada na abertura seguinte), recompra em
+    # pullbacks novos e venda de tudo só quando o fechamento fica abaixo de MM20, MM50 e MM200
+    # com MM50 < MM200 (ver exit_signal).
     "backtestStart": 220,     # primeiro candle com MM200 e inclinação disponíveis
+    "reentryDistance": 0.05,  # recompra só a 5%+ do preço de cada compra da posição aberta (outro pullback)
     "priorWinRate": 0.5,      # base neutra para suavizar taxas de acerto com poucas amostras
     "priorWeight": 4,
     "bovaLookback": 252,      # pregões da variação de 12 meses do BOVA11
@@ -34,7 +41,7 @@ CONFIG = {
 
 log = logging.getLogger(__name__)
 
-SCAN_VERSION = 1  # mude se o formato das análises mudar (descarta a varredura salva no banco)
+SCAN_VERSION = 2  # mude se o formato das análises mudar (descarta a varredura salva no banco)
 MODES = ("fechamento", "intradiario")
 
 # ---------------------------------------------------------------- Auxiliares de pressure()
@@ -136,30 +143,32 @@ def pressure(ind, i, setup, live=False):
 
 def backtest(ind, strict):
     """Repete a estratégia no histórico do ativo: compra na abertura seguinte ao sinal do setup e
-    mantém a posição até o fechamento disparar exit_signal; a venda é na abertura seguinte.
-    Acerto = venda acima da compra. Operação ainda aberta no fim do histórico não conta."""
+    recompra a cada pullback novo enquanto a posição está aberta; o mesmo pullback não gera nova
+    compra (preço a menos de reentryDistance de alguma compra da posição). Quando o fechamento
+    dispara exit_signal, todas as compras são vendidas na abertura seguinte. Cada compra é uma
+    operação; acerto = venda acima daquela compra. Compras ainda abertas no fim não contam."""
     wins = trades = 0
     returns = []
     candles = ind["candles"]
     last = len(candles) - 1
-    i = CONFIG["backtestStart"]
-    while i < last:
+    entries = []  # preços de compra da posição aberta
+    for i in range(CONFIG["backtestStart"], last):
+        if entries and exit_signal(ind, i):
+            exit_price = candles[i + 1]["o"]
+            for entry in entries:
+                ret = exit_price / entry - 1
+                trades += 1
+                returns.append(ret)
+                if ret > 0:
+                    wins += 1
+            entries = []
+            continue
         setup = evaluate_setup(ind, i)
         if not (setup["okStrict"] if strict else setup["ok"]):
-            i += 1
             continue
-        entry = candles[i + 1]["o"]
-        j = i + 1
-        while j < last and not exit_signal(ind, j):
-            j += 1
-        if j >= last:
-            break  # sem saída (ou saída sem candle seguinte): operação em aberto
-        ret = candles[j + 1]["o"] / entry - 1
-        trades += 1
-        returns.append(ret)
-        if ret > 0:
-            wins += 1
-        i = j + 1  # sem sobreposição: volta a procurar sinais depois do candle de saída
+        price = candles[i + 1]["o"]
+        if all(abs(price / entry - 1) >= CONFIG["reentryDistance"] for entry in entries):
+            entries.append(price)
     smoothed = (wins + CONFIG["priorWinRate"] * CONFIG["priorWeight"]) / (trades + CONFIG["priorWeight"]) * 100
     return {"wins": wins, "trades": trades, "winRate": smoothed,
             "avgReturn": add_up(returns) / trades * 100 if trades else None}
@@ -185,13 +194,22 @@ def analyze_asset(candles, confirm_previous=False):
     }
 
 
+def avg_traded_value(candles):
+    """Volume financeiro médio (R$) dos últimos liquidityWindow candles."""
+    window = candles[-CONFIG["liquidityWindow"]:]
+    return add_up(c["c"] * c["v"] for c in window) / len(window) if window else 0.0
+
+
 def analyze_ticker(asset, now=None):
     """Análise de um ativo nas duas bases. Na base "fechamento", descarta o candle do pregão
-    em andamento; "intradiario" o usa (e exige o último pregão fechado acima da média)."""
+    em andamento; "intradiario" o usa (e exige o último pregão fechado acima da média).
+    None quando o volume médio dos pregões fechados fica abaixo do piso (fora do universo)."""
     candles = market_data.history(asset["ticker"])["candles"]
+    live = session_in_progress(candles, now)
+    if avg_traded_value(candles[:-1] if live else candles) < CONFIG["minAvgVolume"]:
+        return None
     if len(candles) < CONFIG["minCandles"]:
         raise ValueError("histórico insuficiente")
-    live = session_in_progress(candles, now)
     intradiario = analyze_asset(candles, live)
     fechamento = analyze_asset(candles[:-1]) if live else intradiario
     return {**asset, "fechamento": fechamento, "intradiario": intradiario}
@@ -200,9 +218,12 @@ def analyze_ticker(asset, now=None):
 # ---------------------------------------------------------------- Varredura
 
 def load_universe():
+    """Candidatos ao universo: volume financeiro do dia acima de prefilterRatio do piso, do mais
+    negociado ao menos. O piso pela média de liquidityWindow pregões é aplicado em analyze_ticker."""
+    cut = CONFIG["minAvgVolume"] * CONFIG["prefilterRatio"]
     stocks = sorted(market_data.universe(), key=lambda s: s["close"] * s["volume"], reverse=True)
     return [{"ticker": s["ticker"], "name": s["name"], "sector": s["sector"]}
-            for s in stocks[:CONFIG["universeSize"]]]
+            for s in stocks if s["close"] * s["volume"] >= cut]
 
 
 def run_scan(progress=lambda done, total: None):
@@ -210,18 +231,20 @@ def run_scan(progress=lambda done, total: None):
     analyses, failures = [], []
     progress(0, len(universe))
     for done, (asset, analysis, err) in enumerate(runtime.run_all(analyze_ticker, universe, CONFIG["batchSize"]), 1):
-        if err is None:
-            analyses.append(analysis)
-        else:
+        if err is not None:
             failures.append({"ticker": asset["ticker"], "reason": str(err)})
+        elif analysis is not None:
+            analyses.append(analysis)
         progress(done, len(universe))
-    return build_scan(universe, analyses, failures)
+    return build_scan(analyses, failures)
 
 
-def build_scan(universe, analyses, failures):
+def build_scan(analyses, failures):
+    """universeSize = ativos acima do piso de liquidez (analisados + falhas; os abaixo do piso
+    não contam)."""
     if not analyses:
         raise RuntimeError(failures[0]["reason"] if failures else "nenhum ativo retornou dados")
-    return {"version": SCAN_VERSION, "timestamp": int(time.time() * 1000), "universeSize": len(universe),
+    return {"version": SCAN_VERSION, "timestamp": int(time.time() * 1000), "universeSize": len(analyses) + len(failures),
             "analyses": analyses, "failures": failures}
 
 
@@ -308,6 +331,7 @@ def scan_payload(scan):
     return {
         "timestamp": scan["timestamp"],
         "universeSize": scan["universeSize"],
+        "minAvgVolume": CONFIG["minAvgVolume"],
         "topN": CONFIG["topN"],
         "failures": len(failures),
         "apiErrors": sum(1 for f in failures if f["reason"] != "histórico insuficiente"),
