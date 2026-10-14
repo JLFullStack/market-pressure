@@ -140,7 +140,9 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
 .kpi-note { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 .regime { margin-top: 14px; font-size: 14px; line-height: 1.5; }
 
-.table-container { overflow-x: auto; padding: 0; }
+/* position: relative prende os .sr-only (absolutos) da tabela dentro da rolagem; sem ele
+   escapam do recorte e alargam a página no celular (a barra de abas de baixo sai da tela). */
+.table-container { position: relative; overflow-x: auto; padding: 0; }
 
 /* Screener: um painel por tipo de ativo (app.js: rankingPanel). */
 .ranking { padding: 0; overflow: hidden; }
@@ -296,7 +298,7 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 /* Sub-abas da Carteira: mesmo visual da barra do topo, menores. No celular a barra rola
    horizontalmente dentro dela (a página não). O sublinhado é um box-shadow interno porque a
    rolagem cortaria uma borda com margem negativa. */
-.subtabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); overflow-x: auto; scrollbar-width: thin; }
+.subtabs { position: relative; display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); overflow-x: auto; scrollbar-width: thin; }
 .subtab {
     flex: 0 0 auto;
     background: none;
