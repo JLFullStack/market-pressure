@@ -1,9 +1,11 @@
-"""Atualização diária, depois do fechamento da B3: python -m marketpressure.update
+"""Atualização dos históricos e da varredura: python -m marketpressure.update
 
 Acrescenta ao histórico salvo de cada ação do universo (e do BOVA11 e do USDBRL, usados pela
 carteira) os candles que faltam e roda a varredura do screener, que fica salva no banco. A
 varredura feita depois do fechamento vale até a abertura do próximo pregão (ScanJob._fresh),
-então ninguém precisa varrer de novo até lá, e todos veem os mesmos dados.
+então ninguém precisa varrer de novo até lá, e todos veem os mesmos dados. Durante o pregão o
+GitHub Actions a roda a cada 30 min: os históricos já estão em dia (só o candle do dia é pedido,
+e não é salvo) e a varredura salva inclui o candle em andamento, como a feita no navegador.
 
 - Publicado: roda no GitHub Actions (.github/workflows/atualizacao-diaria.yml) com
   MARKETPRESSURE_REMOTE_URL (o site) e MARKETPRESSURE_SERVICE_TOKEN (segredo SERVICE_TOKEN do

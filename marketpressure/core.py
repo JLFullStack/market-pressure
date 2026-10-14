@@ -157,11 +157,11 @@ def rsi(closes, n=14):
 
 
 def stochastic(candles, n=14, smooth=3):
+    highs, lows = [c["h"] for c in candles], [c["l"] for c in candles]
     raw = [None] * len(candles)
     for i in range(n - 1, len(candles)):
-        window = candles[i - n + 1:i + 1]
-        hi = max(c["h"] for c in window)
-        lo = min(c["l"] for c in window)
+        hi = max(highs[i - n + 1:i + 1])
+        lo = min(lows[i - n + 1:i + 1])
         raw[i] = 50 if hi == lo else (candles[i]["c"] - lo) / (hi - lo) * 100
     out = [None] * len(candles)
     for i in range(n - 1 + smooth - 1, len(candles)):
@@ -179,8 +179,8 @@ def bollinger_width(closes, n=20, mult=2):
         if m is None:
             continue
         v = 0.0
-        for j in range(i - n + 1, i + 1):
-            v += (closes[j] - m) ** 2
+        for x in closes[i - n + 1:i + 1]:
+            v += (x - m) ** 2
         out[i] = (2 * mult * math.sqrt(v / n)) / m
     return out
 
@@ -215,25 +215,41 @@ def clamp01(x):
     return min(1, max(0, x))
 
 
+class Indicators(dict):
+    """Indicadores de compute_indicators. Estocástico e largura de Bollinger só entram na
+    pressão (screener.pressure), calculada só para quem está em setup: são calculados na
+    primeira leitura (LAZY_INDICATORS), o que poupa a maior parte do custo dos demais ativos."""
+
+    def __missing__(self, key):
+        if key not in LAZY_INDICATORS:
+            raise KeyError(key)
+        value = self[key] = LAZY_INDICATORS[key](self)
+        return value
+
+
+LAZY_INDICATORS = {
+    "stoch": lambda ind: stochastic(ind["candles"], 14, 3),
+    "bbw": lambda ind: bollinger_width(ind["closes"], 20, 2),
+}
+
+
 def compute_indicators(candles):
     closes = [c["c"] for c in candles]
     ema26 = ema(closes, 26)
     macd_line = [v - ema26[i] for i, v in enumerate(ema(closes, 12))]
     signal = ema(macd_line, 9)
-    return {
+    return Indicators({
         "candles": candles,
         "closes": closes,
         "mm20": sma(closes, 20),
         "mm50": sma(closes, 50),
         "mm200": sma(closes, 200),
         "rsi": rsi(closes, 14),
-        "stoch": stochastic(candles, 14, 3),
         "macd": macd_line,
         "hist": [v - signal[i] for i, v in enumerate(macd_line)],
-        "bbw": bollinger_width(closes, 20, 2),
         "obv": obv(candles),
         "atr14": atr(candles, 14),
-    }
+    })
 
 
 # Saída parcial de cada compra (lote): quando a máxima atinge +partialTarget sobre o preço da

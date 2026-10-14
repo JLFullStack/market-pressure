@@ -48,6 +48,10 @@ CONFIG = {
     "regimeMinAssets": 20,      # amplitude/regime do tipo só com pelo menos 20 ativos
     "batchSize": 8,           # requisições simultâneas ao Yahoo
     "cacheTtlMinutes": 60,
+    # No navegador (versão publicada) a varredura salva pela atualização do GitHub Actions, que
+    # roda a cada 30 min no pregão, vale mais: o agendamento do GitHub atrasa, e varrer no
+    # navegador (sobretudo no celular) baixa o histórico de todo o universo.
+    "browserCacheTtlMinutes": 120,
     "topN": 20,
     **SETUP,                  # parâmetros do setup (core.py): maxDistance, maxBelowDistance, minPullback, mm200SlopeLookback
     **EXIT,                   # saída parcial de cada lote (core.py): partialTarget, partialFraction
@@ -564,7 +568,15 @@ class ScanJob:
             return False
         now = time.time() if now is None else now
         made = self.scan["timestamp"] / 1000
-        return now - made < CONFIG["cacheTtlMinutes"] * 60 or (made >= last_close(now) and not in_session_hours(now))
+        ttl = CONFIG["browserCacheTtlMinutes"] if runtime.BROWSER else CONFIG["cacheTtlMinutes"]
+        return now - made < ttl * 60 or (made >= last_close(now) and not in_session_hours(now))
+
+    def _reload(self):
+        """Lê de novo a varredura salva: a atualização (update.py) pode ter gravado uma mais nova
+        depois que esta foi lida, e então não é preciso varrer."""
+        saved = self._read_file()
+        if saved and (not self.scan or saved["timestamp"] > self.scan["timestamp"]):
+            self.scan, self.payloads = saved, {}
 
     def _progress(self, done, total):
         self.done, self.total = done, total
@@ -599,6 +611,8 @@ class ScanJob:
 
     def status(self, force=False, liquidity="padrao"):
         with self.lock:
+            if not self.running and not force and not self.error and not self._fresh():
+                self._reload()
             if not self.running and (force or not self._fresh()) and not (self.error and not force):
                 self.running, self.done, self.total, self.error = True, 0, 0, None
                 self.start()

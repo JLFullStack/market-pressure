@@ -1,12 +1,17 @@
-# Atualização diária da versão publicada, depois do fechamento da B3 (marketpressure/update.py):
-# acrescenta ao histórico salvo no D1 os candles que faltam e salva a varredura do screener.
+# Atualização da versão publicada (marketpressure/update.py): depois do fechamento da B3,
+# acrescenta ao histórico salvo no D1 os candles que faltam e salva a varredura do screener;
+# durante o pregão, a cada 30 min, refaz a varredura com o candle do dia, para que o navegador
+# (sobretudo no celular) só leia a varredura pronta em vez de baixar o universo e calcular.
 # Tudo passa pelo Worker do site (/proxy e /db) com o token de serviço: o segredo
 # MARKETPRESSURE_SERVICE_TOKEN deste repositório tem o mesmo valor do segredo SERVICE_TOKEN do Worker.
 name: Atualização diária
 
 on:
   schedule:
-    - cron: "30 21 * * 1-5"  # 18:30 em Brasília (UTC−3), segunda a sexta
+    - cron: "30 21 * * 1-5"      # 18:30 em Brasília (UTC−3), segunda a sexta
+    - cron: "7,37 13-20 * * 1-5"  # pregão: 10:07 a 17:37 em Brasília, a cada 30 min
+    # O GitHub pode atrasar os agendamentos (minutos fora da hora cheia atrasam menos); no
+    # navegador a varredura salva vale 2 h (screener.CONFIG["browserCacheTtlMinutes"]).
   workflow_dispatch:          # rodar à mão: aba Actions → Atualização diária → Run workflow
 
 concurrency:

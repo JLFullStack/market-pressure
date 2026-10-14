@@ -235,6 +235,27 @@ class ScanFreshnessTest(unittest.TestCase):
         self.assertFalse(self.fresh(made, made + 61 * 60))
 
 
+    def test_in_the_browser_the_saved_scan_lasts_longer(self):
+        made = sp("2023-09-28", 12)
+        with mock.patch.object(screener.runtime, "BROWSER", True):
+            self.assertTrue(self.fresh(made, made + 119 * 60))
+            self.assertFalse(self.fresh(made, made + 121 * 60))
+
+
+class ScanReloadTest(DatabaseTestCase):
+    def test_a_newer_saved_scan_is_used_instead_of_scanning(self):
+        universe = [{"ticker": t, "name": t, "sector": "Teste"} for t in ("AAAA3", "BBBB4")]
+        with mock.patch.object(screener, "load_universe", return_value=universe):
+            scan = screener.run_scan()
+        job = screener.ScanJob()
+        job.scan = {**scan, "timestamp": scan["timestamp"] - 4 * 86400 * 1000}  # antes do último fechamento
+        job.start = mock.Mock()
+        screener.write_scan(scan)  # a atualização gravou uma nova
+        self.assertEqual(job.status()["state"], "done")
+        job.start.assert_not_called()
+        self.assertEqual(job.scan["timestamp"], scan["timestamp"])
+
+
 class DailyUpdateTest(DatabaseTestCase):
     def test_update_saves_the_scan(self):
         universe = [{"ticker": t, "name": t, "sector": "Teste"} for t in ("AAAA3", "BBBB4")]
