@@ -156,3 +156,33 @@ class StoredHistoryD1Test(BrowserTestCase):
             urls = json.loads(browser.scan_prepare(1, 3))
         self.assertEqual(urls, [market_data.history_url(t) for t in ("BBBB4", "CCCC3")])
         self.assertEqual(calls.call_count, 1)  # uma só leitura do D1 para o lote
+
+
+class UniverseFallbackTest(DatabaseTestCase):
+    YAHOO = [{"symbol": "PETR4.SA", "shortName": "PETROBRAS PN", "regularMarketPrice": 30.0,
+              "regularMarketVolume": 1000, "averageDailyVolume3Month": 1000},
+             {"symbol": "HGLG11.SA", "shortName": "FII CSHG LOG", "longName": "CSHG Logística Fundo de Investimento Imobiliário",
+              "regularMarketPrice": 160.0, "regularMarketVolume": 100, "averageDailyVolume3Month": 100}]
+    BRAPI = [{"ticker": "PETR4", "name": "Petrobras", "sector": "Energia", "kind": "acoes",
+              "close": 30.0, "volume": 1000, "avg_volume": None}]
+
+    def load(self, yahoo, brapi=BRAPI):
+        def fail():
+            raise market_data.UpstreamError("Yahoo recusou a sessão (HTTP 429)")
+        with mock.patch.object(market_data, "load_yahoo_list", yahoo or fail), \
+                mock.patch.object(market_data, "load_brapi_stocks", lambda: brapi):
+            return market_data.load_universe()
+
+    def test_without_yahoo_the_saved_yahoo_list_is_used_and_kept(self):
+        saved = self.load(lambda: self.YAHOO)
+        self.assertEqual({a["kind"] for a in saved}, {"acoes", "fundos"})
+        with self.assertLogs("marketpressure.market_data", "WARNING"):
+            assets = self.load(None)
+        self.assertEqual(assets, saved)
+        self.assertEqual(database.read_table("universe"), saved)  # não sobrescreve com a reserva
+
+    def test_without_yahoo_and_without_a_saved_yahoo_list_brapi_is_used(self):
+        with self.assertLogs("marketpressure.market_data", "WARNING"):
+            assets = self.load(None)
+        self.assertEqual([a["ticker"] for a in assets], ["PETR4"])
+        self.assertFalse(database.exists("universe"))

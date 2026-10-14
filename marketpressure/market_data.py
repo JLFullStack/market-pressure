@@ -247,11 +247,21 @@ def load_brapi_stocks() -> list:
             if not s["stock"].endswith("F") and s.get("close") and s.get("volume")]
 
 
+def _saved_universe() -> list:
+    try:
+        return db.read_table("universe") if db.exists("universe") else []
+    except Exception:
+        log.warning("não foi possível ler a última lista de ativos salva", exc_info=True)
+        return []
+
+
 def load_universe():
     """Ativos da B3 que podem entrar no screener: {ticker, name, sector, kind (asset_kind), close,
     volume (do dia), avg_volume (média de 3 meses, em cotas)}. Lista do Yahoo com o nome e o
-    setor da brapi quando ela conhece o ticker; sem o Yahoo, só as ações da brapi; sem as duas,
-    a última lista salva (tabela universe)."""
+    setor da brapi quando ela conhece o ticker. Sem o Yahoo (que às vezes recusa a sessão com
+    HTTP 429), a última lista do Yahoo salva (tabela universe), que tem todos os tipos; se a
+    salva não veio do Yahoo, as ações da brapi; sem nenhuma, a última lista salva, qualquer que
+    seja. A lista de reserva não é gravada por cima da salva."""
     try:
         brapi = {s["ticker"]: s for s in load_brapi_stocks()}
     except Exception as err:
@@ -269,13 +279,18 @@ def load_universe():
                            "sector": known.get("sector"), "kind": kind, "close": q["regularMarketPrice"],
                            "volume": q.get("regularMarketVolume") or 0, "avg_volume": q.get("averageDailyVolume3Month")})
     except Exception as err:
-        if not brapi:
-            if db.exists("universe"):
-                log.warning("Yahoo e brapi indisponíveis (%s); usando a última lista salva", err)
-                return db.read_table("universe")
-            raise
-        log.warning("lista do Yahoo indisponível (%s); usando só as ações da brapi", err)
-        assets = list(brapi.values())
+        saved = _saved_universe()
+        if any(a.get("kind") not in (None, "acoes") for a in saved):
+            log.warning("lista do Yahoo indisponível (%s); usando a última lista do Yahoo salva (%d ativos)",
+                        err, len(saved))
+            return saved
+        if brapi:
+            log.warning("lista do Yahoo indisponível (%s); usando só as ações da brapi", err)
+            return list(brapi.values())
+        if saved:
+            log.warning("Yahoo e brapi indisponíveis (%s); usando a última lista salva", err)
+            return saved
+        raise
     try:
         db.write_tables({"universe": assets})
     except Exception:
