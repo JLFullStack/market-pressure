@@ -83,7 +83,7 @@ SCHEMAS = {
     "scan": _schema(("version", _i64), ("timestamp", _i64), ("universe_size", _i64)),
     "scan_failures": _schema(("ticker", _str), ("reason", _str)),
     "scan_analyses": _schema(("ticker", _str), ("name", _str), ("sector", _str), ("kind", _str),
-                             ("duplicate_of", _str), ("mode", _str),
+                             ("duplicate_of", _str), ("traded", _f64), ("mode", _str),
                              *[(col, kind) for col, _, kind in ANALYSIS_FIELDS]),
 }
 

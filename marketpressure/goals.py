@@ -12,7 +12,7 @@ com a taxa de retirada anual informada (renda × 12 ÷ taxa).
 import math
 from datetime import date
 
-from .core import fmt_brl, fmt_date, fmt_num
+from .core import fmt_brl, fmt_date, fmt_duration, fmt_num
 from .portfolio import add_months, is_iso_date, lower_bound, parse_number
 
 KINDS = {"patrimonio": "Patrimônio", "renda": "Renda mensal"}
@@ -29,15 +29,7 @@ DAYS_PER_MONTH = 365.25 / 12
 
 def duration_text(months):
     """32 → "2 anos e 8 meses"; 12 → "1 ano"; 0 → "já alcançada"."""
-    if months <= 0:
-        return "já alcançada"
-    years, rest = divmod(months, 12)
-    parts = []
-    if years:
-        parts.append(f"{years} {'ano' if years == 1 else 'anos'}")
-    if rest:
-        parts.append(f"{rest} {'mês' if rest == 1 else 'meses'}")
-    return " e ".join(parts)
+    return "já alcançada" if months <= 0 else fmt_duration(months)
 
 
 def _month_label(iso):

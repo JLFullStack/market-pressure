@@ -14,6 +14,14 @@ document.addEventListener("DOMContentLoaded", () => {
         lastScan && render(lastScan);
     });
     document.getElementById('requireCandle').addEventListener('change', () => lastScan && render(lastScan));
+    // Liquidez mínima: o servidor refaz o ranking com o piso escolhido, sem varrer de novo.
+    const liquidity = document.getElementById('liquidity');
+    try { liquidity.value = localStorage.getItem(LIQUIDITY_KEY) || 'padrao'; } catch (e) { /* sem preferência salva */ }
+    if (!liquidity.value) liquidity.value = 'padrao';
+    liquidity.addEventListener('change', () => {
+        try { localStorage.setItem(LIQUIDITY_KEY, liquidity.value); } catch (e) { /* preferência não salva */ }
+        runScan(false);
+    });
     runScan(false);
 });
 
@@ -29,7 +37,8 @@ async function runScan(force) {
     setStatus(force ? "Iniciando varredura..." : "Carregando...", '');
     const busy = busyStart(force ? "Iniciando varredura..." : "Carregando ranking...");
     try {
-        let status = await apiGet(`/scan${force ? '?force=1' : ''}`);
+        const liquidity = document.getElementById('liquidity').value;
+        let status = await apiGet(`/scan?liquidez=${liquidity}${force ? '&force=1' : ''}`);
         const waited = status.state === 'running';
         while (status.state === 'running') {
             if (status.total) {
@@ -41,7 +50,7 @@ async function runScan(force) {
                 busy.text("Carregando a lista de ativos...");
             }
             await sleep(POLL_MS);
-            status = await apiGet('/scan');
+            status = await apiGet(`/scan?liquidez=${liquidity}`);
         }
         if (status.state === 'error') {
             banner.innerText = `Aviso: não foi possível concluir a varredura (${status.message}).`;
@@ -142,7 +151,7 @@ function renderRankings(scan, view, strict) {
 function rankingPanel(scan, r, result, strict) {
     const top = result.top;
     const facts = [
-        `${r.scanned} escaneados (média acima de R$ ${fmtNum(r.minAvgVolume / 1e6, 0)} mi por pregão)`,
+        `${r.scanned} com liquidez (média acima de R$ ${fmtNum(r.minAvgVolume / 1e6, 0)} mi por pregão)`,
         `${result.qualified} no setup`,
         top.length ? `pressão média ${fmtNum(result.avgPressure)}%` : null,
         top.length ? `acerto médio ${fmtNum(result.avgWinRate)}%` : null,

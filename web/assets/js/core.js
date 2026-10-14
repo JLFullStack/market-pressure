@@ -14,6 +14,7 @@ const API = location.port === SERVER_PORT ? "/api" : `http://127.0.0.1:${SERVER_
 const IN_BROWSER = !/^(localhost|127\.0\.0\.1)$/.test(location.hostname) || location.port === "8787";
 
 const MODE_KEY = "marketpressure_base_mode"; // base "fechamento" | "intradiario", comum às duas abas
+const LIQUIDITY_KEY = "marketpressure_liquidez"; // liquidez mínima do ranking (screener.LIQUIDITY), Screener e Backtest
 const OFFLINE = 'servidor local fora do ar — rode "python server.py" na pasta do projeto';
 
 // ---------------------------------------------------------------- API

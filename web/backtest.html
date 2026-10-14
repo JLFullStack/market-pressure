@@ -24,35 +24,85 @@
         <div class="header-panel">
             <div>
                 <h1>🧪 Backtest</h1>
-                <div class="subtitle">Cada compra (lote) do setup no histórico do ativo, com a venda parcial e a saída pela regra B</div>
+                <div class="subtitle" id="btHeaderText">Cada compra (lote) do setup no histórico do ativo, com a venda parcial e a saída pela regra B</div>
+            </div>
+            <div class="seg" role="group" aria-label="Tipo de backtest" id="btMode">
+                <button type="button" data-mode="ativo" aria-pressed="true">Um ativo</button>
+                <button type="button" data-mode="carteira" aria-pressed="false">Carteira</button>
             </div>
         </div>
         <form id="btForm" novalidate>
             <div class="form-grid bt-form">
-                <label class="field">Ativo
+                <label class="field" data-mode="ativo"><span>Ativo <span class="tip" tabindex="0" data-tip="Código do ativo. B3: ações, units, FIIs, ETFs e BDRs (ex.: PETR4, BOVA11, AAPL34). EUA: ações e ETFs (ex.: VOO, AAPL)." aria-label="Ajuda: Código do ativo. B3: ações, units, FIIs, ETFs e BDRs (ex.: PETR4, BOVA11, AAPL34). EUA: ações e ETFs (ex.: VOO, AAPL).">?</span></span>
                     <input type="text" id="btTicker" class="select" placeholder="Ex.: PETR4" autocomplete="off" spellcheck="false" required>
                 </label>
-                <label class="field">Mercado
+                <label class="field" data-mode="ativo"><span>Mercado <span class="tip" tabindex="0" data-tip="Onde o ativo é negociado. Nos EUA os preços ficam em US$; o resultado em reais não considera a variação do dólar." aria-label="Ajuda: Onde o ativo é negociado. Nos EUA os preços ficam em US$; o resultado em reais não considera a variação do dólar.">?</span></span>
                     <select id="btMarket" class="select">
                         <option value="b3">B3</option>
                         <option value="us">EUA</option>
                     </select>
                 </label>
-                <label class="field">Alvo da venda parcial (%)
+                <label class="field" data-mode="carteira" hidden><span>Ranking <span class="tip" tabindex="0" data-tip="De qual ranking do screener a carteira compra. Em cada dia do período, o ranking é refeito como o screener faria naquele dia: só ativos com liquidez naquela época, no setup, ordenados pelo Score do dia. Lista de ativos = só os códigos que você informar." aria-label="Ajuda: De qual ranking do screener a carteira compra. Em cada dia do período, o ranking é refeito como o screener faria naquele dia: só ativos com liquidez naquela época, no setup, ordenados pelo Score do dia. Lista de ativos = só os códigos que você informar.">?</span></span>
+                    <select id="pfUniverse" class="select">
+                        <option value="acoes">Ações</option>
+                        <option value="fundos">Fundos listados</option>
+                        <option value="etfs">ETFs</option>
+                        <option value="bdrs">BDRs</option>
+                        <option value="todos">Todos os tipos</option>
+                        <option value="lista">Lista de ativos</option>
+                    </select>
+                </label>
+                <label class="field" data-mode="carteira" hidden><span>Top do ranking <span class="tip" tabindex="0" data-tip="Quantas posições do ranking de cada dia podem ser compradas (o screener mostra 20 por tipo). Com mais sinais do que caixa, compram primeiro os de maior Score." aria-label="Ajuda: Quantas posições do ranking de cada dia podem ser compradas (o screener mostra 20 por tipo). Com mais sinais do que caixa, compram primeiro os de maior Score.">?</span></span>
+                    <input type="number" id="pfTopN" class="select" min="1" max="100" step="1" value="20" inputmode="numeric">
+                </label>
+                <label class="field bt-wide" data-mode="carteira" id="pfTickersField" hidden><span>Lista de ativos <span class="tip" tabindex="0" data-tip="Códigos da B3 separados por vírgula. Ex.: PETR4, VALE3, ITUB4, BOVA11." aria-label="Ajuda: Códigos da B3 separados por vírgula. Ex.: PETR4, VALE3, ITUB4, BOVA11.">?</span></span>
+                    <input type="text" id="pfTickers" class="select" placeholder="Ex.: PETR4, VALE3, ITUB4" autocomplete="off" spellcheck="false">
+                </label>
+                <label class="field" data-mode="carteira" hidden><span>Liquidez mínima <span class="tip" tabindex="0" data-tip="Volume financeiro médio por pregão (últimos 20 pregões) que o ativo precisa ter para entrar no ranking. Regra prática: cada compra sua deve ser no máximo ~1% desse volume. Para aportes de R$ 2 mil e carteiras de até ~R$ 200 mil, R$ 2 mi por dia é o recomendado; Padrão = R$ 5 mi (fundos R$ 3 mi), mais conservador. No backtest, o piso vale para a liquidez de cada dia do período." aria-label="Ajuda: liquidez mínima">?</span></span>
+                    <select id="pfLiquidity" class="select">
+                        <option value="padrao">Padrão (R$ 5 mi; fundos R$ 3 mi)</option>
+                        <option value="10">R$ 10 mi por dia</option>
+                        <option value="5">R$ 5 mi por dia</option>
+                        <option value="3">R$ 3 mi por dia</option>
+                        <option value="2">R$ 2 mi por dia (recomendado até ~R$ 200 mil)</option>
+                        <option value="1">R$ 1 mi por dia</option>
+                    </select>
+                </label>
+                <label class="field" data-mode="carteira" hidden><span>Capital inicial (R$) <span class="tip" tabindex="0" data-tip="Dinheiro da carteira no primeiro dia do período." aria-label="Ajuda: Dinheiro da carteira no primeiro dia do período.">?</span></span>
+                    <input type="number" id="pfInitial" class="select" min="100" step="1000" value="10000" inputmode="decimal">
+                </label>
+                <label class="field" data-mode="carteira" hidden><span>Aporte mensal (R$) <span class="tip" tabindex="0" data-tip="Dinheiro novo no primeiro pregão de cada mês (0 = sem aportes). O BOVA11 e o CDI de comparação recebem os mesmos aportes." aria-label="Ajuda: Dinheiro novo no primeiro pregão de cada mês (0 = sem aportes). O BOVA11 e o CDI de comparação recebem os mesmos aportes.">?</span></span>
+                    <input type="number" id="pfMonthly" class="select" min="0" step="100" value="0" inputmode="decimal">
+                </label>
+                <label class="field" data-mode="carteira" hidden><span>Fatia por compra (%) <span class="tip" tabindex="0" data-tip="Quanto do patrimônio do dia vai em cada compra. 10 = cada compra usa 10% do patrimônio (o lucro passa a comprar mais: juros compostos). Só compra se houver caixa para pelo menos metade da fatia." aria-label="Ajuda: Quanto do patrimônio do dia vai em cada compra. 10 = cada compra usa 10% do patrimônio (o lucro passa a comprar mais: juros compostos). Só compra se houver caixa para pelo menos metade da fatia.">?</span></span>
+                    <input type="number" id="pfPosition" class="select" min="1" max="100" step="1" value="10" inputmode="decimal">
+                </label>
+                <label class="field" data-mode="carteira" hidden><span>Máx. de ativos <span class="tip" tabindex="0" data-tip="Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam." aria-label="Ajuda: Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam.">?</span></span>
+                    <input type="number" id="pfMaxAssets" class="select" min="1" max="100" step="1" value="10" inputmode="numeric">
+                </label>
+                <label class="field" data-mode="carteira" hidden><span>Custo por operação (%) <span class="tip" tabindex="0" data-tip="Corretagem, emolumentos e diferença de preço na execução, em % de cada compra e de cada venda." aria-label="Ajuda: Corretagem, emolumentos e diferença de preço na execução, em % de cada compra e de cada venda.">?</span></span>
+                    <input type="number" id="pfCost" class="select" min="0" max="5" step="0.05" value="0.1" inputmode="decimal">
+                </label>
+                <label class="field"><span>Alvo da venda parcial (%) <span class="tip" tabindex="0" data-tip="Alta sobre o preço de cada compra em que parte dela é vendida. Ex.: 10 = vende quando o preço sobe 10% acima do que você pagou naquela compra." aria-label="Ajuda: Alta sobre o preço de cada compra em que parte dela é vendida. Ex.: 10 = vende quando o preço sobe 10% acima do que você pagou naquela compra.">?</span></span>
                     <input type="number" id="btTarget" class="select" min="0.5" max="500" step="0.5" value="10" inputmode="decimal">
                 </label>
-                <label class="field">Parte vendida no alvo (%)
+                <label class="field"><span>Parte vendida no alvo (%) <span class="tip" tabindex="0" data-tip="Quanto de cada compra é vendido ao atingir o alvo. 50 = metade; 0 = nunca vende parcial, só pela regra B; 100 = vende tudo no alvo." aria-label="Ajuda: Quanto de cada compra é vendido ao atingir o alvo. 50 = metade; 0 = nunca vende parcial, só pela regra B; 100 = vende tudo no alvo.">?</span></span>
                     <input type="number" id="btFraction" class="select" min="0" max="100" step="5" value="50" inputmode="decimal">
                 </label>
-                <label class="field">De
+                <label class="field" data-mode="ativo"><span>Valor por compra (R$) <span class="tip" tabindex="0" data-tip="Quanto você investiria em cada compra do setup. Serve para mostrar os resultados em reais; os percentuais não mudam." aria-label="Ajuda: Quanto você investiria em cada compra do setup. Serve para mostrar os resultados em reais; os percentuais não mudam.">?</span></span>
+                    <input type="number" id="btAmount" class="select" min="1" step="100" value="1000" inputmode="decimal">
+                </label>
+                <label class="field"><span>De <span class="tip" tabindex="0" data-tip="Início do período: compras só a partir desta data. Em branco = desde o primeiro dia possível." aria-label="Ajuda: Início do período: compras só a partir desta data. Em branco = desde o primeiro dia possível.">?</span></span>
                     <input type="date" id="btFrom" class="select">
                 </label>
-                <label class="field">Até
+                <label class="field"><span>Até <span class="tip" tabindex="0" data-tip="Fim do período: o que estiver aberto nesta data é avaliado pelo fechamento dela. Em branco = até o último pregão fechado." aria-label="Ajuda: Fim do período: o que estiver aberto nesta data é avaliado pelo fechamento dela. Em branco = até o último pregão fechado.">?</span></span>
                     <input type="date" id="btTo" class="select">
                 </label>
-                <label class="toggle bt-check"><input type="checkbox" id="btStrict"> Exigir candle de rejeição</label>
+                <label class="toggle bt-check" data-mode="carteira" hidden><input type="checkbox" id="pfCdi" checked> Caixa rende CDI <span class="tip" tabindex="0" data-tip="O dinheiro parado (esperando sinal) rende o CDI do dia, como num Tesouro Selic ou CDB de liquidez diária." aria-label="Ajuda: O dinheiro parado (esperando sinal) rende o CDI do dia, como num Tesouro Selic ou CDB de liquidez diária.">?</span></label>
+                <label class="toggle bt-check"><input type="checkbox" id="btStrict"> Exigir candle de rejeição <span class="tip" tabindex="0" data-tip="Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener." aria-label="Ajuda: Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener.">?</span></label>
                 <div><button type="submit" class="btn">Rodar backtest</button></div>
             </div>
+            <p class="small muted" data-mode="carteira" hidden>Carteira: um único caixa que segue o ranking do screener dia a dia. Em cada pregão o ranking é refeito como seria naquele dia (liquidez da época, setup e Score do dia) e os ativos dele compram na abertura seguinte com a fatia do patrimônio; o que é vendido volta para o caixa e compra os ativos do ranking do momento. A primeira execução baixa e analisa o histórico de centenas de ativos e pode levar um minuto; as seguintes são rápidas.</p>
             <p class="small muted">Parte vendida 0% = só a regra B (vende tudo quando o fechamento fica abaixo de MM20, MM50 e MM200 com MM50 &lt; MM200). Os padrões (10% e 50%) são as regras do screener e da Carteira. Período em branco = todo o histórico disponível (cerca de 4 anos: o Yahoo guarda 5 e as médias precisam de 220 pregões antes da primeira compra).</p>
             <div class="form-msg" id="btMsg" role="status" aria-live="polite"></div>
         </form>
@@ -72,8 +122,10 @@
             </div>
             <div class="bt-legend" id="btLegend"></div>
             <div class="bt-chart" id="priceChart" role="img" aria-label="Gráfico de preço com médias móveis e as compras e vendas de cada lote"></div>
-            <h3 class="bt-subhead">Resultado acumulado das operações</h3>
+            <h3 class="bt-subhead">Lucro acumulado no período (R$) <span class="tip" tabindex="0" data-tip="Quanto você teria ganho (ou perdido) até cada dia, já descontado o valor investido: o que já foi vendido pelo preço de venda e o que segue aberto pelo fechamento do dia. Uma linha por estratégia, com o mesmo valor por compra." aria-label="Ajuda: lucro acumulado no período">?</span></h3>
+            <div class="bt-legend" id="btEquityLegend"></div>
             <div class="bt-chart bt-chart-small" id="equityChart" role="img" aria-label="Soma do resultado dos lotes ao longo do tempo"></div>
+            <p class="bt-compare" id="btCompareChart" role="status"></p>
             <p class="small muted" id="btChartNote"></p>
         </div>
 
@@ -89,15 +141,16 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="c">Lote</th>
-                            <th>Compra</th>
-                            <th>Venda parcial</th>
-                            <th>Saída (regra B)</th>
-                            <th class="r">Resultado</th>
-                            <th class="r">Pregões</th>
-                            <th class="r">Alta máxima</th>
-                            <th class="r">Devolvido do topo</th>
-                            <th>Situação</th>
+                            <th class="c">Lote <span class="tip" tabindex="0" data-tip="Número da compra, na ordem em que aconteceu. É o número que aparece nos marcadores do gráfico (C, P e V)." aria-label="Ajuda: Número da compra, na ordem em que aconteceu. É o número que aparece nos marcadores do gráfico (C, P e V).">?</span></th>
+                            <th>Compra <span class="tip" tabindex="0" data-tip="Data e preço da compra: abertura do pregão seguinte ao sinal do setup." aria-label="Ajuda: Data e preço da compra: abertura do pregão seguinte ao sinal do setup.">?</span></th>
+                            <th>Venda parcial <span class="tip" tabindex="0" data-tip="Data, preço e alta da venda da parte escolhida ao atingir o alvo. — = o alvo não foi atingido." aria-label="Ajuda: Data, preço e alta da venda da parte escolhida ao atingir o alvo. — = o alvo não foi atingido.">?</span></th>
+                            <th>Saída (regra B) <span class="tip" tabindex="0" data-tip="Data, preço e resultado da venda do restante: abertura do pregão seguinte ao fechamento abaixo de MM20, MM50 e MM200 com MM50 abaixo da MM200. — = ainda aberto." aria-label="Ajuda: Data, preço e resultado da venda do restante: abertura do pregão seguinte ao fechamento abaixo de MM20, MM50 e MM200 com MM50 abaixo da MM200. — = ainda aberto.">?</span></th>
+                            <th class="r">Resultado <span class="tip" tabindex="0" data-tip="Retorno da compra somando a venda parcial e a saída. Aberto: o restante pelo último fechamento." aria-label="Ajuda: Retorno da compra somando a venda parcial e a saída. Aberto: o restante pelo último fechamento.">?</span></th>
+                            <th class="r">Lucro (R$) <span class="tip" tabindex="0" data-tip="Resultado da compra em reais, com o valor por compra escolhido." aria-label="Ajuda: Resultado da compra em reais, com o valor por compra escolhido.">?</span></th>
+                            <th class="r">Pregões <span class="tip" tabindex="0" data-tip="Pregões da compra até a saída (ou até hoje, se aberto)." aria-label="Ajuda: Pregões da compra até a saída (ou até hoje, se aberto).">?</span></th>
+                            <th class="r">Alta máxima <span class="tip" tabindex="0" data-tip="Maior alta alcançada depois da compra (máxima do pregão). Mostra quanto a operação chegou a render." aria-label="Ajuda: Maior alta alcançada depois da compra (máxima do pregão). Mostra quanto a operação chegou a render.">?</span></th>
+                            <th class="r">Devolvido do topo <span class="tip" tabindex="0" data-tip="Queda do maior fechamento depois da compra até o preço da saída: quanto do ganho a regra B devolveu." aria-label="Ajuda: Queda do maior fechamento depois da compra até o preço da saída: quanto do ganho a regra B devolveu.">?</span></th>
+                            <th>Situação <span class="tip" tabindex="0" data-tip="Encerrado = vendido por inteiro. Aberto = ainda em carteira no fim do período (com ou sem a parcial realizada)." aria-label="Ajuda: Encerrado = vendido por inteiro. Aberto = ainda em carteira no fim do período (com ou sem a parcial realizada).">?</span></th>
                         </tr>
                     </thead>
                     <tbody id="lotsBody"></tbody>
@@ -111,6 +164,100 @@
             Cada compra vende a parte escolhida quando a máxima de um pregão posterior ao da compra atinge o alvo (pelo alvo, ou pela abertura se o pregão já abriu acima).
             O restante de todas as compras sai na abertura seguinte ao fechamento que dispara a regra B. Só pregões fechados; fundos listados usam o preço ajustado por proventos, como no screener.
             Sem custos, impostos e proventos. Ferramenta de estudo — não constitui recomendação de investimento.
+        </div>
+    </div>
+    <div id="pfResult" hidden>
+        <p class="banner" id="pfWarnings" role="status"></p>
+        <div class="panel">
+            <h2 id="pfTitle"></h2>
+            <div class="small muted" id="pfSubtitle"></div>
+            <h3 class="bt-subhead">Lucro acumulado (R$) <span class="tip" tabindex="0" data-tip="Patrimônio da carteira menos tudo o que foi aportado, dia a dia: só o ganho (ou a perda). Uma linha por estratégia; BOVA11 e CDI recebem os mesmos aportes, nas mesmas datas." aria-label="Ajuda: Patrimônio da carteira menos tudo o que foi aportado, dia a dia: só o ganho (ou a perda). Uma linha por estratégia; BOVA11 e CDI recebem os mesmos aportes, nas mesmas datas.">?</span></h3>
+            <div class="bt-legend" id="pfLegend"></div>
+            <div class="bt-chart" id="pfChart" role="img" aria-label="Lucro acumulado de cada estratégia, do BOVA11 e do CDI ao longo do período"></div>
+            <p class="bt-compare" id="pfCompare" role="status"></p>
+            <p class="small muted" id="pfNote"></p>
+        </div>
+
+        <div class="panel">
+            <h2 id="pfSummaryTitle">Resumo</h2>
+            <div class="kpis" id="pfKpis"></div>
+            <p class="small muted" id="pfOnlyB"></p>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2>Operações no gráfico <span class="tip" tabindex="0" data-tip="Escolha um ativo para ver o gráfico dele no período com as compras (C), vendas parciais (P) e saídas pela regra B (V) que a carteira fez nele. Clicar numa operação da tabela abaixo também abre o gráfico nela." aria-label="Ajuda: Escolha um ativo para ver o gráfico dele no período com as compras (C), vendas parciais (P) e saídas pela regra B (V) que a carteira fez nele. Clicar numa operação da tabela abaixo também abre o gráfico nela.">?</span></h2>
+                    <div class="small muted" id="pfChartInfo"></div>
+                </div>
+                <div class="seg" role="group" aria-label="Tipo de gráfico" id="pfChartType">
+                    <button type="button" data-type="candles" aria-pressed="true">Candles</button>
+                    <button type="button" data-type="line" aria-pressed="false">Linha</button>
+                </div>
+            </div>
+            <div class="form-grid" style="margin-top: 10px;">
+                <label class="field">Ativo
+                    <select id="pfAsset" class="select"></select>
+                </label>
+            </div>
+            <div class="bt-legend" id="pfPriceLegend"></div>
+            <div class="bt-chart" id="pfPriceChart" role="img" aria-label="Gráfico de preço do ativo com as compras e vendas da carteira"></div>
+            <p class="small muted" id="pfChartMsg" role="status"></p>
+        </div>
+
+        <div class="panel">
+            <h2>Ano a ano <span class="tip" tabindex="0" data-tip="Quanto cada estratégia ganhou em cada ano civil: lucro em reais (patrimônio no fim do ano − patrimônio no início − aportes do ano) e rentabilidade em %, que desconta os aportes (como a rentabilidade de uma carteira ou de um fundo). O primeiro e o último ano podem ser parciais." aria-label="Ajuda: Quanto cada estratégia ganhou em cada ano civil: lucro em reais (patrimônio no fim do ano − patrimônio no início − aportes do ano) e rentabilidade em %, que desconta os aportes (como a rentabilidade de uma carteira ou de um fundo). O primeiro e o último ano podem ser parciais.">?</span></h2>
+            <div class="table-container">
+                <table class="pf-years">
+                    <thead id="pfYearsHead"></thead>
+                    <tbody id="pfYearsBody"></tbody>
+                </table>
+            </div>
+            <p class="small muted" id="pfYearsNote"></p>
+        </div>
+
+        <div class="panel">
+            <h2>Comparação</h2>
+            <div class="table-container">
+                <table>
+                    <thead id="pfCompareHead"></thead>
+                    <tbody id="pfCompareBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2 id="pfTradesTitle">Operações</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="c">#</th>
+                            <th>Ativo <span class="tip" tabindex="0" data-tip="Clique na linha para ver a operação no gráfico acima. O código abre o backtest só desse ativo no mesmo período." aria-label="Ajuda: Clique na linha para ver a operação no gráfico acima. O código abre o backtest só desse ativo no mesmo período.">?</span></th>
+                            <th class="c">Ranking <span class="tip" tabindex="0" data-tip="Posição do ativo no ranking do tipo no dia do sinal (1 = maior Score) e o Score Composto daquele dia." aria-label="Ajuda: Posição do ativo no ranking do tipo no dia do sinal (1 = maior Score) e o Score Composto daquele dia.">?</span></th>
+                            <th>Compra <span class="tip" tabindex="0" data-tip="Data e preço da compra: abertura do pregão seguinte ao sinal do setup." aria-label="Ajuda: Data e preço da compra: abertura do pregão seguinte ao sinal do setup.">?</span></th>
+                            <th>Venda parcial <span class="tip" tabindex="0" data-tip="Data e preço da venda da parte escolhida ao atingir o alvo. — = o alvo não foi atingido." aria-label="Ajuda: Data e preço da venda da parte escolhida ao atingir o alvo. — = o alvo não foi atingido.">?</span></th>
+                            <th>Saída (regra B) <span class="tip" tabindex="0" data-tip="Data e preço da venda do restante pela regra B. — = ainda aberta no fim do período." aria-label="Ajuda: Data e preço da venda do restante pela regra B. — = ainda aberta no fim do período.">?</span></th>
+                            <th class="r">Investido <span class="tip" tabindex="0" data-tip="Valor da compra (a fatia do patrimônio daquele dia)." aria-label="Ajuda: Valor da compra (a fatia do patrimônio daquele dia).">?</span></th>
+                            <th class="r">Proventos <span class="tip" tabindex="0" data-tip="Dividendos e JCP recebidos enquanto a compra esteve na carteira." aria-label="Ajuda: Dividendos e JCP recebidos enquanto a compra esteve na carteira.">?</span></th>
+                            <th class="r">Lucro (R$) <span class="tip" tabindex="0" data-tip="Vendas + proventos + valor do que segue aberto (pelo último fechamento) − valor investido, já descontados os custos." aria-label="Ajuda: Vendas + proventos + valor do que segue aberto (pelo último fechamento) − valor investido, já descontados os custos.">?</span></th>
+                            <th class="r">Resultado <span class="tip" tabindex="0" data-tip="Lucro dividido pelo valor investido na compra." aria-label="Ajuda: Lucro dividido pelo valor investido na compra.">?</span></th>
+                            <th class="r">Pregões <span class="tip" tabindex="0" data-tip="Pregões da compra até a saída (ou até o fim do período, se aberta), e o tempo aproximado em anos e meses." aria-label="Ajuda: Pregões da compra até a saída (ou até o fim do período, se aberta), e o tempo aproximado em anos e meses.">?</span></th>
+                            <th>Situação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pfTradesBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="panel footnote">
+            <strong>Como o backtest de carteira funciona.</strong> Um único caixa, começando com o capital inicial (e os aportes mensais, no primeiro pregão de cada mês), que segue o ranking do screener dia a dia.
+            Ranking do dia: os ativos que o screener mostraria naquele pregão — volume financeiro médio dos 20 pregões anteriores acima de R$ 5 milhões (R$ 3 milhões para fundos), ETFs de renda fixa fora, no setup — ordenados pelo Score Composto calculado só com o histórico até ali, o Top escolhido de cada tipo.
+            Os ativos do ranking compram na abertura do pregão seguinte com a fatia do patrimônio do dia, do maior Score para o menor, enquanto houver caixa.
+            Recompras num ativo seguem a regra do screener (a pelo menos 5% das compras abertas) e há um limite de ativos diferentes. A venda parcial e a saída pela regra B devolvem o dinheiro ao caixa, que paga as compras seguintes.
+            Proventos entram no caixa na data-ex; o caixa parado rende CDI (se marcado); cada compra e venda paga o custo informado. Sem imposto de renda.
+            Os candidatos são todos os ativos da lista da B3 salva (não só os líquidos de hoje): cada um entra no ranking nos períodos em que tinha liquidez. Empresas que já saíram da bolsa não estão no Yahoo e ficam de fora, então ainda há algum viés de sobrevivência. Fundos listados aparecem no gráfico com o preço ajustado por proventos; as operações usam o preço negociado. Ferramenta de estudo — não constitui recomendação de investimento.
         </div>
     </div>
 </div>

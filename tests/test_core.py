@@ -56,3 +56,11 @@ class SetupTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DurationTest(unittest.TestCase):
+    def test_sessions_become_years_and_months(self):
+        from marketpressure.core import fmt_duration, fmt_sessions
+        self.assertEqual([fmt_sessions(n) for n in (5, 21, 252, 303, 1025)],
+                         ["menos de 1 mês", "1 mês", "1 ano", "1 ano e 2 meses", "4 anos e 1 mês"])
+        self.assertEqual(fmt_duration(26), "2 anos e 2 meses")

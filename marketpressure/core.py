@@ -364,5 +364,27 @@ def fmt_qty(q):
     return _pt_br(f"{exact:,.8f}".rstrip("0").rstrip("."))
 
 
+SESSIONS_PER_MONTH = 21  # pregões num mês, em média (cerca de 252 por ano)
+
+
+def fmt_duration(months):
+    """32 → "2 anos e 8 meses"; 12 → "1 ano"; 0 → "menos de 1 mês"."""
+    months = int(months)
+    if months <= 0:
+        return "menos de 1 mês"
+    years, rest = divmod(months, 12)
+    parts = []
+    if years:
+        parts.append(f"{years} {'ano' if years == 1 else 'anos'}")
+    if rest:
+        parts.append(f"{rest} {'mês' if rest == 1 else 'meses'}")
+    return " e ".join(parts)
+
+
+def fmt_sessions(sessions):
+    """Pregões → tempo aproximado em anos e meses (21 pregões por mês): 303 → "1 ano e 2 meses"."""
+    return fmt_duration(round(sessions / SESSIONS_PER_MONTH))
+
+
 def fmt_date(iso):
     return f"{iso[8:10]}/{iso[5:7]}/{iso[0:4]}" if iso else "—"

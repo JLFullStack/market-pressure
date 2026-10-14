@@ -63,15 +63,15 @@ class AnalysisTest(unittest.TestCase):
 
 
 class UniverseTest(DatabaseTestCase):
-    def test_candidates_use_a_loose_cut_on_the_3_month_average_per_kind(self):
+    def test_candidates_use_a_loose_cut_on_the_3_month_average(self):
         listed = [{"ticker": t, "name": t, "sector": "S", "kind": kind, "close": 10, "volume": 1, "avg_volume": v / 10}
-                  for t, kind, v in (("BAIX3", "acoes", 2e6), ("ALTA3", "acoes", 15e6), ("MEIO3", "acoes", 3.5e6),
+                  for t, kind, v in (("BAIX3", "acoes", 0.5e6), ("ALTA3", "acoes", 15e6), ("MEIO3", "acoes", 0.8e6),
                                      ("FUND11", "fundos", 2e6), ("ZZZZ11", "outro", 9e6))]
         with mock.patch.object(screener.market_data, "universe", return_value=listed):
             candidates = screener.load_universe()
-        # ações: 60% de R$ 5 mi = 3 mi; fundos: 60% de R$ 3 mi = 1,8 mi; tipo fora de KINDS: fora
-        self.assertEqual([a["ticker"] for a in candidates], ["ALTA3", "MEIO3", "FUND11"])
-        self.assertEqual(candidates[2]["kind"], "fundos")
+        # 60% do menor piso que a página deixa escolher (scanFloor, R$ 1 mi) = R$ 600 mil; tipo fora de KINDS: fora
+        self.assertEqual([a["ticker"] for a in candidates], ["ALTA3", "FUND11", "MEIO3"])
+        self.assertEqual(candidates[1]["kind"], "fundos")
 
     def test_old_saved_list_without_kind_counts_as_stocks(self):
         listed = [{"ticker": "ALTA3", "name": "A", "sector": "S", "close": 10, "volume": 1e6}]
@@ -81,24 +81,33 @@ class UniverseTest(DatabaseTestCase):
     def test_floor_uses_the_average_of_closed_sessions(self):
         def raw(ticker, market="b3"):
             data = raw_history(ticker)
-            if ticker == "POUC3":  # R$ ~1 mi por pregão, abaixo do piso: fora do universo, não é falha
+            if ticker == "POUC3":  # R$ 500 mil por pregão, abaixo do menor piso: fora da varredura, não é falha
                 for c in data["candles"]:
-                    c["volume"] = 1e6 / c["close"]
+                    c["volume"] = 5e5 / c["close"]
+            if ticker == "MEIA3":  # R$ 2 mi por pregão: analisado, mas abaixo do piso padrão (R$ 5 mi)
+                for c in data["candles"]:
+                    c["volume"] = 2e6 / c["close"]
             if ticker == "FRAC3":  # dias fracos só no fim: a média de 20 pregões continua acima do piso
                 for c in data["candles"][-3:]:
                     c["volume"] = 1
             return data
-        universe = [{"ticker": t, "name": t, "sector": "Teste"} for t in ("AAAA3", "POUC3", "FRAC3")]
+        universe = [{"ticker": t, "name": t, "sector": "Teste"} for t in ("AAAA3", "POUC3", "FRAC3", "MEIA3")]
         with mock.patch.object(screener.market_data, "raw_history", raw), \
                 mock.patch.object(screener, "load_universe", return_value=universe):
             scan = screener.run_scan()
-        self.assertEqual(sorted(a["ticker"] for a in scan["analyses"]), ["AAAA3", "FRAC3"])
-        self.assertEqual((scan["failures"], scan["universeSize"]), ([], 2))
+        self.assertEqual(sorted(a["ticker"] for a in scan["analyses"]), ["AAAA3", "FRAC3", "MEIA3"])
+        self.assertEqual(scan["failures"], [])
+        # O filtro de liquidez escolhe quem entra no ranking, sem varrer de novo.
+        self.assertEqual(screener.scan_payload(scan)["universeSize"], 2)
+        self.assertEqual(screener.scan_payload(scan, "2")["universeSize"], 3)
+        ranking = screener.scan_payload(scan, "2")["views"]["fechamento"]["rankings"][0]
+        self.assertEqual((ranking["scanned"], ranking["minAvgVolume"]), (3, 2_000_000))
+        self.assertEqual(screener.scan_payload(scan, "10")["views"]["fechamento"]["scanned"], 2)  # sintéticos: ~R$ 100 mi/dia
 
     def test_live_candle_is_left_out_of_the_average(self):
         series = candles(300)
         for c in series[:-1]:
-            c["v"] = screener.CONFIG["minAvgVolume"] * 0.9 / c["c"]
+            c["v"] = screener.CONFIG["scanFloor"] * 0.9 / c["c"]
         series[-1]["v"] = 1e12  # volume do pregão em andamento não pode salvar o ativo
         with mock.patch.object(screener.market_data, "history", return_value={"candles": series}), \
                 mock.patch.object(screener, "session_in_progress", return_value=True):

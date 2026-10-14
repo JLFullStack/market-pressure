@@ -14,6 +14,7 @@ from datetime import date
 from . import goals as gl
 from . import market_data, screener
 from . import portfolio as pf
+from . import portfolio_backtest as pb
 from . import portfolio_service as svc
 from . import portfolio_store as store
 
@@ -90,7 +91,10 @@ PORTFOLIO_ID = r"(?P<id>[0-9A-Za-z-]+)"
 
 @route("GET", "/api/scan")
 def get_scan(req):
-    return screener.scan_job.status(force=req.arg("force") == "1")
+    liquidity = req.arg("liquidez", "padrao")
+    if liquidity not in screener.LIQUIDITY:
+        raise HTTPError(400, "liquidez deve ser padrao, 10, 5, 3, 2 ou 1 (milhões de R$ por pregão)")
+    return screener.scan_job.status(force=req.arg("force") == "1", liquidity=liquidity)
 
 
 @route("GET", "/api/bova")
@@ -109,13 +113,17 @@ def percent_arg(req, name, default, low, high):
 @route("GET", "/api/backtest")
 def get_backtest(req):
     """Aba Backtest: a estratégia lote a lote num ativo (ticker, market b3|us, target e fraction
-    em %, strict=1 exige o candle de rejeição, from/to = período, AAAA-MM-DD, opcionais)."""
+    em %, strict=1 exige o candle de rejeição, from/to = período, AAAA-MM-DD, opcionais; amount =
+    valor de cada compra, para os resultados em dinheiro)."""
     market = req.arg("market", "b3")
     if market not in screener.BACKTEST_MARKETS:
         raise HTTPError(400, "market deve ser b3 ou us")
     ticker = valid_ticker(pf.normalize_ticker(req.arg("ticker")))
     target = percent_arg(req, "target", screener.CONFIG["partialTarget"] * 100, 0.5, 500)
     fraction = percent_arg(req, "fraction", screener.CONFIG["partialFraction"] * 100, 0, 100)
+    amount = pf.parse_number(req.arg("amount"), screener.BACKTEST_AMOUNT)
+    if amount is None or not 1 <= amount <= 100_000_000:
+        raise HTTPError(400, "O valor por compra deve ficar entre R$ 1 e R$ 100 milhões.")
     start, end = req.arg("from") or None, req.arg("to") or None
     for value in (start, end):
         if value and not pf.is_iso_date(value):
@@ -123,7 +131,7 @@ def get_backtest(req):
     if start and end and start >= end:
         raise HTTPError(400, "O início do período deve ser antes do fim.")
     try:
-        return screener.backtest_view(ticker, market, target, fraction, req.arg("strict") == "1", start, end)
+        return screener.backtest_view(ticker, market, target, fraction, req.arg("strict") == "1", start, end, amount)
     except ValueError as err:
         raise HTTPError(400, str(err)) from None
 
@@ -177,6 +185,15 @@ def post_contribution(req):
     body = req.json_object()
     return svc.contribution(portfolio_of(req, needs_entries=True), body.get("amount"), body.get("mode"),
                             body.get("base"), body.get("selected"))
+
+
+@route("POST", "/api/backtest/carteira")
+def post_portfolio_backtest(req):
+    """Aba Backtest, modo Carteira: o setup em vários ativos com um único caixa (portfolio_backtest)."""
+    try:
+        return pb.run(pb.parse_params(req.json_object()))
+    except ValueError as err:
+        raise HTTPError(400, str(err)) from None
 
 
 @route("GET", f"/api/carteira/{PORTFOLIO_ID}/metas")

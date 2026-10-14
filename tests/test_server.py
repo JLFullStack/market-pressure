@@ -86,6 +86,25 @@ class ServerTest(DatabaseTestCase):
         self.assertTrue(data["lots"])
         self.assertEqual(data["stats"]["lots"], len(data["lots"]))
         self.assertIsNotNone(data["onlyB"])
+        s = data["stats"]
+        self.assertEqual((s["amount"], s["invested"]), (1000, 1000 * s["lots"]))
+        self.assertAlmostEqual(s["profit"], s["sumReturn"] * 10)
+        self.assertAlmostEqual(s["realized"] + s["unrealized"], s["profit"])
+        self.assertAlmostEqual(data["equity"][-1]["value"], s["profit"])
+        self.assertAlmostEqual(sum(lot["profit"] for lot in data["lots"]), s["profit"])
+        self.assertTrue(0 < s["maxCapital"] <= s["invested"])
+        b = data["onlyB"]
+        self.assertTrue(0 < b["maxCapital"] <= b["invested"])
+        self.assertGreaterEqual(b["maxCapital"], s["maxCapital"])  # sem parcial, nada volta antes da regra B
+        self.assertAlmostEqual(b["returnOnMaxCapital"], b["profit"] / b["maxCapital"] * 100)
+        self.assertEqual(len(data["equityB"]), len(data["equity"]))
+        self.assertAlmostEqual(data["equityB"][-1]["value"], b["profit"])
+        self.assertIn("a mais que", data["compare"])
+        only = self.request("GET", "/api/backtest?ticker=PETR4&fraction=0")[1]
+        self.assertEqual((only["onlyB"], only["equityB"], only["compare"]), (None, None, None))
+        doubled = self.request("GET", "/api/backtest?ticker=PETR4&amount=2000")[1]["stats"]
+        self.assertAlmostEqual(doubled["profit"], 2 * s["profit"])
+        self.assertAlmostEqual(doubled["returnOnMaxCapital"], s["returnOnMaxCapital"])
         status, period, _ = self.request("GET", "/api/backtest?ticker=PETR4&from=2021-10-01&to=2021-12-31")
         self.assertEqual(status, 200)
         self.assertEqual((period["bounds"]["from"], period["candles"][-1]["time"]), ("2021-10-01", "2021-12-31"))
@@ -98,8 +117,18 @@ class ServerTest(DatabaseTestCase):
         self.assertIn("Início ajustado", early["note"])
         for query in ("ticker=PETR4&market=xx", "ticker=PETR4&target=abc", "ticker=&market=b3",
                       "ticker=PETR4&fraction=150", "ticker=PETR4&from=ontem", "ticker=PETR4&from=2021-12-01&to=2021-11-01",
-                      "ticker=PETR4&to=2021-02-01"):
+                      "ticker=PETR4&to=2021-02-01", "ticker=PETR4&amount=0", "ticker=PETR4&amount=abc"):
             self.assertEqual(self.request("GET", f"/api/backtest?{query}")[0], 400, query)
+
+    def test_portfolio_backtest_route(self):
+        body = {"universe": "lista", "tickers": "PETR4, VALE3", "initial": "5000", "cdi": False}
+        status, data, _ = self.request("POST", "/api/backtest/carteira", body)
+        self.assertEqual(status, 200)
+        self.assertEqual((data["universe"]["candidates"], data["universe"]["ranked"]), (2, 2))
+        self.assertEqual({a["ticker"] for a in data["assets"]}, set(data["markers"]))
+        self.assertEqual(data["strategies"][0]["metrics"]["contributed"], 5000)
+        self.assertEqual(self.request("POST", "/api/backtest/carteira", {**body, "tickers": ""})[0], 400)
+        self.assertEqual(self.request("POST", "/api/backtest/carteira", {**body, "position": "150"})[0], 400)
 
     def test_goal_routes(self):
         pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "Metas"})[1]["id"]

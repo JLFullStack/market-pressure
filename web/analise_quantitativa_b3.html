@@ -33,6 +33,16 @@
                         <option value="intradiario">Intradiário</option>
                     </select>
                 </label>
+                <label class="toggle">Liquidez mínima:
+                    <select id="liquidity" class="select" title="Volume financeiro médio por pregão (últimos 20 pregões) que o ativo precisa ter para entrar no ranking. Regra prática: cada compra sua deve ser no máximo ~1% desse volume. Para aportes de R$ 2 mil e carteiras de até ~R$ 200 mil, R$ 2 mi por dia é o recomendado; Padrão = R$ 5 mi (fundos R$ 3 mi), mais conservador.">
+                        <option value="padrao">Padrão (R$ 5 mi; fundos R$ 3 mi)</option>
+                        <option value="10">R$ 10 mi por dia</option>
+                        <option value="5">R$ 5 mi por dia</option>
+                        <option value="3">R$ 3 mi por dia</option>
+                        <option value="2">R$ 2 mi por dia (recomendado até ~R$ 200 mil)</option>
+                        <option value="1">R$ 1 mi por dia</option>
+                    </select>
+                </label>
                 <label class="toggle"><input type="checkbox" id="requireCandle"> Exigir candle de rejeição</label>
                 <span class="status-badge" id="modeIndicator">Aguardando</span>
                 <button class="btn" id="refreshBtn" onclick="runScan(true)">Forçar Atualização</button>

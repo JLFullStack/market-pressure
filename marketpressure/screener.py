@@ -16,15 +16,18 @@ import time
 from . import database as db
 from . import market_data, runtime
 from .core import (EXIT, SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
-                  evaluate_setup, exit_signal, fmt_date, fmt_num, in_session_hours, last_close, session_in_progress)
+                  evaluate_setup, exit_signal, fmt_brl, fmt_date, fmt_num, fmt_sessions, in_session_hours, last_close, session_in_progress)
 
 CONFIG = {
     # Universo: ativos da lista do Yahoo (market_data.load_universe) de quatro tipos, cada um com
     # o seu ranking (KINDS), com volume financeiro médio (fechamento × volume) dos últimos pregões
     # fechados acima do piso do tipo. A média evita que um ativo saia por causa de um único dia
     # fraco; a média de 3 meses da lista só descarta antes os que estão muito longe do piso.
-    "minAvgVolume": 5_000_000,  # R$ por pregão
+    "minAvgVolume": 5_000_000,  # R$ por pregão (piso "padrão")
     "minAvgVolumeByKind": {"fundos": 3_000_000},  # fundos: book raso abaixo disso, mas R$ 3 mi bastam
+    # A varredura analisa tudo a partir do menor piso que a página deixa escolher (LIQUIDITY);
+    # o filtro "Liquidez mínima" só escolhe quais entram no ranking, sem varrer de novo.
+    "scanFloor": 1_000_000,
     "liquidityWindow": 20,      # pregões da média
     "prefilterRatio": 0.6,      # candidato: média de 3 meses (lista do Yahoo) >= 60% do piso
     # Fundos (FII, Fiagro, FI-Infra) caem todo mês o valor do rendimento na data-ex: com o preço
@@ -62,13 +65,24 @@ CONFIG = {
 
 log = logging.getLogger(__name__)
 
-SCAN_VERSION = 4  # mude se o formato das análises mudar (descarta a varredura salva no banco)
+SCAN_VERSION = 5  # mude se o formato das análises mudar (descarta a varredura salva no banco)
 MODES = ("fechamento", "intradiario")
 KINDS = ("acoes", "fundos", "etfs", "bdrs")  # tipos de ativo (market_data.asset_kind), um ranking cada
 
 
 def min_avg_volume(kind):
     return CONFIG["minAvgVolumeByKind"].get(kind, CONFIG["minAvgVolume"])
+
+
+# Filtro "Liquidez mínima" (Screener e backtest de carteira): volume financeiro médio por pregão
+# exigido para entrar no ranking. "padrao" = o piso de cada tipo (minAvgVolume/minAvgVolumeByKind).
+LIQUIDITY = {"padrao": None, "10": 10_000_000, "5": 5_000_000, "3": 3_000_000, "2": 2_000_000, "1": 1_000_000}
+
+
+def liquidity_floor(kind, choice="padrao"):
+    """Piso de liquidez (R$ por pregão) de um tipo de ativo na escolha da página."""
+    value = LIQUIDITY.get(choice)
+    return min_avg_volume(kind) if value is None else value
 
 # ---------------------------------------------------------------- Auxiliares de pressure()
 
@@ -278,7 +292,7 @@ def analyze_ticker(asset, now=None):
         raise ValueError("histórico insuficiente")
     live = session_in_progress(candles, now)
     traded = avg_traded_value(candles[:-1] if live else candles)
-    if traded < min_avg_volume(kind):
+    if traded < CONFIG["scanFloor"]:
         return None
     if len(candles) < CONFIG["minCandles"]:
         raise ValueError("histórico insuficiente")
@@ -340,7 +354,7 @@ def load_universe():
     assets = [s for s in market_data.universe() if (s.get("kind") or "acoes") in KINDS]
     return [{"ticker": s["ticker"], "name": s["name"], "sector": s["sector"], "kind": s.get("kind") or "acoes"}
             for s in sorted(assets, key=traded, reverse=True)
-            if traded(s) >= min_avg_volume(s.get("kind") or "acoes") * CONFIG["prefilterRatio"]]
+            if traded(s) >= CONFIG["scanFloor"] * CONFIG["prefilterRatio"]]
 
 
 def run_scan(progress=lambda done, total: None):
@@ -437,20 +451,34 @@ def ranking_view(analyses, strict):
     }
 
 
-def views(scan):
+def above_floor(scan, liquidity="padrao"):
+    """Análises dos ativos com liquidez acima do piso escolhido (liquidity_floor)."""
+    return [a for a in scan["analyses"]
+            if (a.get("traded") or 0) >= liquidity_floor(a.get("kind") or "acoes", liquidity)]
+
+
+def views(scan, liquidity="padrao"):
     """Tudo o que a página mostra, nas quatro combinações de base × candle de rejeição: um
     ranking por tipo de ativo (KINDS), cada um com a sua amplitude e regime (só com pelo menos
-    regimeMinAssets ativos no tipo; abaixo disso, None = amostra pequena)."""
+    regimeMinAssets ativos no tipo; abaixo disso, None = amostra pequena). Só os ativos acima
+    do piso de liquidez escolhido."""
     result = {}
+    scan = {**scan, "analyses": above_floor(scan, liquidity)}
     for mode in MODES:
         analyses = analyses_for(scan, mode)
+        if not analyses:
+            result[mode] = {"refDate": None, "scanned": 0, "rankings": [
+                {"kind": kind, "scanned": 0, "minAvgVolume": liquidity_floor(kind, liquidity), "duplicates": 0,
+                 "breadth": None, "regime": None, "loose": ranking_view([], False), "strict": ranking_view([], True)}
+                for kind in KINDS]}
+            continue
         view = {"refDate": day_of(max(a["date"] for a in analyses)), "scanned": len(analyses), "rankings": []}
         for kind in KINDS:
             group = [a for a in analyses if (a.get("kind") or "acoes") == kind]
             breadth = (sum(1 for a in group if a["aboveRisingMM200"]) / len(group) * 100
                        if len(group) >= CONFIG["regimeMinAssets"] else None)
             view["rankings"].append({
-                "kind": kind, "scanned": len(group), "minAvgVolume": min_avg_volume(kind),
+                "kind": kind, "scanned": len(group), "minAvgVolume": liquidity_floor(kind, liquidity),
                 "duplicates": sum(1 for a in group if a.get("duplicateOf")),
                 "breadth": breadth, "regime": regime(breadth) if breadth is not None else None,
                 "loose": ranking_view(group, False), "strict": ranking_view(group, True),
@@ -459,21 +487,22 @@ def views(scan):
     return result
 
 
-def scan_payload(scan):
+def scan_payload(scan, liquidity="padrao"):
     failures = scan["failures"]
     return {
         "timestamp": scan["timestamp"],
-        "universeSize": scan["universeSize"],
+        "universeSize": len(above_floor(scan, liquidity)) + len(failures),
+        "liquidity": liquidity,
         "topN": CONFIG["topN"],
         "failures": len(failures),
         "apiErrors": sum(1 for f in failures if f["reason"] != "histórico insuficiente"),
         "liveSession": any(a["fechamento"]["date"] != a["intradiario"]["date"] for a in scan["analyses"]),
-        "views": views(scan),
+        "views": views(scan, liquidity),
     }
 
 
 ASSET_COLUMNS = (("ticker", "ticker"), ("name", "name"), ("sector", "sector"), ("kind", "kind"),
-                 ("duplicate_of", "duplicateOf"))
+                 ("duplicate_of", "duplicateOf"), ("traded", "traded"))
 
 
 def write_scan(scan):
@@ -517,7 +546,7 @@ class ScanJob:
         self.done = self.total = 0
         self.error = None
         self.scan = self._read_file()
-        self.payload = scan_payload(self.scan) if self.scan else None
+        self.payloads = {}  # liquidez escolhida → payload da varredura atual
         self.start = lambda: threading.Thread(target=self._work, daemon=True).start()
 
     @staticmethod
@@ -546,22 +575,29 @@ class ScanJob:
         except Exception as err:
             self.fail(err)
 
+    def payload(self, liquidity="padrao"):
+        """Payload da varredura atual para a liquidez escolhida (montado uma vez por escolha)."""
+        if not self.scan:
+            return None
+        if liquidity not in self.payloads:
+            self.payloads[liquidity] = scan_payload(self.scan, liquidity)
+        return self.payloads[liquidity]
+
     def finish(self, scan):
         """Varredura concluída: guarda em memória e no banco."""
-        payload = scan_payload(scan)
         try:
             write_scan(scan)
         except Exception:
             log.warning("não foi possível salvar a varredura no banco", exc_info=True)
         with self.lock:
-            self.scan, self.payload, self.error, self.running = scan, payload, None, False
+            self.scan, self.payloads, self.error, self.running = scan, {}, None, False
 
     def fail(self, err):
         log.warning("varredura falhou: %s", err)
         with self.lock:
             self.error, self.running = str(err), False
 
-    def status(self, force=False):
+    def status(self, force=False, liquidity="padrao"):
         with self.lock:
             if not self.running and (force or not self._fresh()) and not (self.error and not force):
                 self.running, self.done, self.total, self.error = True, 0, 0, None
@@ -571,8 +607,8 @@ class ScanJob:
             if self.error:
                 # Falhou: mostra a última varredura salva, se houver. A próxima chamada tenta de novo.
                 error, self.error = self.error, None
-                return {"state": "error", "message": error, "scan": self.payload}
-            return {"state": "done", "scan": self.payload}
+                return {"state": "error", "message": error, "scan": self.payload(liquidity)}
+            return {"state": "done", "scan": self.payload(liquidity)}
 
 
 scan_job = ScanJob()
@@ -588,6 +624,7 @@ KIND_LABEL = {"acoes": "Ação", "fundos": "Fundo listado (FII, Fiagro, FI-Infra
 MARKER_LETTER = {"buy": "C", "partial": "P", "exit": "V"}
 MARKER_ORDER = ("buy", "partial", "exit")
 LOT_MARGIN = 40  # pregões mostrados antes e depois de um lote ao focá-lo no gráfico
+BACKTEST_AMOUNT = 1000.0  # valor padrão de cada compra, para os resultados em dinheiro
 
 
 def _lot_numbers(numbers):
@@ -619,9 +656,9 @@ def _asset_info(ticker, market):
     return ticker, market_data.asset_kind(ticker) or "acoes"
 
 
-def _backtest_summary(lots, fraction, mark):
+def _backtest_summary(lots, fraction, mark, amount):
     """Resumo dos lotes: encerrados (acerto, médio, mediana, melhor, pior) e a soma de todos,
-    com os abertos marcados pelo último fechamento (mark)."""
+    com os abertos marcados pelo último fechamento (mark); em reais, com `amount` por compra."""
     closed = sorted(r for r in (lot_return(lot, fraction) for lot in lots) if r is not None)
     wins = sum(1 for r in closed if r > 0)
     return {
@@ -634,17 +671,66 @@ def _backtest_summary(lots, fraction, mark):
         "best": closed[-1] * 100 if closed else None,
         "worst": closed[0] * 100 if closed else None,
         "sumReturn": add_up(lot_return(lot, fraction, mark) for lot in lots) * 100,
+        "invested": len(lots) * amount,
+        "profit": add_up(lot_return(lot, fraction, mark) for lot in lots) * amount,
     }
 
 
-def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False, start=None, end=None):
+def _max_capital(lots, fraction, first, last, amount):
+    """Maior valor investido ao mesmo tempo de first a last: o valor de compra (amount por lote) da
+    parte ainda não vendida de cada lote, dia a dia. É o dinheiro necessário para seguir todos os sinais."""
+    best = 0.0
+    for i in range(first, last + 1):
+        capital = 0.0
+        for lot in lots:
+            e, p, x = lot["entry"], lot["partial"], lot["exit"]
+            if e["i"] > i or (x and x["i"] <= i):
+                continue
+            capital += (1 - fraction if p and p["i"] <= i else 1) * amount
+        best = max(best, capital)
+    return best
+
+
+def _profit_curve(lots, fraction, first, days, closes, amount):
+    """Lucro acumulado em dinheiro (amount por compra) dia a dia, de first ao fim: o que já foi
+    vendido pelo preço da venda e a parte ainda aberta pelo fechamento do dia. Só o ganho (ou a
+    perda), sem o valor investido."""
+    out = []
+    for i in range(first, len(days)):
+        total = 0.0
+        for lot in lots:
+            e, p, x = lot["entry"], lot["partial"], lot["exit"]
+            if e["i"] > i:
+                continue
+            rest = 1.0
+            if p and p["i"] <= i:
+                total += fraction * (p["price"] / e["price"] - 1)
+                rest -= fraction
+            end_price = x["price"] if x and x["i"] <= i else closes[i]
+            total += rest * (end_price / e["price"] - 1)
+        out.append({"time": days[i], "value": total * amount})
+    return out
+
+
+def _with_capital(stats, lots, fraction, first, last, amount):
+    """Acrescenta ao resumo o capital máximo e os retornos sobre ele e sobre o total aplicado."""
+    max_capital = _max_capital(lots, fraction, first, last, amount)
+    return {**stats, "maxCapital": max_capital,
+            "returnOnInvested": stats["profit"] / stats["invested"] * 100 if stats["invested"] else None,
+            "returnOnMaxCapital": stats["profit"] / max_capital * 100 if max_capital else None}
+
+
+def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False, start=None, end=None,
+                  amount=BACKTEST_AMOUNT):
     """Tudo o que a aba Backtest mostra de um ativo: candles e médias (pregões fechados; fundos no
     preço ajustado por proventos, como no screener), cada lote com compra, venda parcial e saída,
     marcadores do gráfico, resultado acumulado e o resumo, também com só a regra B para comparar.
     target e fraction em fração (0,10 = 10%); None = os do CONFIG. start/end (AAAA-MM-DD, opcionais):
     período do backtest. As médias usam o histórico anterior a start; compras só a partir de start
     (ajustado para o primeiro pregão com MM200, se for antes) e o que estiver aberto em end é
-    marcado pelo fechamento desse dia. ValueError se o histórico ou o período não bastam."""
+    marcado pelo fechamento desse dia. amount: valor de cada compra, para os resultados em
+    dinheiro (lucro, total aplicado, capital máximo empregado ao mesmo tempo). ValueError se o
+    histórico ou o período não bastam."""
     target = CONFIG["partialTarget"] if target is None else target
     fraction = CONFIG["partialFraction"] if fraction is None else fraction
     name, kind = _asset_info(ticker, market)
@@ -692,7 +778,9 @@ def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False,
             "exit": x and {"date": days[x["i"]], "price": x["price"], "return": (x["price"] / e["price"] - 1) * 100},
             "open": x is None,
             "return": lot_return(lot, fraction, closes[last]) * 100,
+            "profit": lot_return(lot, fraction, closes[last]) * amount,
             "days": end - e["i"],
+            "duration": fmt_sessions(end - e["i"]),
             "maxGain": (peak_high / e["price"] - 1) * 100,
             "giveback": (1 - x["price"] / peak_close) * 100 if x else None,
             "status": status,
@@ -705,35 +793,45 @@ def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False,
                     "text": f"{MARKER_LETTER[key]}{_lot_numbers(m['lots'])}"}
                    for (i, key), m in sorted(markers.items(), key=lambda kv: (kv[0][0], MARKER_ORDER.index(kv[0][1])))]
 
-    # Resultado acumulado: soma do retorno de cada lote (em % de um lote) dia a dia; a parte ainda
-    # aberta de cada lote é marcada pelo fechamento do dia.
-    equity = []
-    for i in range(first, len(candles)):
-        total = 0.0
-        for lot in lots:
-            e, p, x = lot["entry"], lot["partial"], lot["exit"]
-            if e["i"] > i:
-                continue
-            rest = 1.0
-            if p and p["i"] <= i:
-                total += fraction * (p["price"] / e["price"] - 1)
-                rest -= fraction
-            end_price = x["price"] if x and x["i"] <= i else closes[i]
-            total += rest * (end_price / e["price"] - 1)
-        equity.append({"time": days[i], "value": total * 100})
+    equity = _profit_curve(lots, fraction, first, days, closes, amount)
+    realized = 0.0
+    for lot in lots:
+        e, p, x = lot["entry"], lot["partial"], lot["exit"]
+        rest = 1.0
+        if p:
+            realized += fraction * (p["price"] / e["price"] - 1) * amount
+            rest -= fraction
+        if x:
+            realized += rest * (x["price"] / e["price"] - 1) * amount
 
     closed_rows = [r for r in rows if not r["open"]]
-    stats = _backtest_summary(lots, fraction, closes[last])
+    stats = _with_capital(_backtest_summary(lots, fraction, closes[last], amount), lots, fraction, first, last, amount)
     stats.update({
+        "amount": amount, "realized": realized, "unrealized": stats["profit"] - realized,
+        "openCapital": add_up((1 - (fraction if lot["partial"] else 0)) * amount for lot in lots if not lot["exit"]),
         "partialHits": sum(1 for r in rows if r["partial"]),
         "avgDays": add_up(r["days"] for r in closed_rows) / len(closed_rows) if closed_rows else None,
+        "avgDuration": fmt_sessions(add_up(r["days"] for r in closed_rows) / len(closed_rows)) if closed_rows else None,
+        "periodSessions": last - first,
+        "periodDuration": fmt_sessions(last - first),
         "avgGiveback": add_up(r["giveback"] for r in closed_rows) / len(closed_rows) if closed_rows else None,
         "avgMaxGain": add_up(r["maxGain"] for r in rows) / len(rows) if rows else None,
         "exits": len({lot["exit"]["i"] for lot in lots if lot["exit"]}),
         "buyHold": (closes[last] / lots[0]["entry"]["price"] - 1) * 100 if lots else None,
         "buyHoldFrom": days[lots[0]["entry"]["i"]] if lots else None,
     })
-    only_b = _backtest_summary(backtest_lots(ind, strict, target, 0, first), 0, closes[last]) if fraction > 0 else None
+    only_b, equity_b, compare = None, None, None
+    if fraction > 0:
+        lots_b = backtest_lots(ind, strict, target, 0, first)
+        only_b = _with_capital(_backtest_summary(lots_b, 0, closes[last], amount), lots_b, 0, first, last, amount)
+        equity_b = _profit_curve(lots_b, 0, first, days, closes, amount)
+        diff = stats["profit"] - only_b["profit"]
+        if abs(diff) < 0.005:
+            compare = "As duas estratégias deram o mesmo lucro no período."
+        else:
+            winner, loser = ("A venda parcial", "a regra B sozinha") if diff > 0 else ("A regra B sozinha", "a venda parcial")
+            compare = (f"{winner} ganhou {fmt_brl(abs(diff))} a mais que {loser} no período "
+                       f"({fmt_brl(stats['profit'])} contra {fmt_brl(only_b['profit'])}).")
 
     rule_b = "quando o fechamento fica abaixo de MM20, MM50 e MM200 com MM50 < MM200 (regra B)"
     if fraction > 0:
@@ -750,7 +848,8 @@ def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False,
                     for i, c in enumerate(candles) if i >= first],
         "ma": {k: [{"time": days[i], "value": v} for i, v in enumerate(ind[k]) if v is not None and i >= first]
                for k in ("mm20", "mm50", "mm200")},
-        "markers": marker_list, "equity": equity, "lots": rows, "stats": stats, "onlyB": only_b,
+        "markers": marker_list, "equity": equity, "equityB": equity_b, "compare": compare,
+        "lots": rows, "stats": stats, "onlyB": only_b,
     }
 
 
