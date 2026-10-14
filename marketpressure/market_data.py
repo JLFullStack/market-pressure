@@ -2,7 +2,7 @@
 
 - brapi: lista de ações da B3 (o plano gratuito libera 1 ticker por requisição e 3 meses de
   histórico, por isso só a lista vem dela).
-- Yahoo Finance: candles diários de 5 anos e proventos (data-ex) por mercado.
+- Yahoo Finance: candles diários de 10 anos e proventos (data-ex) por mercado.
 - Banco Central (SGS 12): CDI diário.
 - B3 (empresas listadas): proventos anunciados com data de pagamento.
 
@@ -287,7 +287,7 @@ def universe():
     return cached("universe", load_universe)
 
 
-def history_url(ticker: str, market: str = "b3", range_: str = "5y") -> str:
+def history_url(ticker: str, market: str = "b3", range_: str = "10y") -> str:
     symbol = YAHOO_SYMBOL[market].format(ticker)
     return (f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}"
             f"?range={range_}&interval=1d&events=div")
@@ -325,14 +325,16 @@ def parse_chart(data: dict, ticker: str) -> dict:
 # - salvo em dia e pregão em andamento: pede só range=5d, para o candle do dia (não é salvo);
 # - salvo atrasado (a atualização diária não rodou, ou ativo fora dela, como os da carteira):
 #   pede o menor range que cobre do último candle salvo até hoje, com folga, e salva;
-# - nada salvo: os 5 anos.
+# - nada salvo, ou salvo no formato antigo de 5 anos (legacy_history): os 10 anos.
 #
 # O fechamento do Yahoo é ajustado por desdobramentos e o adjustedClose, por proventos: um
 # evento novo muda o passado inteiro. Por isso os dias que o trecho novo e o salvo têm em comum
 # são comparados; qualquer diferença (desdobramento, grupamento, bonificação, provento novo,
-# correção) baixa de novo os 5 anos. Só candles de pregões já fechados são salvos.
+# correção) baixa de novo os 10 anos. Só candles de pregões já fechados são salvos.
 
-HISTORY_DAYS = 1826            # 5 anos: candles mais antigos são descartados
+HISTORY_DAYS = 3652            # 10 anos: candles mais antigos são descartados
+FULL_RANGE = "10y"             # download completo
+LEGACY_HISTORY_DAYS = 1826     # histórico salvo antes, cortado em 5 anos
 HISTORY_OVERLAP_DAYS = 7       # folga: dias já salvos que o trecho novo também traz
 HISTORY_TOLERANCE = 1e-4       # diferença relativa de fechamento que conta como mudança do passado
 LIVE_RANGE = "5d"              # candle do dia, com alguns dias salvos para comparar
@@ -426,10 +428,20 @@ def stored_history(ticker: str, market: str = "b3", consume=False) -> dict | Non
     return hist if hist["candles"] else None
 
 
+def legacy_history(stored: dict) -> bool:
+    """Salvo quando o histórico era cortado em 5 anos? O corte deixava do primeiro ao último
+    candle entre LEGACY_HISTORY_DAYS menos alguns dias (fim de semana e feriado nas duas pontas)
+    e LEGACY_HISTORY_DAYS; esse histórico é baixado de novo com os 10 anos. Um ativo que tem de
+    fato ~5 anos de pregão cai na mesma faixa e é baixado de novo só nos poucos dias em que o
+    seu intervalo passa por ela."""
+    span = (stored["candles"][-1]["date"] - stored["candles"][0]["date"]) / 86400
+    return LEGACY_HISTORY_DAYS - 10 <= span <= LEGACY_HISTORY_DAYS + 1
+
+
 def update_range(stored: dict | None, market: str, now: float) -> str | None:
     """Range a pedir ao Yahoo agora (ver acima); None = o salvo basta."""
-    if not stored:
-        return "5y"
+    if not stored or legacy_history(stored):
+        return FULL_RANGE
     last = stored["candles"][-1]["date"]
     if _day(last, market) >= last_closed_day(market, now):
         return LIVE_RANGE if live_session(market, now) else None
@@ -437,7 +449,7 @@ def update_range(stored: dict | None, market: str, now: float) -> str | None:
     for range_, covered in HISTORY_RANGES:
         if days <= covered:
             return range_
-    return "5y"
+    return FULL_RANGE
 
 
 def update_url(ticker: str, market: str = "b3", now: float | None = None) -> str | None:
@@ -458,7 +470,7 @@ def _differs(a, b) -> bool:
 
 def merge_history(stored: dict, fresh: dict, market: str) -> dict | None:
     """Salvo + trecho novo. None quando o passado mudou (fechamento ou fechamento ajustado de
-    um dia em comum diferente) ou não há dia em comum: aí é preciso baixar os 5 anos."""
+    um dia em comum diferente) ou não há dia em comum: aí é preciso baixar os 10 anos."""
     if not fresh["candles"]:
         return None
     first = _day(fresh["candles"][0]["date"], market)
@@ -491,14 +503,14 @@ def _save_history(ticker, market, stored, hist, now):
 
 
 def load_history(ticker: str, market: str = "b3", now: float | None = None) -> dict:
-    """Candles diários de 5 anos do Yahoo Finance (OHLC sem ajuste por proventos) e proventos,
+    """Candles diários de 10 anos do Yahoo Finance (OHLC sem ajuste por proventos) e proventos,
     a partir do histórico salvo no banco mais o que falta (ver acima).
 
     market escolhe o símbolo do Yahoo (YAHOO_SYMBOL): "b3" -> PETR4.SA, "us" -> VOO,
     "crypto" -> BTC-USD, "fx" -> USDBRL=X. Fora da B3 os preços vêm na moeda do ativo (US$
     para EUA e cripto); a conversão para reais é feita em portfolio.convert_history.
 
-    5 anos dão ao backtest da estratégia (compra no pullback, venda abaixo das três médias)
+    10 anos dão ao backtest da estratégia (compra no pullback, venda abaixo das três médias)
     mais operações por ativo — cada posição dura em média ~160 pregões. O screener não usa
     adjustedClose; a carteira o usa só para a rentabilidade do BOVA11.
     dividends: [{"date": ts, "amount": valor por cota}], em ordem de data. A data do Yahoo
@@ -511,10 +523,10 @@ def load_history(ticker: str, market: str = "b3", now: float | None = None) -> d
         hist = stored
     else:
         hist = parse_chart(http_json(history_url(ticker, market, range_)), ticker)
-        if range_ != "5y":
+        if range_ != FULL_RANGE:
             merged = merge_history(stored, hist, market)
             if merged is None:
-                log.info("histórico de %s mudou no passado (desdobramento ou provento); baixando 5 anos", ticker)
+                log.info("histórico de %s mudou no passado (desdobramento ou provento); baixando 10 anos", ticker)
                 merged = parse_chart(http_json(history_url(ticker, market)), ticker)
             hist = merged
     start = now - HISTORY_DAYS * 86400

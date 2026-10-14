@@ -25,8 +25,9 @@ SETUP = {
 
 # ---------------------------------------------------------------- Fusos e relógio da B3
 # O Windows não traz a base de fusos (zoneinfo) e o projeto não usa pacotes externos, então os
-# três fusos usados são calculados aqui. Brasília não tem horário de verão desde 2019 (antes
-# dos 5 anos de histórico); Londres segue a regra europeia (último domingo de março e de
+# três fusos usados são calculados aqui. Brasília é UTC−3 fixo: não tem horário de verão desde 2019,
+# e nos anos anteriores do histórico o candle diário da B3 vem às 10h (13h UTC), longe da
+# meia-noite, então o dia não muda; Londres segue a regra europeia (último domingo de março e de
 # outubro, à 01:00 UTC).
 
 SAO_PAULO = timezone(timedelta(hours=-3))

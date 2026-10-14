@@ -1,6 +1,7 @@
 """Histórico salvo no banco: só o que falta é pedido ao Yahoo; salvo em dia e fora do pregão,
 nada é pedido; no pregão, só o candle do dia (5d); mudança no passado (desdobramento, provento
-novo) baixa os 5 anos de novo."""
+novo) baixa os 10 anos de novo; o salvo no formato antigo, cortado em 5 anos, é baixado de novo
+com os 10 anos."""
 
 import json
 import urllib.parse
@@ -11,7 +12,7 @@ from marketpressure import browser, core, database, market_data, runtime
 from .support import DAY, DatabaseTestCase, candles
 from .test_browser import BrowserTestCase
 
-RANGE_DAYS = {"5d": 7, "1mo": 30, "3mo": 91, "6mo": 182, "1y": 365, "2y": 730, "5y": 1826}
+RANGE_DAYS = {"5d": 7, "1mo": 30, "3mo": 91, "6mo": 182, "1y": 365, "2y": 730, "5y": 1826, "10y": 3652}
 HOUR = 3600
 
 
@@ -58,10 +59,10 @@ class StoredHistoryTest(DatabaseTestCase):
     def test_series_ends_on_a_thursday(self):
         self.assertEqual(core.local_time(series(1001)[-1]["date"]).strftime("%A"), "Thursday")
 
-    def test_first_load_downloads_5_years_and_saves_closed_sessions(self):
+    def test_first_load_downloads_10_years_and_saves_closed_sessions(self):
         data = series(1001)
         hist, ranges = self.load(data, at(data[-1], 12))
-        self.assertEqual(ranges, ["5y"])
+        self.assertEqual(ranges, ["10y"])
         self.assertEqual(hist["candles"], data)
         self.assertEqual(self.saved(), 1000)  # o candle do pregão em andamento não é salvo
         self.assertTrue(database.table_path("history_b3_petr4").exists())
@@ -101,15 +102,27 @@ class StoredHistoryTest(DatabaseTestCase):
         split = series(1001, factor=0.5)  # desdobramento 2:1: o Yahoo ajusta todo o passado
         with self.assertLogs("marketpressure.market_data", "INFO"):
             hist, ranges = self.load(split, at(split[-1], 19))
-        self.assertEqual(ranges, ["1mo", "5y"])
+        self.assertEqual(ranges, ["1mo", "10y"])
         self.assertEqual(hist["candles"], split)
         self.assertEqual(database.read_table("history_b3_petr4")[0]["close"], split[0]["close"])
 
     def test_old_candles_are_dropped(self):
-        data = series(1900)
+        data = series(3800)
         hist, _ = self.load(data, at(data[-1], 12))
         self.assertLessEqual(len(hist["candles"]), market_data.HISTORY_DAYS + 1)
         self.assertEqual(hist["candles"][-1], data[-1])
+
+    def test_history_saved_with_5_years_is_downloaded_again_with_10(self):
+        data = series(3800)
+        now = at(data[-1], 19)
+        old = [c for c in data if c["date"] >= now - market_data.LEGACY_HISTORY_DAYS * DAY]
+        database.write_tables({"history_b3_petr4": market_data._history_to_rows({"candles": old, "dividends": []})})
+        hist, ranges = self.load(data, now)
+        self.assertEqual(ranges, ["10y"])
+        self.assertGreater(len(hist["candles"]), 3600)
+        self.assertGreater(self.saved(), 3600)
+        hist, ranges = self.load(data, now + HOUR)
+        self.assertEqual(ranges, [])  # já migrado: nada a pedir
 
     def test_last_closed_day_per_market(self):
         thursday = series(1001)[-1]

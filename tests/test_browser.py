@@ -70,7 +70,7 @@ class RemoteDatabaseTest(BrowserTestCase):
 
 
 class ProxyTest(BrowserTestCase):
-    URL = "https://query1.finance.yahoo.com/v8/finance/chart/PETR4.SA?range=5y"
+    URL = "https://query1.finance.yahoo.com/v8/finance/chart/PETR4.SA?range=10y"
 
     def test_primed_response_skips_the_network(self):
         market_data.prime(self.URL, 200, '{"chart": {"result": []}}')

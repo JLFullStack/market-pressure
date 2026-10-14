@@ -510,7 +510,7 @@ def run(params):
         raise ValueError("O período não tem pregões suficientes; escolha um início anterior ao fim.")
     note = None
     if params["start"] and params["start"] < first_day:
-        note = (f"Início ajustado para {fmt_date(cal[0])}: o histórico do Yahoo tem 5 anos e as médias precisam de "
+        note = (f"Início ajustado para {fmt_date(cal[0])}: o histórico do Yahoo tem 10 anos e as médias precisam de "
                 f"{sc.CONFIG['backtestStart']} pregões antes da primeira compra.")
 
     cdi = {}

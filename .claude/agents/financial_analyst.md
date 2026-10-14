@@ -39,7 +39,7 @@ Todo o cálculo fica no Python, no pacote `marketpressure/`: `evaluate_setup` e 
 
 ## Dados
 
-- Candles diários de 5 anos do Yahoo Finance, servidos pelo `server.py` em `http://127.0.0.1:8765/api/history/{TICKER}`. O universo de ações vem de `/api/universe`.
+- Candles diários de 10 anos do Yahoo Finance, servidos pelo `server.py` em `http://127.0.0.1:8765/api/history/{TICKER}`. O universo de ações vem de `/api/universe`.
 - **Os preços NÃO são ajustados por proventos**, para bater com o gráfico padrão do TradingView, a referência do usuário. Os desdobramentos já vêm ajustados. Consequência: em datas ex-dividendo há gaps de baixa que não são movimento de mercado. Considere isso ao avaliar médias, a regra de saída e o backtest.
 - Durante o pregão (até as 18h de Brasília), o último candle é parcial. A base "intradiário" usa esse candle, e a base "último fechamento" o descarta.
 
@@ -51,7 +51,7 @@ A "Taxa de Acerto" vem de um backtest simples da estratégia do usuário: compra
 - Compras ainda abertas no fim do histórico **não contam**; as posições duram muitos meses.
 - As amostras são pequenas e correlacionadas (as compras de uma mesma posição saem juntas, na mesma venda). Por isso a taxa é suavizada para uma base neutra de 50%, com peso de 4 operações fictícias.
 - O backtest é por ativo e não reproduz a carteira real (até 10 ações, ~1 compra por mês).
-- **Viés de sobrevivência:** o universo é formado pelas ações mais líquidas de *hoje*, aplicado a um histórico de 5 anos.
+- **Viés de sobrevivência:** o universo é formado pelas ações mais líquidas de *hoje*, aplicado a um histórico de 10 anos.
 - Os parâmetros (3%, regra de saída, pesos da pressão) foram definidos por julgamento, não otimizados. Desconfie de qualquer sugestão de otimizá-los olhando o mesmo histórico (overfitting).
 - O ranking **nunca** é completado com ativos que não atendem aos critérios.
 

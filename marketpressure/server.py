@@ -27,7 +27,7 @@ só faz o HTTP; as rotas ficam em api.py (as mesmas que o navegador usa na vers�
 
     Dados brutos
     GET  /api/universe                  -> ações mais líquidas da B3 (lista da brapi)
-    GET  /api/history/PETR4[?market=]   -> candles diários de 5 anos + proventos (Yahoo Finance)
+    GET  /api/history/PETR4[?market=]   -> candles diários de 10 anos + proventos (Yahoo Finance)
     GET  /api/cdi?from=AAAA-MM-DD       -> taxas diárias do CDI (Banco Central, série 12)
     GET  /api/proventos/PETR4           -> proventos anunciados com data de pagamento (B3)
 
