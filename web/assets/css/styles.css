@@ -176,19 +176,46 @@ tr:hover { background-color: rgba(56, 139, 253, 0.03); }
 .badge-ok { background-color: rgba(46, 160, 67, 0.15); color: var(--success); border: 1px solid rgba(46, 160, 67, 0.3); }
 .badge-info { background-color: rgba(56, 139, 253, 0.15); color: var(--accent); border: 1px solid rgba(56, 139, 253, 0.3); }
 
-/* Abas no topo das páginas */
-.tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); }
+/* Barra do app (estilo de app de banco): marca, abas com ícone e rótulo, usuário. No desktop fica
+   no topo; no celular as abas viram uma barra fixa embaixo da tela (ver @media no fim). */
+.appbar {
+    display: flex;
+    align-items: stretch;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 0 16px;
+    background-color: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+.brand { align-self: center; font-weight: 700; font-size: 15px; color: var(--text-color); white-space: nowrap; }
+.tabs { display: flex; gap: 4px; }
 .tab {
-    padding: 10px 18px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 92px;
+    padding: 10px 12px;
     color: var(--text-muted);
     text-decoration: none;
     font-weight: 600;
-    font-size: 14px;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
+    font-size: 13px;
+}
+.tab-icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tab::after {
+    content: "";
+    position: absolute;
+    left: 12px; right: 12px; bottom: -1px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: transparent;
 }
 .tab:hover { color: var(--text-color); }
-.tab[aria-current="page"] { color: var(--text-color); border-bottom-color: var(--accent); }
+.tab[aria-current="page"] { color: var(--accent); }
+.tab[aria-current="page"]::after { background: var(--accent); }
 .tab:focus-visible, .btn:focus-visible, .btn-secondary:focus-visible, .link-btn:focus-visible, .seg button:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -268,7 +295,7 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 
 /* Sub-abas da Carteira: mesmo visual da barra do topo, menores. No celular a barra rola
    horizontalmente dentro dela (a página não). O sublinhado é um box-shadow interno porque a
-   rolagem cortaria a margem negativa usada em .tab. */
+   rolagem cortaria uma borda com margem negativa. */
 .subtabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); overflow-x: auto; scrollbar-width: thin; }
 .subtab {
     flex: 0 0 auto;
@@ -353,7 +380,6 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 
 @media (max-width: 640px) {
     body { padding: 16px; }
-    .tab { padding: 10px 12px; }
     .subtab { padding: 9px 11px; }
     .kpi-value { font-size: 20px; }
     .chart-wrap { height: 260px; }
@@ -366,7 +392,8 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 }
 
 /* ------------------------------------------------------------ Login e conta (versão publicada) */
-.tabs-user { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+.tabs-user { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); min-width: 0; }
+.tabs-user #userName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabs-user .link-btn { color: var(--accent); font-size: 13px; }
 
 .login-wrap { min-height: calc(100vh - 48px); display: flex; align-items: center; justify-content: center; }
@@ -376,3 +403,29 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 .login-card .btn { width: 100%; margin-top: 4px; }
 .login-card .form-msg { margin-top: 0; }
 .login-note { margin: 0; }
+
+/* ------------------------------------------------------------ Celular: abas na barra de baixo */
+@media (max-width: 640px) {
+    body { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+    .appbar { align-items: center; padding: 10px 14px; min-height: 0; }
+    .tabs {
+        position: fixed;
+        left: 0; right: 0; bottom: 0;
+        z-index: 900;
+        gap: 0;
+        padding-bottom: env(safe-area-inset-bottom);
+        background-color: var(--panel-bg);
+        border-top: 1px solid var(--border-color);
+        box-shadow: 0 -4px 16px rgba(1, 4, 9, 0.45);
+    }
+    .tab { flex: 1 1 0; min-width: 0; padding: 10px 4px 8px; font-size: 12px; }
+    .tab-icon { width: 24px; height: 24px; }
+    .tab::after { top: 0; bottom: auto; left: 0; right: 0; border-radius: 0 0 3px 3px; }
+
+    /* Selects dos controles ocupam a linha toda e não passam da tela (opções longas, como
+       a de liquidez, são cortadas dentro do campo). */
+    .controls { width: 100%; }
+    .controls > .toggle:has(> .select) { flex: 1 1 100%; min-width: 0; }
+    .controls .select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+    .controls .toggle > .select { flex: 1 1 auto; width: 100%; }
+}
