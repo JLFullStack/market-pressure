@@ -23,8 +23,17 @@ document.addEventListener("DOMContentLoaded", () => {
         try { localStorage.setItem(LIQUIDITY_KEY, liquidity.value); } catch (e) { /* preferência não salva */ }
         runScan(false);
     });
+    document.getElementById('rankings').addEventListener('click', (e) => {
+        const btn = e.target.closest('button.copy-analysis');
+        if (btn) copyAnalysis(btn);
+    });
     runScan(false);
 });
+
+// Carteira da coluna "Indicação" e da análise copiada: a última aberta na aba Carteira.
+function currentPortfolio() {
+    try { return localStorage.getItem(PORTFOLIO_KEY) || ''; } catch (e) { return ''; }
+}
 
 // ---------------------------------------------------------------- Varredura
 
@@ -39,10 +48,7 @@ async function runScan(force) {
     const busy = busyStart(force ? "Iniciando varredura..." : "Carregando ranking...");
     try {
         const liquidity = document.getElementById('liquidity').value;
-        // Carteira da coluna "Indicação" (compras já feitas na região): a última aberta na aba Carteira.
-        let portfolio = '';
-        try { portfolio = localStorage.getItem(PORTFOLIO_KEY) || ''; } catch (e) { /* sem carteira salva */ }
-        const query = `liquidez=${liquidity}&carteira=${encodeURIComponent(portfolio)}`;
+        const query = `liquidez=${liquidity}&carteira=${encodeURIComponent(currentPortfolio())}`;
         let status = await apiGet(`/scan?${query}${force ? '&force=1' : ''}`);
         const waited = status.state === 'running';
         while (status.state === 'running') {
@@ -193,6 +199,7 @@ function rankingPanel(scan, r, result, strict) {
                             <th class="c">Estado da Garrafa</th>
                             <th class="c">Indicação</th>
                             <th>Justificativa Quantitativa (Volume &amp; Momentum)</th>
+                            <th class="c">Análise IA ${tip('Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente que fala de forma simples e entrega todos os dados do ativo (ranking, pressão, backtest, médias, últimos pregões, mercado, sua estratégia e suas compras abertas) para dizer se é hora de comprar ou de esperar, e por quê.')}</th>
                         </tr>
                     </thead>
                     <tbody>${tableRows(top, r.kind)}</tbody>
@@ -217,7 +224,7 @@ const ADVICE_BADGE = { comprar: 'badge-ok', aguardar: 'badge-fill' };
 
 function tableRows(top, kind) {
     if (top.length === 0) {
-        return `<tr><td colspan="10" class="empty-row">Nenhum ${kind === 'acoes' ? 'ativo' : 'ativo deste tipo'} atende a todos os critérios hoje.</td></tr>`;
+        return `<tr><td colspan="11" class="empty-row">Nenhum ${kind === 'acoes' ? 'ativo' : 'ativo deste tipo'} atende a todos os critérios hoje.</td></tr>`;
     }
     const medals = ['🥇', '🥈', '🥉'];
     return top.map((a, index) => `
@@ -234,8 +241,73 @@ function tableRows(top, kind) {
             <td class="c">${BOTTLE_BADGE[a.bottle]}</td>
             <td class="c">${a.advice ? signalBadge(a.advice.label, a.advice.reason, ADVICE_BADGE[a.advice.action] || 'badge-low') : '—'}</td>
             <td>${justificationList(a.justification)}</td>
+            <td class="c"><button type="button" class="btn-secondary copy-analysis" data-ticker="${escapeHTML(a.ticker)}">COPIAR ANÁLISE</button></td>
         </tr>
     `).join('');
+}
+
+// ---------------------------------------------------------------- Copiar análise
+
+// "COPIAR ANÁLISE": o texto vem pronto do servidor (ai_prompt.py), na visão que a página mostra.
+// O ClipboardItem recebe a promessa do texto, para a cópia valer como parte do clique mesmo com a
+// resposta chegando depois (o Safari exige); sem ele, copia ao chegar. Se o navegador recusar,
+// o texto abre numa janela para copiar à mão.
+async function copyAnalysis(btn) {
+    const params = new URLSearchParams({
+        ticker: btn.dataset.ticker,
+        mode: document.getElementById('baseMode').value,
+        strict: document.getElementById('requireCandle').checked ? '1' : '0',
+        liquidez: document.getElementById('liquidity').value,
+        carteira: currentPortfolio(),
+    });
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'COPIANDO...';
+    const textPromise = apiGet(`/scan/prompt?${params}`).then(r => r.text);
+    textPromise.catch(() => { /* tratado abaixo */ });
+    let done = 'COPIADA ✓';
+    try {
+        if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+            const blob = textPromise.then(t => new Blob([t], { type: 'text/plain' }));
+            await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+        } else {
+            await navigator.clipboard.writeText(await textPromise);
+        }
+    } catch (err) {
+        const text = await textPromise.catch(e => {
+            const banner = document.getElementById('errorBanner');
+            banner.innerText = `Não foi possível montar a análise de ${btn.dataset.ticker} (${e.message}).`;
+            banner.style.display = 'block';
+            done = 'ERRO';
+            return null;
+        });
+        if (text !== null) {
+            done = label;
+            showCopyDialog(btn.dataset.ticker, text);
+        }
+    }
+    btn.textContent = done;
+    setTimeout(() => {
+        btn.textContent = label;
+        btn.disabled = false;
+    }, 2000);
+}
+
+function showCopyDialog(ticker, text) {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'copy-dialog';
+    dialog.innerHTML = `<h3>Análise de ${escapeHTML(ticker)}</h3>
+        <p class="small muted">O navegador não deixou copiar sozinho. Selecione o texto (já selecionado) e copie com Ctrl+C.</p>
+        <textarea readonly></textarea>
+        <div class="copy-dialog-actions"><button type="button" class="btn">Fechar</button></div>`;
+    const area = dialog.querySelector('textarea');
+    area.value = text;
+    dialog.querySelector('button').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', () => dialog.remove());
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    area.focus();
+    area.select();
 }
 
 // ---------------------------------------------------------------- KPI do BOVA11

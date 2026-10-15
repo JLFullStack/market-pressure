@@ -7,7 +7,7 @@ import unittest
 from http.server import ThreadingHTTPServer
 from unittest import mock
 
-from marketpressure import market_data, server
+from marketpressure import market_data, screener, server
 from tests.support import DatabaseTestCase
 
 
@@ -68,6 +68,9 @@ class ServerTest(DatabaseTestCase):
         self.assertEqual(self.request("GET", "/api/history/PETR-4")[0], 400)
         self.assertEqual(self.request("PUT", "/api/carteira/acao", {})[0], 405)
         self.assertEqual(self.request("GET", "/api/nada")[0], 404)
+        self.assertEqual(self.request("GET", "/api/scan/prompt?ticker=AAAA3&mode=outro")[0], 400)
+        with mock.patch.object(screener.scan_job, "scan", None):
+            self.assertEqual(self.request("GET", "/api/scan/prompt?ticker=AAAA3")[0], 404)
         with mock.patch.object(market_data, "universe", side_effect=market_data.UpstreamError("brapi fora")):
             self.assertEqual(self.request("GET", "/api/universe")[:2], (502, {"message": "brapi fora"}))
         with mock.patch.object(market_data, "universe", side_effect=KeyError("bug")), \

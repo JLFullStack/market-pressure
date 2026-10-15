@@ -11,6 +11,7 @@ import math
 import re
 from datetime import date
 
+from . import ai_prompt
 from . import goals as gl
 from . import market_data, screener
 from . import portfolio as pf
@@ -101,19 +102,47 @@ def get_scan(req):
     return {**result, "scan": scan_with_advice(result["scan"], req.arg("carteira"))}
 
 
-def scan_with_advice(payload, portfolio_id):
-    """Ranking com a coluna "Indicação" (COMPRAR/AGUARDAR) pela estratégia salva e pelas compras
-    abertas da carteira escolhida (a última aberta na aba Carteira; sem ela, a primeira)."""
-    strategy = st.load()
-    lots = {}
+def open_lots_for(portfolio_id, tickers):
+    """Compras abertas dos `tickers` na carteira escolhida (a última aberta na aba Carteira; sem
+    ela, a primeira), {ticker: lotes}; {} sem carteira ou se ela não puder ser lida."""
     try:
         portfolios = store.read_doc()["portfolios"]
         portfolio = next((p for p in portfolios if p.get("id") == portfolio_id), portfolios[0] if portfolios else None)
         if portfolio:
-            lots = svc.held_lots(portfolio, screener.top_tickers(payload))
+            return svc.held_lots(portfolio, tickers)
     except Exception:
         log.warning("carteira indisponível para a indicação do screener", exc_info=True)
+    return {}
+
+
+def scan_with_advice(payload, portfolio_id):
+    """Ranking com a coluna "Indicação" (COMPRAR/AGUARDAR) pela estratégia salva e pelas compras
+    abertas da carteira escolhida."""
+    strategy = st.load()
+    lots = open_lots_for(portfolio_id, screener.top_tickers(payload))
     return {**screener.with_advice(payload, lots, strategy), "strategy": st.describe(strategy)}
+
+
+@route("GET", "/api/scan/prompt")
+def get_scan_prompt(req):
+    """Botão "COPIAR ANÁLISE": o texto para uma IA sobre um ativo do ranking, na mesma visão da
+    página (mode, strict=1, liquidez) e com as compras abertas da carteira (carteira=)."""
+    liquidity, mode = req.arg("liquidez", "padrao"), req.arg("mode", "fechamento")
+    if liquidity not in screener.LIQUIDITY:
+        raise HTTPError(400, "liquidez deve ser padrao, 10, 5, 3, 2 ou 1 (milhões de R$ por pregão)")
+    if mode not in screener.MODES:
+        raise HTTPError(400, "mode deve ser fechamento ou intradiario")
+    ticker = valid_ticker(pf.normalize_ticker(req.arg("ticker")))
+    job = screener.scan_job
+    if not job.scan:
+        raise HTTPError(404, "Nenhuma varredura disponível; atualize o ranking.")
+    lots = open_lots_for(req.arg("carteira"), {ticker}).get(ticker)
+    try:
+        text = ai_prompt.build(job.scan, job.payload(liquidity), ticker, mode, req.arg("strict") == "1",
+                               lots, st.describe(st.load()))
+    except ValueError as err:
+        raise HTTPError(404, str(err)) from None
+    return {"ticker": ticker, "text": text}
 
 
 @route("GET", "/api/bova")

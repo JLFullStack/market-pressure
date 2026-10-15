@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime
 from unittest import mock
 
-from marketpressure import screener, update
+from marketpressure import ai_prompt, screener, strategy, update
 from marketpressure.core import SAO_PAULO
 from tests.support import DatabaseTestCase, candles, raw_history
 
@@ -259,6 +259,24 @@ class ScanReloadTest(DatabaseTestCase):
         self.assertEqual(job.status()["state"], "done")
         job.start.assert_not_called()
         self.assertEqual(job.scan["timestamp"], scan["timestamp"])
+
+
+class AnalysisPromptTest(DatabaseTestCase):
+    def test_prompt_has_the_ranking_row_and_the_history(self):
+        n = next(n for n in range(262, 400) if screener.analyze_asset(candles(n))["setup"]["ok"])
+        universe = [{"ticker": "AAAA3", "name": "Empresa A", "sector": "Energia", "kind": "acoes"}]
+        with mock.patch.object(screener, "load_universe", return_value=universe),                 mock.patch.object(screener.market_data, "raw_history", lambda t, market="b3": raw_history(t, n=n)):
+            scan = screener.run_scan()
+            payload = screener.scan_payload(scan)
+            lots = [{"date": "2021-05-01", "price": 120.0, "quantity": 100, "remaining": 100}]
+            text = ai_prompt.build(scan, payload, "AAAA3", "fechamento", False, lots, strategy.describe(strategy.DEFAULT))
+        row = payload["views"]["fechamento"]["rankings"][0]["loose"]["top"][0]
+        for part in ("50 anos", "COMPRAR AGORA", "ESPERAR", "Dados do ativo: AAAA3", "Rank**: 1º", "Score Composto**",
+                     "Média testada**: " + row["setup"]["ma"]["name"], "Estado da garrafa", "Indicação do app",
+                     "Justificativa quantitativa", "Últimos 10 pregões", "MM200:", "BOVA11", "Compra aberta de 01/05/2021"):
+            self.assertIn(part, text)
+        with self.assertRaises(ValueError):  # fora do ranking
+            ai_prompt.build(scan, payload, "ZZZZ3", "fechamento", False, None, strategy.describe(strategy.DEFAULT))
 
 
 class DailyUpdateTest(DatabaseTestCase):
