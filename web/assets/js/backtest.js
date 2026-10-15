@@ -25,6 +25,7 @@ const MARKER = {
     exit: { position: 'aboveBar', shape: 'arrowDown', color: COLORS.exit }
 };
 const CHART_KEY = 'marketpressure_backtest_grafico'; // "candles" | "line"
+const PAGE_SIZE_KEY = 'marketpressure_backtest_por_pagina'; // linhas por página das tabelas de lotes e de operações
 // Linhas do gráfico do modo Carteira, por estratégia (chave do servidor).
 const PF_COLORS = { rule: '#58a6ff', onlyB: '#e3a33b', bova: '#3fb950', cdi: '#8b949e' };
 // Linhas da tabela de comparação do modo Carteira: [rótulo, ajuda, campo, formato].
@@ -47,7 +48,8 @@ const PF_ROWS = [
 const $ = (id) => document.getElementById(id);
 const signClass = (v) => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
 const state = { data: null, type: 'candles', price: null, equity: null, series: {}, seq: 0, mode: 'ativo', pfChart: null,
-                pf: null, pfPrice: null, pfSeq: 0 };
+                pf: null, pfPrice: null, pfSeq: 0, pageSize: 25,
+                pages: { lots: 0, trades: 0 }, selected: { lots: null, trades: null } };
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -73,6 +75,7 @@ function init() {
     $('pfAsset').addEventListener('change', () => showPfAsset($('pfAsset').value));
     $('pfTradesBody').addEventListener('click', onPfTradeClick);
     $('pfTradesBody').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onPfTradeClick(ev); } });
+    setupPagers();
     $('chartType').addEventListener('click', (ev) => {
         const type = ev.target.dataset?.type;
         if (!type || type === state.type) return;
@@ -182,6 +185,8 @@ function render(d) {
         + (d.market === 'us' ? ' Ativo dos EUA: resultado em reais sem a variação do dólar.' : '');
     drawCharts(d);
     renderKpis(d);
+    state.pages.lots = 0;
+    state.selected.lots = null;
     renderLots(d);
     keepTipsWithText($('btResult') || document);
 }
@@ -333,8 +338,9 @@ function lotCell(point, currency) {
 }
 
 function renderLots(d) {
-    $('lotsBody').innerHTML = d.lots.length ? d.lots.map(l => `
-        <tr class="lot-row" tabindex="0" data-n="${l.n}" aria-label="Focar o lote ${l.n} no gráfico">
+    const rows = pageRows('lots', d.lots);
+    $('lotsBody').innerHTML = rows.length ? rows.map(l => `
+        <tr class="lot-row${String(l.n) === state.selected.lots ? ' selected' : ''}" tabindex="0" data-n="${l.n}" aria-label="Focar o lote ${l.n} no gráfico">
             <td class="c"><strong>${l.n}</strong></td>
             <td class="nowrap">${lotCell(l.entry, d.currency)}</td>
             <td class="nowrap">${lotCell(l.partial, d.currency)}</td>
@@ -347,6 +353,59 @@ function renderLots(d) {
             <td><span class="badge ${l.open ? 'badge-fill' : 'badge-low'}">${escapeHTML(l.status)}</span></td>
         </tr>`).join('')
         : '<tr><td colspan="10" class="empty-row">Nenhum sinal do setup no período.</td></tr>';
+}
+
+// ---------------------------------------------------------------- Paginação
+
+// Tabelas paginadas: lotes (um ativo) e operações (carteira). A quantidade por página é a mesma
+// nas duas e fica salva; a página e a linha selecionada de cada uma ficam em state.pages/selected.
+const PAGERS = {
+    lots: { nav: 'lotsPager', items: () => state.data?.lots, render: () => renderLots(state.data) },
+    trades: { nav: 'pfTradesPager', items: () => state.pf?.trades, render: () => renderPfTrades() }
+};
+const PAGE_SIZES = [25, 50, 100];
+
+function setupPagers() {
+    try { state.pageSize = Number(localStorage.getItem(PAGE_SIZE_KEY)) || state.pageSize; } catch (e) { /* sem preferência salva */ }
+    if (!PAGE_SIZES.includes(state.pageSize)) state.pageSize = PAGE_SIZES[0];
+    for (const [name, pager] of Object.entries(PAGERS)) {
+        const nav = $(pager.nav);
+        const select = nav.querySelector('select');
+        select.value = String(state.pageSize);
+        select.addEventListener('change', () => {
+            state.pageSize = Number(select.value);
+            try { localStorage.setItem(PAGE_SIZE_KEY, String(state.pageSize)); } catch (e) { /* preferência não salva */ }
+            for (const [other, p] of Object.entries(PAGERS)) {
+                $(p.nav).querySelector('select').value = select.value;
+                state.pages[other] = 0;
+                if (p.items()) p.render();
+            }
+        });
+        nav.addEventListener('click', (ev) => {
+            const go = ev.target.closest?.('button[data-page]')?.dataset.page;
+            const items = pager.items();
+            if (!go || !items) return;
+            const last = Math.max(0, Math.ceil(items.length / state.pageSize) - 1);
+            state.pages[name] = { first: 0, prev: state.pages[name] - 1, next: state.pages[name] + 1, last }[go];
+            pager.render();
+        });
+    }
+}
+
+// Linhas da página atual da tabela `name` e o paginador atualizado (escondido até 25 linhas).
+function pageRows(name, items) {
+    const nav = $(PAGERS[name].nav);
+    const size = state.pageSize;
+    const pages = Math.max(1, Math.ceil(items.length / size));
+    const page = state.pages[name] = Math.min(Math.max(0, state.pages[name]), pages - 1);
+    const start = page * size;
+    const rows = items.slice(start, start + size);
+    nav.hidden = items.length <= PAGE_SIZES[0];
+    nav.querySelector('.pager-info').innerText = `Página ${page + 1} de ${pages} · ${start + 1}–${start + rows.length} de ${items.length}`;
+    for (const b of nav.querySelectorAll('button[data-page]')) {
+        b.disabled = b.dataset.page === 'first' || b.dataset.page === 'prev' ? page === 0 : page === pages - 1;
+    }
+    return rows;
 }
 
 // ---------------------------------------------------------------- Modo Carteira
@@ -429,10 +488,20 @@ function renderPortfolio(d) {
     state.pfPrice = null;
     if (d.assets.length) showPfAsset(d.assets[0].ticker);
     $('pfTradesTitle').innerText = `Operações — ${rule.label} (${d.trades.length})`;
+    state.pages.trades = 0;
+    state.selected.trades = null;
+    renderPfTrades();
+}
+
+// Tabela de operações, uma página por vez.
+function renderPfTrades() {
+    const d = state.pf;
+    const p = d.params;
+    const rows = pageRows('trades', d.trades);
     const single = (t) => `backtest.html?${new URLSearchParams({ ticker: t, market: 'b3', target: p.target, fraction: p.fraction, from: d.bounds.from, to: d.bounds.to })}`;
     const point = (x) => x ? `${fmtDate(x.date)}<div class="small muted">${fmtBRL(x.price)}</div>` : '<span class="muted">—</span>';
-    $('pfTradesBody').innerHTML = d.trades.length ? d.trades.map(t => `
-        <tr class="lot-row" tabindex="0" data-n="${t.n}" aria-label="Ver a operação ${t.n} (${escapeHTML(t.ticker)}) no gráfico">
+    $('pfTradesBody').innerHTML = rows.length ? rows.map(t => `
+        <tr class="lot-row${String(t.n) === state.selected.trades ? ' selected' : ''}" tabindex="0" data-n="${t.n}" aria-label="Ver a operação ${t.n} (${escapeHTML(t.ticker)}) no gráfico">
             <td class="c">${t.n}</td>
             <td><a href="${single(t.ticker)}" class="ticker-link">${escapeHTML(t.ticker)}</a></td>
             <td class="c nowrap">${t.rank}º<div class="small muted">Score ${fmtNum(t.score, 0)}</div></td>
@@ -545,6 +614,7 @@ function onPfTradeClick(ev) {
     const t = state.pf.trades.find(x => String(x.n) === row.dataset.n);
     for (const r of $('pfTradesBody').querySelectorAll('tr.selected')) r.classList.remove('selected');
     row.classList.add('selected');
+    state.selected.trades = row.dataset.n;
     showPfAsset(t.ticker, t.range);
     $('pfPriceChart').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -555,6 +625,7 @@ function onLotClick(ev) {
     const lot = state.data.lots.find(l => String(l.n) === row.dataset.n);
     for (const r of $('lotsBody').querySelectorAll('tr.selected')) r.classList.remove('selected');
     row.classList.add('selected');
+    state.selected.lots = row.dataset.n;
     state.price.timeScale().setVisibleRange(lot.range);
     $('priceChart').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }

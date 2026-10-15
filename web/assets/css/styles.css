@@ -327,6 +327,14 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 .batch-error td { background-color: rgba(248, 81, 73, 0.08); }
 .history-toggle { margin-top: 12px; }
 
+/* Paginação de tabelas (Backtest: operações da carteira) */
+.pager { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.pager[hidden] { display: none; }
+.pager .btn-secondary { padding: 6px 10px; }
+.pager .btn-secondary:disabled { opacity: 0.4; cursor: default; border-color: var(--border-color); color: var(--text-color); }
+.pager-info { font-size: 13px; color: var(--text-muted); padding: 0 4px; }
+.pager-size { margin-left: auto; font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+
 /* ------------------------------------------------------------ Carteira: sub-aba Metas */
 .goal-checks { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 12px 0 4px; }
 .goal-card h3 { margin-top: 18px; }

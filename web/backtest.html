@@ -180,6 +180,20 @@
                     <tbody id="lotsBody"></tbody>
                 </table>
             </div>
+            <nav class="pager" id="lotsPager" aria-label="Páginas da tabela de lotes" hidden>
+                <button type="button" class="btn-secondary" data-page="first" aria-label="Primeira página">«</button>
+                <button type="button" class="btn-secondary" data-page="prev" aria-label="Página anterior">‹ Anterior</button>
+                <span class="pager-info" aria-live="polite"></span>
+                <button type="button" class="btn-secondary" data-page="next" aria-label="Próxima página">Próxima ›</button>
+                <button type="button" class="btn-secondary" data-page="last" aria-label="Última página">»</button>
+                <label class="pager-size">Por página
+                    <select>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </label>
+            </nav>
             <ul class="notes">
                 <li>Clique num lote para focá-lo no gráfico.</li>
                 <li><strong>Resultado</strong> = parte vendida no alvo + restante na saída (lotes abertos: restante pelo último fechamento).</li>
@@ -293,6 +307,20 @@
                     <tbody id="pfTradesBody"></tbody>
                 </table>
             </div>
+            <nav class="pager" id="pfTradesPager" aria-label="Páginas da tabela de operações" hidden>
+                <button type="button" class="btn-secondary" data-page="first" aria-label="Primeira página">«</button>
+                <button type="button" class="btn-secondary" data-page="prev" aria-label="Página anterior">‹ Anterior</button>
+                <span class="pager-info" aria-live="polite"></span>
+                <button type="button" class="btn-secondary" data-page="next" aria-label="Próxima página">Próxima ›</button>
+                <button type="button" class="btn-secondary" data-page="last" aria-label="Última página">»</button>
+                <label class="pager-size">Por página
+                    <select>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </label>
+            </nav>
         </div>
 
         <details class="panel method">
