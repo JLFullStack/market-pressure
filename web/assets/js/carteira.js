@@ -907,9 +907,8 @@ function renderPositions(a) {
             <td class="r nowrap ${signClass(p.profit)}">${p.returnPct === null ? '—' : fmtPct(p.returnPct, 2)}</td>
             <td class="r nowrap">${fmtBRL(p.dividends)}</td>
             <td class="r nowrap">${fmtNum(p.weight)}%</td>
-            <td>${p.status ? `<span class="badge ${STATUS_BADGE[p.statusKey] || 'badge-low'}">${escapeHTML(p.status)}</span>` : '<span class="small muted">—</span>'}
-                ${p.partial ? `<div class="small nowrap">${fmtQty(p.partial.quantity)} ${p.partial.quantity === 1 ? 'cota' : 'cotas'} de ${p.partial.lots} compra(s)</div>` : ''}
-                ${p.statusReason ? `<div class="small muted signal-reason">${escapeHTML(p.statusReason)}</div>` : ''}</td>
+            <td class="c">${p.status ? signalBadge(p.status, p.statusReason, STATUS_BADGE[p.statusKey] || 'badge-low') : '<span class="small muted">—</span>'}
+                ${p.partial ? `<div class="small muted nowrap">${fmtQty(p.partial.quantity)} ${p.partial.quantity === 1 ? 'cota' : 'cotas'} de ${p.partial.lots} compra(s)</div>` : ''}</td>
         </tr>`);
     const fixedRows = a.fixed.map(f => `
         <tr class="fi-section">

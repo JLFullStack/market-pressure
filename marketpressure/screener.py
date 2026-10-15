@@ -409,30 +409,31 @@ def regime(breadth):
 
 
 def justification(a):
-    """Texto da coluna "Justificativa Quantitativa" a partir dos detalhes da pressão."""
+    """Coluna "Justificativa Quantitativa" a partir dos detalhes da pressão: um aspecto por grupo,
+    [{"label", "items": [sinal, ...]}] (Setup, Volume, Momentum, Tendência, Estrutura)."""
     d, setup = a["pressure"]["details"], a["setup"]
     pattern = setup["pattern"][0].upper() + setup["pattern"][1:] if setup["pattern"] else "Candle"
-    parts = [f"{pattern} na {setup['ma']['name']} (+{fmt_num(setup['ma']['dist'] * 100)}% acima), "
-             f"pullback de {fmt_num(setup['pullback'] * 100)}%."]
+    parts = [("Setup", [f"{pattern} na {setup['ma']['name']} (+{fmt_num(setup['ma']['dist'] * 100)}% acima)",
+                        f"pullback de {fmt_num(setup['pullback'] * 100)}%"])]
     vol = []
     if a.get("kind") == "bdrs":
-        vol.append("Volume fora da pressão (BDR: volume do formador de mercado)")
+        vol.append("fora da pressão (BDR: volume do formador de mercado)")
     elif d["dryRatio"] is not None:
-        vol.append(f"Volume {'secou' if d['dryRatio'] <= 1 else 'cresceu'} no pullback ({fmt_num(d['dryRatio'], 1)}x do avanço)")
+        vol.append(f"{'secou' if d['dryRatio'] <= 1 else 'cresceu'} no pullback ({fmt_num(d['dryRatio'], 1)}x do avanço)")
     if a.get("kind") != "bdrs":
         vol.append(f"OBV {'acima' if d['obvPct'] >= d['closePct'] else 'abaixo'} do preço")
         if d["advanceRatio"] is not None and d["advanceRatio"] >= 1:
             vol.append(f"avanço com volume ({fmt_num(d['advanceRatio'], 1)}x)")
-    parts.append("; ".join(vol) + ".")
+    parts.append(("Volume", vol))
     mom = [f"RSI respeitou 40 (mín. {fmt_num(d['rsiMin'], 0)})" if d["rsiMin"] >= 40 else f"RSI caiu a {fmt_num(d['rsiMin'], 0)}",
-           f"Estoc. tocou {fmt_num(d['stochMin'], 0)} (agora {fmt_num(d['stoch'], 0)})"]
+           f"Estocástico tocou {fmt_num(d['stochMin'], 0)} (agora {fmt_num(d['stoch'], 0)})"]
     if d["hiddenDivergence"]:
         mom.append("divergência oculta de alta")
-    parts.append("; ".join(mom) + ".")
-    hist = "Histograma sem força vendedora" if d["hist"] >= 1 else f"Histograma recuperou {fmt_num(d['hist'] * 100, 0)}% da força vendedora"
-    parts.append(f"{hist}; MACD {'acima' if d['macdAtr'] >= 0 else 'abaixo'} de zero; "
-                 f"compressão de {fmt_num(d['range5Atr'], 1)} ATR em 5 pregões.")
-    return " ".join(parts)
+    parts.append(("Momentum", mom))
+    hist = "histograma sem força vendedora" if d["hist"] >= 1 else f"histograma recuperou {fmt_num(d['hist'] * 100, 0)}% da força vendedora"
+    parts.append(("Tendência", [hist, f"MACD {'acima' if d['macdAtr'] >= 0 else 'abaixo'} de zero"]))
+    parts.append(("Estrutura", [f"compressão de {fmt_num(d['range5Atr'], 1)} ATR em 5 pregões"]))
+    return [{"label": label, "items": [i[0].upper() + i[1:] for i in items]} for label, items in parts]
 
 
 def analyses_for(scan, mode):
@@ -464,7 +465,8 @@ def advice(a, lots, strategy):
     tem uma compra aberta a menos de reentryDistance do preço (mesmo pullback: a estratégia só
     recompra em outro) ou quando, no backtest do próprio ativo, a estratégia perdeu dinheiro em
     média com pelo menos adviceMinTrades compras encerradas. lots: compras abertas do ativo na
-    carteira (portfolio_service.held_lots) ou None; strategy: a de strategy.py (texto da saída)."""
+    carteira (portfolio_service.held_lots) ou None; strategy: a de strategy.py (texto da saída).
+    O motivo vem em parágrafos separados por "\n"."""
     price = a["price"]
     dist = CONFIG["reentryDistance"]
     nearest = min(lots or [], key=lambda lot: abs(price / lot["price"] - 1), default=None)
@@ -472,25 +474,25 @@ def advice(a, lots, strategy):
     if nearest and gap < dist:
         return {"action": "aguardar", "label": "AGUARDAR", "reason": (
             f"Já comprado nesta região: compra de {fmt_date(nearest['date'])} a {fmt_brl(nearest['price'])}, "
-            f"a {fmt_num(gap * 100)}% do preço atual. A estratégia só recompra em outro pullback, "
+            f"a {fmt_num(gap * 100)}% do preço atual.\nA estratégia só recompra em outro pullback, "
             f"a {fmt_pct_value(dist)}% ou mais de cada compra aberta.")}
     bt = a["bt"]
     if bt["trades"] >= CONFIG["adviceMinTrades"] and bt["avgReturn"] is not None and bt["avgReturn"] < 0:
         return {"action": "aguardar", "label": "AGUARDAR", "reason": (
             f"Está no setup, mas no histórico deste ativo a estratégia perdeu em média {fmt_num(bt['avgReturn'])}% "
-            f"por compra ({bt['wins']} de {bt['trades']} com lucro). Prefira um ativo com histórico favorável.")}
+            f"por compra ({bt['wins']} de {bt['trades']} com lucro).\nPrefira um ativo com histórico favorável.")}
     ma = a["setup"]["ma"]
     reason = (f"Pullback na {ma['name']} (+{fmt_num(ma['dist'] * 100)}% acima da média), pressão "
               f"{fmt_num(a['pressure'], 0)}% e Score {fmt_num(a['score'])}.")
     if nearest:
         reason = (f"Já na carteira, em novo pullback: {fmt_num(gap * 100)}% da compra mais próxima "
-                  f"({fmt_date(nearest['date'])}, {fmt_brl(nearest['price'])}). ") + reason
+                  f"({fmt_date(nearest['date'])}, {fmt_brl(nearest['price'])}).\n") + reason
     if strategy["key"] == "parcial":
         rest = " e o restante na reversão de tendência" if strategy["fraction"] < 1 else ""
-        reason += (f" Saída: vender {fmt_pct_value(strategy['fraction'])}% em +{fmt_pct_value(strategy['target'])}% "
+        reason += (f"\nSaída: vender {fmt_pct_value(strategy['fraction'])}% em +{fmt_pct_value(strategy['target'])}% "
                    f"({fmt_brl(price * (1 + strategy['target']))}){rest}.")
     else:
-        reason += " Saída: vender tudo na reversão de tendência."
+        reason += "\nSaída: vender tudo na reversão de tendência."
     return {"action": "comprar", "label": "COMPRAR", "reason": reason}
 
 

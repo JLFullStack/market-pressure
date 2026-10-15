@@ -349,8 +349,14 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 #goalPreview .goal-card { margin-bottom: 0; border-style: dashed; }
 
 /* ------------------------------------------------------------ Aba Backtest */
-.bt-form .bt-check { align-self: center; padding-bottom: 8px; }
-.bt-form .bt-wide { grid-column: span 2; }
+/* Formulário do Backtest: cada campo tem a largura do seu rótulo (que não quebra linha, com o "?"
+   ao lado) e os campos passam para a linha de baixo quando não cabem. */
+.bt-form { display: flex; flex-wrap: wrap; align-items: flex-end; }
+.bt-form > .field { flex: 1 1 auto; min-width: 140px; }
+.bt-form > .bt-wide { flex-basis: 300px; }
+.bt-form > .bt-check { flex: 0 0 auto; align-self: center; padding-bottom: 8px; }
+.bt-form > div { flex: 0 0 auto; }
+.field .tip-label, .toggle .tip-label { white-space: nowrap; }
 .pf-years th, .pf-years td { padding: 10px 12px; }
 .bt-chart { position: relative; height: 460px; margin-top: 10px; }
 .bt-chart-small { height: 200px; }
@@ -360,7 +366,7 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 .bt-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .swatch-line { display: inline-block; width: 14px; height: 2px; }
 .swatch-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
-/* Ícone de ajuda "?" e a caixa flutuante (backtest.js: setupTips) */
+/* Ícone de ajuda "?" e a caixa flutuante (core.js: setupTips) */
 .tip {
     display: inline-flex; align-items: center; justify-content: center;
     width: 15px; height: 15px; margin-left: 4px; vertical-align: middle;
@@ -368,9 +374,12 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
     font-size: 10px; font-weight: 700; line-height: 1; color: var(--text-muted);
     text-transform: none; cursor: help;
 }
+.tip-label { display: inline-flex; align-items: baseline; gap: 4px; max-width: 100%; }
+.tip-label > .tip { flex: none; margin-left: 0; }
+.tip-text { min-width: 0; }
 .tip:hover, .tip:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
 .tip-box {
-    position: fixed; z-index: 1100; max-width: 300px;
+    position: fixed; z-index: 1100; max-width: min(340px, calc(100vw - 16px));
     padding: 8px 10px; border-radius: 6px;
     background: #1f2630; border: 1px solid var(--border-color); box-shadow: 0 6px 18px rgba(1, 4, 9, 0.5);
     color: var(--text-color); font-size: 12px; font-weight: 400; line-height: 1.45;
@@ -433,7 +442,7 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 }
 
 /* Aba Configurações: as estratégias de venda como opções (rádio) com os parâmetros no texto */
-.strategy-options { border: 0; padding: 0; margin: 0 0 8px; display: grid; gap: 10px; }
+.strategy-options { border: 0; padding: 0; margin: 16px 0 8px; display: grid; gap: 10px; }
 .strategy-option { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
 .strategy-option:has(input[type="radio"]:checked) { border-color: var(--accent); background: rgba(56, 139, 253, 0.06); }
 .strategy-option > input[type="radio"] { margin-top: 3px; }
@@ -441,4 +450,39 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 .strategy-params { font-size: 14px; line-height: 2; }
 .strategy-params .select { width: 4.5em; padding: 4px 6px; text-align: right; }
 .strategy-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.signal-reason { max-width: 360px; white-space: normal; margin-top: 4px; }
+/* Indicação (COMPRAR, VENDER, MANTER, AGUARDAR): badge clicável; o motivo abre na .tip-box */
+.signal-badge { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; font-weight: 700; cursor: help; white-space: nowrap; }
+.signal-badge:hover, .signal-badge:focus-visible { filter: brightness(1.25); outline: 2px solid currentColor; outline-offset: 2px; }
+.signal-info { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border: 1px solid currentColor; border-radius: 50%; font-size: 9px; font-style: italic; font-family: Georgia, serif; line-height: 1; opacity: 0.8; }
+.tip-title { display: block; margin-bottom: 8px; font-size: 12px; letter-spacing: 0.02em; }
+.tip-box p { margin: 0; }
+.tip-box p + p { margin-top: 8px; }
+/* Textos explicativos longos: metodologia recolhível, organizada por tópicos (dl.method-list), e
+   notas de rodapé das tabelas como lista espaçada (ul.notes). */
+details.method > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-color); }
+details.method > summary::-webkit-details-marker { display: none; }
+details.method > summary::before { content: "▸"; color: var(--accent); transition: transform 0.15s; }
+details.method[open] > summary::before { transform: rotate(90deg); }
+details.method > summary .muted { font-size: 12px; font-weight: 400; }
+details.method > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+.method-list { margin: 16px 0 0; max-width: 980px; display: grid; gap: 14px; font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+.method-list dt { color: var(--text-color); font-weight: 600; margin-bottom: 2px; }
+.method-list dd { margin: 0; }
+.method-list dd p { margin: 0; }
+.method-list dd p + p { margin-top: 6px; }
+.method-list dd ul { margin: 4px 0 0; padding-left: 18px; }
+.method-list dd li + li { margin-top: 3px; }
+.method-list dd ul + p, .method-list dd p + ul { margin-top: 6px; }
+.method-list > div { min-width: 0; overflow-wrap: anywhere; }
+.method-disclaimer { margin: 16px 0 0; font-size: 12px; color: var(--text-muted); font-style: italic; }
+ul.notes { margin: 12px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.55; color: var(--text-muted); }
+ul.notes li + li { margin-top: 6px; }
+ul.notes strong { color: var(--text-color); font-weight: 600; }
+/* Justificativa do ranking: uma linha por aspecto (título | sinais separados por "·"); um sinal
+   nunca quebra no meio, só entre sinais */
+.facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12px; line-height: 1.45; min-width: 340px; max-width: 560px; }
+.facts dt { color: var(--text-color); font-weight: 600; white-space: nowrap; }
+.facts dd { margin: 0; color: var(--text-muted); }
+.facts .fact { white-space: nowrap; }
+.facts .fact-sep { color: var(--text-muted); opacity: 0.6; }
+.regime-badge { margin-right: 6px; vertical-align: 1px; }

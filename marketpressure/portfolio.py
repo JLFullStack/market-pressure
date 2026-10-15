@@ -411,22 +411,23 @@ def _partial_reason(partial, strategy, money):
     q, fraction = partial["quantity"], partial_fraction(strategy)
     sell = (f"Pela estratégia, venda {fmt_qty(q)} {'cota' if q == 1 else 'cotas'} "
             f"({fmt_pct_value(fraction)}% {'dessa compra' if partial['lots'] == 1 else 'dessas compras'}")
+    sell += ")."
     if partial["rounded"]:
-        sell += f"; seriam {fmt_qty(partial['exact'])}, arredondado para baixo porque na B3 não há fração de cota"
+        sell += f" Seriam {fmt_qty(partial['exact'])}, arredondado para baixo porque na B3 não há fração de cota."
+    paragraphs = [f"{_hit_text(partial, strategy, money)}.", sell]
     if q >= partial["held"] - EPS:
-        rest = "; a venda zera a posição."
+        paragraphs.append("A venda zera a posição.")
     elif fraction < 1:
-        rest = "; o restante sai na reversão de tendência."
-    else:
-        rest = "."
-    return f"{_hit_text(partial, strategy, money)}. {sell}){rest}"
+        paragraphs.append("O restante sai na reversão de tendência.")
+    return "\n".join(paragraphs)
 
 
 SIGNAL_LABELS = {"sell": "VENDER", "buy": "COMPRAR", "hold": "MANTER", "attention": "MANTER"}
 
 
 def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="R$", setup=None):
-    """Indicação de uma posição da carteira: {key, label, reason}, sempre com o motivo.
+    """Indicação de uma posição da carteira: {key, label, reason}, sempre com o motivo (parágrafos
+    separados por "\n": a situação, o que aconteceu, o que fazer).
     VENDER: "sell" = reversão de tendência (exit_signal), vende tudo; "partial" = alguma compra
     atingiu o alvo da estratégia e a parte dela ainda não foi vendida (partial_to_sell com
     quantidade > 0), rótulo "VENDER 50%". COMPRAR ("buy"): setup de pullback no último pregão
@@ -437,26 +438,30 @@ def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="
         return f"{currency} {fmt_num(v, 2)}"
 
     def signal(key, reason, label=None):
+        if isinstance(reason, list):
+            reason = "\n".join(p for p in reason if p)
         return {"key": key, "label": label or SIGNAL_LABELS[key], "reason": reason}
 
     if ind is not None:
         c, mm20, mm50, mm200 = (ind[k][i] for k in ("closes", "mm20", "mm50", "mm200"))
         day = fmt_date(day_of(ind["candles"][i]["date"]))
         if exit_signal(ind, i):
-            return signal("sell", f"Reversão de tendência no fechamento de {day}: {money(c)}, abaixo da MM20 "
-                                  f"({money(mm20)}), da MM50 ({money(mm50)}) e da MM200 ({money(mm200)}), com a MM50 "
-                                  "abaixo da MM200. Pela estratégia, venda toda a posição.")
+            return signal("sell", [f"Reversão de tendência no fechamento de {day}: {money(c)}, abaixo da MM20 "
+                                   f"({money(mm20)}), da MM50 ({money(mm50)}) e da MM200 ({money(mm200)}), com a MM50 "
+                                   "abaixo da MM200.", "Pela estratégia, venda toda a posição."])
     if partial and partial["quantity"] > 0:
         return signal("partial", _partial_reason(partial, strategy, money),
                       f"VENDER {fmt_pct_value(partial_fraction(strategy))}%")
-    too_small = ""
+    too_small = []
     if partial:  # atingiu o alvo, mas a parte a vender não chega a 1 cota inteira (B3)
         held = partial["held"]
-        too_small = (f" {_hit_text(partial, strategy, money)}, mas {fmt_pct_value(partial_fraction(strategy))}% de "
-                     f"{fmt_qty(held)} {'cota' if held == 1 else 'cotas'} não chega a 1 cota inteira (na B3 não há "
-                     "fração de cota): não há venda parcial, e a posição sai inteira na reversão de tendência.")
+        too_small = [f"{_hit_text(partial, strategy, money)}.",
+                     f"Mas {fmt_pct_value(partial_fraction(strategy))}% de {fmt_qty(held)} "
+                     f"{'cota' if held == 1 else 'cotas'} não chega a 1 cota inteira (na B3 não há fração de cota), "
+                     "então não há venda parcial.",
+                     "A posição sai inteira na reversão de tendência."]
     if ind is None:
-        return signal("hold", f"Histórico curto para as médias (menos de 200 pregões).{too_small}") if partial else None
+        return signal("hold", ["Histórico curto para as médias (menos de 200 pregões).", *too_small]) if partial else None
 
     nearest = gap = pullback = None
     if setup and setup.get("ok"):
@@ -467,36 +472,37 @@ def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="
         if nearest is None or gap >= REENTRY_DISTANCE:
             where = (f", a {fmt_num(gap * 100)}% da compra aberta mais próxima ({fmt_date(nearest['date'])}, "
                      f"{money(nearest['price'])})" if nearest else "")
-            return signal("buy", f"Novo {pullback}{where}: a estratégia volta a comprar em cada pullback novo, "
-                                 f"a {fmt_pct_value(REENTRY_DISTANCE)}% ou mais das compras abertas.")
+            return signal("buy", [f"Novo {pullback}{where}.",
+                                  "A estratégia volta a comprar em cada pullback novo, a "
+                                  f"{fmt_pct_value(REENTRY_DISTANCE)}% ou mais das compras abertas."])
 
     # Abaixo das três médias implica abaixo da MM200: as duas condições se resumem a c < MM200.
     if c < mm200:
         key = "attention"
-        reason = (f"Fechamento de {day} ({money(c)}) abaixo da MM200 ({money(mm200)}): tendência enfraquecendo, mas "
-                  "ainda sem reversão (a venda vem quando o fechamento ficar abaixo das três médias com a MM50 "
-                  "abaixo da MM200).")
+        reason = [f"Fechamento de {day} ({money(c)}) abaixo da MM200 ({money(mm200)}): tendência enfraquecendo, mas "
+                  "ainda sem reversão.", "A venda vem quando o fechamento ficar abaixo das três médias com a MM50 "
+                  "abaixo da MM200."]
     else:
         key = "hold"
-        reason = f"Tendência preservada: fechamento de {day} ({money(c)}) acima da MM200, sem reversão."
+        reason = [f"Tendência preservada: fechamento de {day} ({money(c)}) acima da MM200, sem reversão."]
     if nearest is not None:
-        reason += (f" Está em {pullback}, mas a só {fmt_num(gap * 100)}% da compra de {fmt_date(nearest['date'])} "
+        reason.append(f"Está em {pullback}, mas a só {fmt_num(gap * 100)}% da compra de {fmt_date(nearest['date'])} "
                    f"({money(nearest['price'])}): mesma região, sem nova compra (recompra a "
-                   f"{fmt_pct_value(REENTRY_DISTANCE)}% ou mais).")
+                      f"{fmt_pct_value(REENTRY_DISTANCE)}% ou mais).")
     if too_small:
         reason += too_small
     elif partial_fraction(strategy) <= 0:
-        reason += " A estratégia vende 100% só na reversão de tendência."
+        reason.append("A estratégia vende 100% só na reversão de tendência.")
     else:
         waiting = [lot for lot in lots if not lot["hitDate"]]
         if waiting:
             lot = min(waiting, key=lambda lot: lot["price"])
             more = f" (e de mais {len(waiting) - 1} compra(s) acima)" if len(waiting) > 1 else ""
-            reason += (f" Próximo alvo: +{fmt_pct_value(strategy['target'])}% em "
+            reason.append(f"Próximo alvo: +{fmt_pct_value(strategy['target'])}% em "
                        f"{money(lot['price'] * (1 + strategy['target']))}, da compra de {fmt_date(lot['date'])} a "
-                       f"{money(lot['price'])}{more}; o restante sai na reversão de tendência.")
+                          f"{money(lot['price'])}{more}; o restante sai na reversão de tendência.")
         else:
-            reason += " A venda parcial das compras já foi feita; o restante sai na reversão de tendência."
+            reason.append("A venda parcial das compras já foi feita; o restante sai na reversão de tendência.")
     return signal(key, reason)
 
 

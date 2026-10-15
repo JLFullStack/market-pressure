@@ -121,8 +121,13 @@
                 <label class="toggle bt-check"><input type="checkbox" id="btStrict"> Exigir candle de rejeição <span class="tip" tabindex="0" data-tip="Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener." aria-label="Ajuda: Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener.">?</span></label>
                 <div><button type="submit" class="btn">Rodar backtest</button></div>
             </div>
-            <p class="small muted" data-mode="carteira" hidden>Carteira: um único caixa que segue o ranking do screener dia a dia. Em cada pregão o ranking é refeito como seria naquele dia (liquidez da época, setup e Score do dia) e os ativos dele compram na abertura seguinte com a fatia do patrimônio; o que é vendido volta para o caixa e compra os ativos do ranking do momento. A primeira execução baixa e analisa o histórico de centenas de ativos e pode levar um minuto; as seguintes são rápidas.</p>
-            <p class="small muted">Parte vendida 0% = só a regra B (vende tudo quando o fechamento fica abaixo de MM20, MM50 e MM200 com MM50 &lt; MM200). Os padrões (10% e 50%) são as regras do screener e da Carteira. Período em branco = todo o histórico disponível (cerca de 4 anos: o Yahoo guarda 5 e as médias precisam de 220 pregões antes da primeira compra).</p>
+            <ul class="notes">
+                <li data-mode="carteira" hidden><strong>Carteira:</strong> um único caixa que segue o ranking do screener dia a dia. Em cada pregão o ranking é refeito como seria naquele dia (liquidez da época, setup e Score do dia), e os ativos dele compram na abertura seguinte com a fatia do patrimônio; o que é vendido volta para o caixa.</li>
+                <li data-mode="carteira" hidden>A primeira execução baixa e analisa o histórico de centenas de ativos e pode levar um minuto; as seguintes são rápidas.</li>
+                <li><strong>Parte vendida 0%</strong> = só a regra B: vende tudo quando o fechamento fica abaixo de MM20, MM50 e MM200 com MM50 &lt; MM200.</li>
+                <li>Os padrões (10% e 50%) são as regras do screener e da Carteira.</li>
+                <li><strong>Período em branco</strong> = todo o histórico disponível (cerca de 9 anos: o histórico tem 10 e as médias precisam de 220 pregões antes da primeira compra).</li>
+            </ul>
             <div class="form-msg" id="btMsg" role="status" aria-live="polite"></div>
         </form>
     </div>
@@ -175,15 +180,35 @@
                     <tbody id="lotsBody"></tbody>
                 </table>
             </div>
-            <p class="small muted">Clique num lote para focá-lo no gráfico. Resultado = parte vendida no alvo + restante na saída (lotes abertos: restante pelo último fechamento). Alta máxima: maior máxima desde a compra. Devolvido do topo: queda do maior fechamento até o preço da saída.</p>
+            <ul class="notes">
+                <li>Clique num lote para focá-lo no gráfico.</li>
+                <li><strong>Resultado</strong> = parte vendida no alvo + restante na saída (lotes abertos: restante pelo último fechamento).</li>
+                <li><strong>Alta máxima:</strong> maior máxima desde a compra. <strong>Devolvido do topo:</strong> queda do maior fechamento até o preço da saída.</li>
+            </ul>
         </div>
 
-        <div class="panel footnote">
-            <strong>Como o backtest funciona.</strong> Compra na abertura do pregão seguinte ao sinal do setup (o mesmo do screener) e recompra a cada novo pullback enquanto a posição está aberta, a pelo menos 5% do preço de todas as compras abertas.
-            Cada compra vende a parte escolhida quando a máxima de um pregão posterior ao da compra atinge o alvo (pelo alvo, ou pela abertura se o pregão já abriu acima).
-            O restante de todas as compras sai na abertura seguinte ao fechamento que dispara a regra B. Só pregões fechados; fundos listados usam o preço ajustado por proventos, como no screener.
-            Sem custos, impostos e proventos. Ferramenta de estudo — não constitui recomendação de investimento.
-        </div>
+        <details class="panel method">
+            <summary>Como o backtest funciona</summary>
+            <dl class="method-list">
+                <div>
+                    <dt>Compra</dt>
+                    <dd><p>Na abertura do pregão seguinte ao sinal do setup (o mesmo do screener). Recompra a cada novo pullback enquanto a posição está aberta, a pelo menos 5% do preço de todas as compras abertas.</p></dd>
+                </div>
+                <div>
+                    <dt>Venda parcial</dt>
+                    <dd><p>Cada compra vende a parte escolhida quando a máxima de um pregão posterior ao da compra atinge o alvo: pelo preço do alvo, ou pela abertura se o pregão já abriu acima dele.</p></dd>
+                </div>
+                <div>
+                    <dt>Saída (regra B)</dt>
+                    <dd><p>O restante de todas as compras sai na abertura seguinte ao fechamento que dispara a regra B.</p></dd>
+                </div>
+                <div>
+                    <dt>Dados</dt>
+                    <dd><p>Só pregões fechados; fundos listados usam o preço ajustado por proventos, como no screener. Sem custos, impostos e proventos.</p></dd>
+                </div>
+            </dl>
+            <p class="method-disclaimer">Ferramenta de estudo — não constitui recomendação de investimento.</p>
+        </details>
     </div>
     <div id="pfResult" hidden>
         <p class="banner" id="pfWarnings" role="status"></p>
@@ -270,14 +295,36 @@
             </div>
         </div>
 
-        <div class="panel footnote">
-            <strong>Como o backtest de carteira funciona.</strong> Um único caixa, começando com o capital inicial (e os aportes mensais, no primeiro pregão de cada mês), que segue o ranking do screener dia a dia.
-            Ranking do dia: os ativos que o screener mostraria naquele pregão — volume financeiro médio dos 20 pregões anteriores acima de R$ 5 milhões (R$ 3 milhões para fundos), ETFs de renda fixa fora, no setup — ordenados pelo Score Composto calculado só com o histórico até ali, o Top escolhido de cada tipo.
-            Os ativos do ranking compram na abertura do pregão seguinte com a fatia do patrimônio do dia, do maior Score para o menor, enquanto houver caixa.
-            Recompras num ativo seguem a regra do screener (a pelo menos 5% das compras abertas) e há um limite de ativos diferentes. A venda parcial e a saída pela regra B devolvem o dinheiro ao caixa, que paga as compras seguintes.
-            Proventos entram no caixa na data-ex; o caixa parado rende CDI (se marcado); cada compra e venda paga o custo informado. Sem imposto de renda.
-            Os candidatos são todos os ativos da lista da B3 salva (não só os líquidos de hoje): cada um entra no ranking nos períodos em que tinha liquidez. Empresas que já saíram da bolsa não estão no Yahoo e ficam de fora, então ainda há algum viés de sobrevivência. Fundos listados aparecem no gráfico com o preço ajustado por proventos; as operações usam o preço negociado. Ferramenta de estudo — não constitui recomendação de investimento.
-        </div>
+        <details class="panel method">
+            <summary>Como o backtest de carteira funciona</summary>
+            <dl class="method-list">
+                <div>
+                    <dt>Caixa único</dt>
+                    <dd><p>Começa com o capital inicial e recebe os aportes mensais no primeiro pregão de cada mês. Segue o ranking do screener dia a dia.</p></dd>
+                </div>
+                <div>
+                    <dt>Ranking do dia</dt>
+                    <dd><p>Os ativos que o screener mostraria naquele pregão: volume financeiro médio dos 20 pregões anteriores acima da liquidez mínima escolhida, ETFs de renda fixa fora e no setup.</p>
+                        <p>São ordenados pelo Score Composto calculado só com o histórico até ali, e entra o Top escolhido de cada tipo.</p></dd>
+                </div>
+                <div>
+                    <dt>Compras</dt>
+                    <dd><p>Na abertura do pregão seguinte, com a fatia do patrimônio do dia, do maior Score para o menor, enquanto houver caixa.</p>
+                        <p>Recompras num ativo seguem a regra do screener (a pelo menos 5% das compras abertas), e há um limite de ativos diferentes.</p></dd>
+                </div>
+                <div>
+                    <dt>Vendas e caixa</dt>
+                    <dd><p>A venda parcial e a saída pela regra B devolvem o dinheiro ao caixa, que paga as compras seguintes.</p>
+                        <p>Proventos entram no caixa na data-ex; o caixa parado rende CDI (se marcado); cada compra e venda paga o custo informado. Sem imposto de renda.</p></dd>
+                </div>
+                <div>
+                    <dt>Candidatos e limitações</dt>
+                    <dd><p>Todos os ativos da lista da B3 salva, não só os líquidos de hoje: cada um entra no ranking nos períodos em que tinha liquidez.</p>
+                        <p>Empresas que já saíram da bolsa não estão no Yahoo e ficam de fora, então ainda há algum viés de sobrevivência. Fundos listados aparecem no gráfico com o preço ajustado por proventos; as operações usam o preço negociado.</p></dd>
+                </div>
+            </dl>
+            <p class="method-disclaimer">Ferramenta de estudo — não constitui recomendação de investimento.</p>
+        </details>
     </div>
 </div>
 

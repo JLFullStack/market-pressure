@@ -174,26 +174,57 @@
                                 <th class="r">Rentab.</th>
                                 <th class="r">Proventos</th>
                                 <th class="r">% carteira</th>
-                                <th>Situação</th>
+                                <th class="c">Situação</th>
                             </tr>
                         </thead>
                         <tbody id="positionsBody"></tbody>
                     </table>
                 </div>
-                <p class="small muted">Lucro e rentabilidade incluem valorização, vendas e proventos (base: total comprado do ativo). Situação, pela estratégia de venda escolhida em <a href="configuracoes.html" class="inline-link">Configurações</a>: <strong>Vender tudo</strong> na reversão de tendência (fechamento abaixo da MM20, da MM50 e da MM200 com a MM50 abaixo da MM200); <strong>Vender X%</strong> quando alguma compra atingiu o alvo de rentabilidade (máxima de um pregão depois dela) e a parte dela ainda não foi vendida (a quantidade aparece abaixo, inteira na B3, nunca zero; as vendas abatem primeiro essas parciais); <strong>Atenção</strong> quando o fechamento está abaixo da MM200 sem a reversão formada; <strong>Manter</strong> nos demais casos. O motivo de cada indicação aparece abaixo dela. As médias usam o último pregão fechado.</p>
+                <ul class="notes">
+                    <li><strong>Lucro e rentabilidade</strong> incluem valorização, vendas e proventos, sobre o total comprado do ativo.</li>
+                    <li><strong>Situação</strong> segue a estratégia de venda escolhida em <a href="configuracoes.html" class="inline-link">Configurações</a>; toque no selo para ver o motivo.
+                        <strong>VENDER</strong> na reversão de tendência (vende tudo) ou <strong>VENDER X%</strong> quando uma compra atingiu o alvo;
+                        <strong>COMPRAR</strong> num pullback novo, a 5% ou mais das compras abertas; <strong>MANTER</strong> nos demais casos.</li>
+                    <li>Na venda parcial, a quantidade aparece abaixo do selo, inteira na B3; com poucas cotas (ex.: 50% de 1 cota) não há venda parcial. As médias usam o último pregão fechado.</li>
+                </ul>
             </div>
         </div>
 
-        <div class="panel footnote">
-            <strong>Metodologia.</strong> Cotações diárias do Yahoo Finance sem ajuste por proventos (o mesmo fechamento do gráfico padrão do TradingView); durante o pregão, o patrimônio usa o candle do dia.
-            Preço médio: compras somam quantidade e custo (preço × quantidade + taxas); vendas reduzem a posição pelo preço médio e geram lucro realizado.
-            Proventos: valor por cota × quantidade possuída na data-com (pregão anterior à data-ex).
-            Rentabilidade por cota (TWR): retorno diário = (patrimônio + proventos do dia − aportes líquidos do dia) ÷ patrimônio do dia anterior − 1, acumulado no calendário de pregões do BOVA11.
-            Ativos dos EUA e cripto: preço em US$ × câmbio USDBRL do dia (Yahoo USDBRL=X); cripto, que negocia todos os dias, entra em cada pregão da B3 pelo último preço até a data. Cada operação guarda o câmbio usado.
-            Renda fixa: último valor atual informado, somado aos aportes e resgates posteriores; antes do primeiro, o valor aplicado.
-            BOVA11 pelo fechamento ajustado (retorno total); CDI pela série 12 do Banco Central.
-            Os dados das carteiras ficam no banco local (arquivos Parquet na pasta data/ do projeto). Ferramenta de estudo — não constitui recomendação de investimento.
-        </div>
+        <details class="panel method">
+            <summary>Metodologia <span class="muted">como os valores da carteira são calculados</span></summary>
+            <dl class="method-list">
+                <div>
+                    <dt>Cotações</dt>
+                    <dd><p>Diárias do Yahoo Finance, sem ajuste por proventos (o mesmo fechamento do gráfico padrão do TradingView). Durante o pregão, o patrimônio usa o candle do dia.</p></dd>
+                </div>
+                <div>
+                    <dt>Preço médio</dt>
+                    <dd><p>Compras somam quantidade e custo (preço × quantidade + taxas). Vendas reduzem a posição pelo preço médio e geram lucro realizado.</p></dd>
+                </div>
+                <div>
+                    <dt>Proventos</dt>
+                    <dd><p>Valor por cota × quantidade possuída na data-com (o pregão anterior à data-ex).</p></dd>
+                </div>
+                <div>
+                    <dt>Rentabilidade por cota (TWR)</dt>
+                    <dd><p>Retorno diário = (patrimônio + proventos do dia − aportes líquidos do dia) ÷ patrimônio do dia anterior − 1, acumulado no calendário de pregões do BOVA11.</p></dd>
+                </div>
+                <div>
+                    <dt>EUA e cripto</dt>
+                    <dd><p>Preço em US$ × câmbio USDBRL do dia (Yahoo USDBRL=X); cada operação guarda o câmbio usado.</p>
+                        <p>Cripto negocia todos os dias e entra em cada pregão da B3 pelo último preço até a data.</p></dd>
+                </div>
+                <div>
+                    <dt>Renda fixa</dt>
+                    <dd><p>Último valor atual informado, somado aos aportes e resgates posteriores; antes do primeiro, o valor aplicado.</p></dd>
+                </div>
+                <div>
+                    <dt>Comparações</dt>
+                    <dd><p>BOVA11 pelo fechamento ajustado (retorno total); CDI pela série 12 do Banco Central.</p></dd>
+                </div>
+            </dl>
+            <p class="method-disclaimer">Os dados das carteiras ficam no banco de dados da aplicação. Ferramenta de estudo — não constitui recomendação de investimento.</p>
+        </details>
     </section>
 
     <!-- ============================================================ Aportes e lançamentos -->
@@ -304,10 +335,14 @@
                 </div>
                 <div class="form-msg" id="batchMsg" role="status" aria-live="polite"></div>
             </div>
-            <p class="small muted">Valor ideal = (patrimônio atual + aporte) × % meta; "a investir" pode ser negativo (acima do ideal). A meta de cada ativo é, por padrão, a meta da classe dividida igualmente entre os ativos com posição; digite um % para fixá-la (os demais dividem o restante) ou apague o campo para voltar ao automático.
-                A sugestão só compra: divide o aporte entre os ativos elegíveis proporcionalmente ao que falta para o valor ideal. Ativos com situação <strong>Vender</strong> nunca recebem aporte. No modo pullback, só recebem os ativos em setup agora (mesma regra e base do screener) e a renda fixa, pela meta.
-                Cotas = sugestão ÷ preço em reais, arredondado para baixo (inteiras na B3; 4 casas para EUA e cripto). Barras: faixa de cima = % atual; de baixo = % após a sugestão; traço = meta.
-                "Registrar compras sugeridas" abre a lista para conferir quantidade, preço, câmbio e data antes de gravar; os lançamentos entram juntos no histórico.</p>
+            <ul class="notes">
+                <li><strong>Valor ideal</strong> = (patrimônio atual + aporte) × % meta; <strong>"a investir"</strong> pode ser negativo (acima do ideal).</li>
+                <li><strong>Meta de cada ativo:</strong> por padrão, a meta da classe dividida igualmente entre os ativos com posição. Digite um % para fixá-la (os demais dividem o restante) ou apague o campo para voltar ao automático.</li>
+                <li><strong>Sugestão</strong> só compra: divide o aporte entre os ativos elegíveis, proporcionalmente ao que falta para o valor ideal. Ativos com situação <strong>Vender</strong> nunca recebem aporte; no modo pullback, só recebem os ativos em setup agora (mesma regra e base do screener) e a renda fixa, pela meta.</li>
+                <li><strong>Cotas</strong> = sugestão ÷ preço em reais, arredondado para baixo (inteiras na B3; 4 casas para EUA e cripto).</li>
+                <li><strong>Barras:</strong> faixa de cima = % atual; de baixo = % após a sugestão; traço = meta.</li>
+                <li><strong>"Registrar compras sugeridas"</strong> abre a lista para conferir quantidade, preço, câmbio e data antes de gravar; os lançamentos entram juntos no histórico.</li>
+            </ul>
             </div>
         </div>
 
@@ -438,7 +473,11 @@
                     <tbody id="receivablesBody"></tbody>
                 </table>
             </div>
-            <p class="small muted">Proventos anunciados por empresas e FIIs na B3 e ainda não pagos. <strong>Confirmado</strong>: a data-com já passou e a quantidade é a que você tinha nela. <strong>Previsto</strong>: a data-com é hoje ou futura e a quantidade é a atual, então só vale se o ativo for mantido até lá. Os confirmados já aparecem em Proventos recebidos e na rentabilidade, que contam pela data-ex. Cobre ações, units e FIIs; ETFs, BDRs e ativos dos EUA e cripto ficam de fora.</p>
+            <ul class="notes">
+                <li>Proventos anunciados por empresas e FIIs na B3 e ainda não pagos. Cobre ações, units e FIIs; ETFs, BDRs, ativos dos EUA e cripto ficam de fora.</li>
+                <li><strong>Confirmado:</strong> a data-com já passou e a quantidade é a que você tinha nela. Já aparece em Proventos recebidos e na rentabilidade, que contam pela data-ex.</li>
+                <li><strong>Previsto:</strong> a data-com é hoje ou futura e a quantidade é a atual, então só vale se o ativo for mantido até lá.</li>
+            </ul>
         </div>
         <div class="panel" data-needs-entries>
             <h2>Proventos recebidos</h2>
@@ -457,7 +496,11 @@
                     <tbody id="dividendsBody"></tbody>
                 </table>
             </div>
-            <p class="small muted">Valores brutos estimados pela data-com e pelos proventos informados pelo Yahoo Finance (data-ex). JCP tem 15% de IR retido na fonte; dividendos de ativos dos EUA aparecem brutos, sem os 30% de IR retidos lá, convertidos pelo câmbio USDBRL da data-ex. Os valores podem diferir do extrato da corretora.</p>
+            <ul class="notes">
+                <li>Valores brutos estimados pela data-com e pelos proventos informados pelo Yahoo Finance (data-ex); podem diferir do extrato da corretora.</li>
+                <li><strong>JCP</strong> tem 15% de IR retido na fonte.</li>
+                <li><strong>Ativos dos EUA:</strong> dividendos brutos, sem os 30% de IR retidos lá, convertidos pelo câmbio USDBRL da data-ex.</li>
+            </ul>
         </div>
     </section>
 
@@ -516,13 +559,28 @@
         <p class="banner" id="goalsWarning" role="status"></p>
         <div id="goalsList"></div>
 
-        <div class="panel footnote">
-            <strong>Como as metas são calculadas.</strong> Projeção mês a mês em valores de hoje: o patrimônio rende a taxa real (a rentabilidade esperada descontada a inflação) e recebe o aporte no fim de cada mês.
-            Com "corrigir o aporte pela inflação", o aporte mantém o poder de compra; sem isso, o mesmo valor nominal vale um pouco menos a cada mês.
-            Meta de renda: patrimônio necessário = renda mensal × 12 ÷ taxa de retirada. Valores nominais (do futuro) aparecem à parte.
-            Ponto de virada: o mês em que os juros do mês superam o aporte. Sem impostos e custos; a rentabilidade real não é garantida.
-            Ferramenta de estudo — não constitui recomendação de investimento.
-        </div>
+        <details class="panel method">
+            <summary>Como as metas são calculadas</summary>
+            <dl class="method-list">
+                <div>
+                    <dt>Projeção</dt>
+                    <dd><p>Mês a mês, em valores de hoje: o patrimônio rende a taxa real (a rentabilidade esperada descontada a inflação) e recebe o aporte no fim de cada mês.</p></dd>
+                </div>
+                <div>
+                    <dt>Aporte corrigido pela inflação</dt>
+                    <dd><p>Marcado, o aporte mantém o poder de compra. Sem isso, o mesmo valor nominal vale um pouco menos a cada mês.</p></dd>
+                </div>
+                <div>
+                    <dt>Meta de renda</dt>
+                    <dd><p>Patrimônio necessário = renda mensal × 12 ÷ taxa de retirada. Valores nominais (do futuro) aparecem à parte.</p></dd>
+                </div>
+                <div>
+                    <dt>Ponto de virada</dt>
+                    <dd><p>O mês em que os juros do mês superam o aporte.</p></dd>
+                </div>
+            </dl>
+            <p class="method-disclaimer">Sem impostos e custos; a rentabilidade real não é garantida. Ferramenta de estudo — não constitui recomendação de investimento.</p>
+        </details>
     </section>
 
     <!-- ============================================================ Configurações -->
@@ -583,7 +641,11 @@
                 </table>
             </div>
             <p class="small" id="assetTargetsWarnings" role="status"></p>
-            <p class="small muted">Por padrão, a meta de cada ativo é a meta da classe dividida igualmente entre os ativos com posição. Digite um % para fixá-la (os demais da classe dividem o restante) ou apague o campo para voltar ao automático. A mesma meta pode ser editada na tabela da aba Aportar.</p>
+            <ul class="notes">
+                <li>Por padrão, a meta de cada ativo é a meta da classe dividida igualmente entre os ativos com posição.</li>
+                <li>Digite um % para fixá-la (os demais da classe dividem o restante) ou apague o campo para voltar ao automático.</li>
+                <li>A mesma meta pode ser editada na tabela da calculadora de aporte.</li>
+            </ul>
         </div>
     </section>
 </div>

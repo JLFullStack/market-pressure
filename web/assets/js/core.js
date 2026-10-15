@@ -186,6 +186,89 @@ function busyStart(text = 'Carregando...') {
     return end;
 }
 
+// ---------------------------------------------------------------- Explicações flutuantes
+
+// Ícone "?" com a explicação em data-tip (mostrada ao passar o mouse, focar com o teclado ou tocar).
+const tip = (text) => `<span class="tip" tabindex="0" data-tip="${escapeHTML(text)}" aria-label="Ajuda: ${escapeHTML(text)}">?</span>`;
+
+// Indicação (COMPRAR, VENDER, MANTER, AGUARDAR) como botão: o motivo abre na caixa flutuante.
+const signalBadge = (label, reason, badgeClass) => `<button type="button" class="badge ${badgeClass} signal-badge"
+    data-tip="${escapeHTML(reason)}" data-tip-title="${escapeHTML(label)}" aria-label="${escapeHTML(label)}: ${escapeHTML(reason)}">${escapeHTML(label)}<span class="signal-info" aria-hidden="true">i</span></button>`;
+
+// Uma única caixa flutuante (position: fixed) para todo elemento com data-tip: não é cortada
+// pelas tabelas com rolagem e fica dentro da tela. data-tip-title vira o título da caixa.
+// Parágrafos da caixa: os separados por "\n" (motivos das indicações, do Python) ou, num texto
+// corrido, uma frase por parágrafo (corta depois de . ! ? seguido de espaço e maiúscula, então
+// abreviações como "Estoc. tocou" e "Ex.: 10" ficam inteiras).
+function tipParagraphs(text) {
+    const parts = text.includes('\n') ? text.split('\n') : text.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý"(])/u);
+    return parts.map(p => p.trim()).filter(Boolean);
+}
+
+// O "?" de um rótulo nunca cai sozinho na linha de baixo: o texto antes dele vira um bloco
+// (span.tip-text, que pode quebrar linha) e o ícone fica ao lado da primeira linha desse bloco
+// (span.tip-label, inline-flex). Campos (input, select) antes do texto ficam de fora.
+function keepTipsWithText(root = document) {
+    const FIELD = /^(INPUT|SELECT|TEXTAREA|BUTTON|BR)$/;
+    root.querySelectorAll('.tip').forEach(tipEl => {
+        if (tipEl.parentElement.classList.contains('tip-label')) return;
+        const before = [];
+        for (let n = tipEl.previousSibling; n && !(n.nodeType === Node.ELEMENT_NODE && FIELD.test(n.tagName)); n = n.previousSibling) {
+            before.unshift(n);
+        }
+        if (!before.some(n => n.textContent.trim())) return;
+        const label = document.createElement('span');
+        label.className = 'tip-label';
+        const text = document.createElement('span');
+        text.className = 'tip-text';
+        tipEl.before(label);
+        text.append(...before);
+        label.append(text, tipEl);
+    });
+}
+
+let tipsReady = false;
+function setupTips() {
+    if (tipsReady) return;
+    tipsReady = true;
+    const box = document.createElement('div');
+    box.className = 'tip-box';
+    box.id = 'tipBox';
+    box.setAttribute('role', 'tooltip');
+    box.hidden = true;
+    document.body.appendChild(box);
+    let current = null;
+    const show = (el) => {
+        current = el;
+        const title = el.dataset.tipTitle;
+        // O texto pode vir em parágrafos separados por "\n" (motivos das indicações, do Python).
+        const paragraphs = tipParagraphs(el.dataset.tip).map(p => `<p>${escapeHTML(p)}</p>`).join('');
+        box.innerHTML = (title ? `<strong class="tip-title">${escapeHTML(title)}</strong>` : '') + paragraphs;
+        box.hidden = false;
+        const r = el.getBoundingClientRect();
+        const left = Math.min(Math.max(8, r.left + r.width / 2 - box.offsetWidth / 2), window.innerWidth - box.offsetWidth - 8);
+        let top = r.top - box.offsetHeight - 8;
+        if (top < 8) top = r.bottom + 8;
+        box.style.left = `${left}px`;
+        box.style.top = `${top}px`;
+        el.setAttribute('aria-describedby', 'tipBox');
+    };
+    const hide = () => { box.hidden = true; current?.removeAttribute('aria-describedby'); current = null; };
+    const target = (ev) => ev.target.closest?.('[data-tip]');
+    document.addEventListener('mouseover', (ev) => { const el = target(ev); if (el) show(el); else if (current && document.activeElement !== current) hide(); });
+    document.addEventListener('focusin', (ev) => { const el = target(ev); if (el) show(el); else hide(); });
+    document.addEventListener('focusout', (ev) => { if (ev.target === current) hide(); });
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') hide(); });
+    window.addEventListener('scroll', hide, { passive: true });
+    // Um toque/clique mostra a explicação (no celular não há "passar o mouse") sem ativar o campo
+    // ou a linha da tabela; tocar em outro lugar fecha.
+    document.addEventListener('click', (ev) => {
+        const el = target(ev);
+        if (el) { ev.preventDefault(); ev.stopPropagation(); show(el); } else if (current) hide();
+    }, true);
+}
+document.addEventListener('DOMContentLoaded', () => { setupTips(); keepTipsWithText(); });
+
 // ---------------------------------------------------------------- Formatadores
 
 const fmtBRL = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

@@ -183,6 +183,7 @@ function render(d) {
     drawCharts(d);
     renderKpis(d);
     renderLots(d);
+    keepTipsWithText($('btResult') || document);
 }
 
 // O tamanho vem do contêiner (.bt-chart no CSS): autoSize acompanha a largura da página.
@@ -283,41 +284,6 @@ function kpi(label, value, note = '', cls = '', help = '') {
 
 // ---------------------------------------------------------------- Tooltips
 
-// Ícone "?" com a explicação em data-tip (mostrada ao passar o mouse ou focar com o teclado).
-const tip = (text) => `<span class="tip" tabindex="0" data-tip="${escapeHTML(text)}" aria-label="Ajuda: ${escapeHTML(text)}">?</span>`;
-
-// Uma única caixa flutuante (position: fixed) para todos os ícones: não é cortada pelas tabelas
-// com rolagem e fica dentro da tela.
-function setupTips() {
-    const box = document.createElement('div');
-    box.className = 'tip-box';
-    box.id = 'tipBox';
-    box.setAttribute('role', 'tooltip');
-    box.hidden = true;
-    document.body.appendChild(box);
-    let current = null;
-    const show = (el) => {
-        current = el;
-        box.textContent = el.dataset.tip;
-        box.hidden = false;
-        const r = el.getBoundingClientRect();
-        const left = Math.min(Math.max(8, r.left + r.width / 2 - box.offsetWidth / 2), window.innerWidth - box.offsetWidth - 8);
-        let top = r.top - box.offsetHeight - 8;
-        if (top < 8) top = r.bottom + 8;
-        box.style.left = `${left}px`;
-        box.style.top = `${top}px`;
-        el.setAttribute('aria-describedby', 'tipBox');
-    };
-    const hide = () => { box.hidden = true; current?.removeAttribute('aria-describedby'); current = null; };
-    document.addEventListener('mouseover', (ev) => { const el = ev.target.closest?.('.tip'); if (el) show(el); else if (current && document.activeElement !== current) hide(); });
-    document.addEventListener('focusin', (ev) => { if (ev.target.classList?.contains('tip')) show(ev.target); else hide(); });
-    document.addEventListener('focusout', (ev) => { if (ev.target === current) hide(); });
-    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') hide(); });
-    window.addEventListener('scroll', hide, { passive: true });
-    // Um clique no "?" dentro de um rótulo não deve ativar o campo nem a linha da tabela.
-    document.addEventListener('click', (ev) => { if (ev.target.closest?.('.tip')) { ev.preventDefault(); ev.stopPropagation(); show(ev.target.closest('.tip')); } }, true);
-}
-
 function renderKpis(d) {
     const s = d.stats;
     const brl = (v) => v === null || v === undefined ? '—' : fmtBRL(v);
@@ -417,6 +383,7 @@ async function runPortfolio() {
 }
 
 function renderPortfolio(d) {
+    setTimeout(() => keepTipsWithText($('pfResult')));  // "?" dos cartões e da comparação, já desenhados
     const p = d.params;
     $('pfTitle').innerText = `Carteira — ${d.universe.label} (${d.universe.ranked} ativos passaram pelo ranking)`;
     $('pfSubtitle').innerText = `${d.period} (${fmtNum(d.sessions, 0)} pregões, ≈ ${d.duration}) · Top ${p.topN} do ranking · capital inicial ${fmtBRL(p.initial)}`

@@ -15,6 +15,11 @@ class AnalysisTest(unittest.TestCase):
         self.assertTrue(0 <= result["pressure"]["total"] <= 100)
         bt = screener.backtest(screener.compute_indicators(series), strict=False)
         self.assertEqual(set(bt), {"wins", "trades", "winRate", "avgReturn"})
+        parts = screener.justification(result)  # um aspecto por linha na coluna Justificativa
+        self.assertEqual([p["label"] for p in parts], ["Setup", "Volume", "Momentum", "Tendência", "Estrutura"])
+        self.assertTrue(all(p["items"] and all(i[0].isupper() for i in p["items"]) for p in parts))
+        bdr = screener.justification({**result, "kind": "bdrs"})
+        self.assertEqual(bdr[1]["items"], ["Fora da pressão (BDR: volume do formador de mercado)"])
 
     def test_backtest_buys_again_only_in_a_new_pullback(self):
         opens = {221: 100, 222: 102, 226: 110, 231: 105, 233: 90}

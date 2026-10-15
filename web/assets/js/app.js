@@ -127,10 +127,10 @@ const KIND_TITLE = {
 const KIND_SHORT = { acoes: 'ações', fundos: 'fundos', etfs: 'ETFs', bdrs: 'BDRs' };
 const KIND_OF = { acoes: 'das ações', fundos: 'dos fundos', etfs: 'dos ETFs', bdrs: 'dos BDRs' };
 
-const REGIME_TEXT = {
-    alta: 'tendência de alta disseminada — pullbacks tendem a ser compras de oportunidade',
-    misto: 'regime misto e seletivo — prefira os setups de maior score composto',
-    defensivo: 'regime defensivo — poucos ativos em tendência primária de alta; reduza exposição'
+const REGIME = {
+    alta: { label: 'Regime de alta', badge: 'badge-ok', text: 'Tendência de alta disseminada: pullbacks tendem a ser compras de oportunidade.' },
+    misto: { label: 'Regime misto', badge: 'badge-fill', text: 'Mercado seletivo: prefira os setups de maior Score Composto.' },
+    defensivo: { label: 'Regime defensivo', badge: 'badge-hot', text: 'Poucos ativos em tendência primária de alta: reduza a exposição.' },
 };
 
 function renderKpis(scan, view, strict) {
@@ -162,9 +162,12 @@ function rankingPanel(scan, r, result, strict) {
         top.length ? `acerto médio ${fmtNum(result.avgWinRate)}%` : null,
         r.duplicates ? `${r.duplicates} ETF(s) que repetem um índice já listado omitidos` : null,
     ].filter(Boolean).join(' · ');
-    const regimeText = r.regime
-        ? `<strong>Regime:</strong> ${fmtNum(r.breadth, 0)}% ${KIND_OF[r.kind]} em tendência primária de alta (preço, MM20 e MM50 acima de uma MM200 ascendente) — ${REGIME_TEXT[r.regime]}.`
-        : `<strong>Regime:</strong> amostra pequena (menos de 20 ${KIND_SHORT[r.kind]} no universo) — sem leitura de amplitude.`;
+    const regime = REGIME[r.regime];
+    const regimeText = regime
+        ? `<span class="badge ${regime.badge} regime-badge">${regime.label}</span> ${regime.text}
+           <span class="muted">${fmtNum(r.breadth, 0)}% ${KIND_OF[r.kind]} em tendência primária de alta</span>
+           ${tip('Tendência primária de alta: preço, MM20 e MM50 acima de uma MM200 ascendente. Com 60% ou mais dos ativos do tipo nessa condição, o regime é de alta; de 40% a 60%, misto; abaixo de 40%, defensivo.')}`
+        : `<span class="badge badge-low regime-badge">Regime</span> <span class="muted">Amostra pequena (menos de 20 ${KIND_SHORT[r.kind]} no universo): sem leitura de amplitude.</span>`;
     const few = top.length && top.length < scan.topN
         ? `<div class="ranking-note">Apenas ${top.length} ${KIND_SHORT[r.kind]} atendem a todos os critérios hoje.${strict ? ' Desmarque "Exigir candle de rejeição" para ampliar a lista.' : ''}</div>`
         : '';
@@ -188,7 +191,7 @@ function rankingPanel(scan, r, result, strict) {
                             <th class="c">Pressão %</th>
                             <th class="c">Taxa Acerto %</th>
                             <th class="c">Estado da Garrafa</th>
-                            <th>Indicação</th>
+                            <th class="c">Indicação</th>
                             <th>Justificativa Quantitativa (Volume &amp; Momentum)</th>
                         </tr>
                     </thead>
@@ -203,6 +206,11 @@ const BOTTLE_BADGE = {
     quase: `<span class="badge badge-fill">💧 Q. Cheia</span>`,
     enchendo: `<span class="badge badge-low">Enchendo</span>`
 };
+
+// Justificativa (screener.justification): uma linha por aspecto, título à esquerda e os sinais
+// separados por "·" (cada sinal inteiro numa linha, sem quebrar no meio).
+const justificationList = (parts) => `<dl class="facts">${parts.map(p => `<dt>${escapeHTML(p.label)}</dt>
+    <dd>${p.items.map(i => `<span class="fact">${escapeHTML(i)}</span>`).join('<span class="fact-sep" aria-hidden="true"> · </span>')}</dd>`).join('')}</dl>`;
 
 // Indicação do ranking (screener.advice): só compra ou espera; a venda fica na aba Carteira.
 const ADVICE_BADGE = { comprar: 'badge-ok', aguardar: 'badge-fill' };
@@ -224,9 +232,8 @@ function tableRows(top, kind) {
             <td class="c" style="font-weight: 600;">${fmtNum(a.pressure, 0)}%</td>
             <td class="c nowrap">${fmtNum(a.bt.winRate, 0)}% <span class="small muted">(${a.bt.wins}/${a.bt.trades})${a.bt.avgReturn === null ? '' : ` · méd. ${fmtPct(a.bt.avgReturn)}`}</span></td>
             <td class="c">${BOTTLE_BADGE[a.bottle]}</td>
-            <td>${a.advice ? `<span class="badge ${ADVICE_BADGE[a.advice.action] || 'badge-low'}">${escapeHTML(a.advice.label)}</span>
-                <div class="small muted signal-reason">${escapeHTML(a.advice.reason)}</div>` : '—'}</td>
-            <td class="small muted" style="min-width: 320px;">${escapeHTML(a.justification)}</td>
+            <td class="c">${a.advice ? signalBadge(a.advice.label, a.advice.reason, ADVICE_BADGE[a.advice.action] || 'badge-low') : '—'}</td>
+            <td>${justificationList(a.justification)}</td>
         </tr>
     `).join('');
 }
