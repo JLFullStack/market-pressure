@@ -11,8 +11,8 @@ import time
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from .core import (EXIT, add_up, closed_candles, compute_indicators, day_of, evaluate_setup, exit_signal,
-                  fmt_date, fmt_num, fmt_qty, iso_day_in, js_round, today_iso)
+from .core import (EXIT, REENTRY_DISTANCE, add_up, closed_candles, compute_indicators, day_of, evaluate_setup, exit_signal,
+                  fmt_date, fmt_num, fmt_pct_value, fmt_qty, iso_day_in, js_round, today_iso)
 
 # Classes sugeridas para uma carteira nova (método ARCA). O usuário cria, renomeia e remove.
 DEFAULT_CLASSES = [
@@ -368,35 +368,149 @@ def open_lots(transactions, ticker, candles, target=EXIT["partialTarget"], fract
     return out
 
 
-def partial_to_sell(lots, market):
+# Estratégia de venda (strategy.py, aba Configurações): {"key": "parcial" | "reversao",
+# "target", "fraction"} em fração. "parcial" vende `fraction` de cada compra em +`target` e o
+# restante na reversão de tendência (exit_signal); "reversao" vende tudo na reversão.
+DEFAULT_STRATEGY = {"key": "parcial", "target": EXIT["partialTarget"], "fraction": EXIT["partialFraction"]}
+
+
+def partial_fraction(strategy):
+    """Parte de cada compra vendida no alvo: 0 na estratégia "reversao"."""
+    return strategy["fraction"] if strategy["key"] == "parcial" else 0.0
+
+
+def partial_to_sell(lots, market, strategy=DEFAULT_STRATEGY):
     """Quantidade a vender pela saída parcial (lotes que atingiram o alvo e ainda não venderam a
-    parte deles); inteira na B3. None quando não há."""
-    pending = add_up(lot["pending"] for lot in lots if lot["pending"] > EPS)
-    if market == "b3":
-        pending = math.floor(pending + EPS)
-    if pending <= EPS:
+    parte deles). Na B3 a quantidade é inteira, arredondada para baixo: com 1 cota, 50% dá 0 e não
+    há venda parcial (quantity 0; a posição sai inteira na reversão). due: os lotes que atingiram
+    o alvo; held: quantidade aberta. None quando nenhuma compra tem parte a vender."""
+    due = [lot for lot in lots if lot["pending"] > EPS]
+    exact = add_up(lot["pending"] for lot in due)
+    if exact <= EPS:
         return None
-    return {"quantity": pending, "lots": sum(1 for lot in lots if lot["pending"] > EPS),
-            "target": EXIT["partialTarget"] * 100, "fraction": EXIT["partialFraction"] * 100}
+    quantity = math.floor(exact + EPS) if market == "b3" else exact
+    return {"quantity": quantity, "exact": exact, "held": add_up(lot["remaining"] for lot in lots),
+            "rounded": abs(quantity - exact) > EPS, "lots": len(due),
+            "due": [{"date": lot["date"], "price": lot["price"], "hitDate": lot["hitDate"]} for lot in due],
+            "target": strategy["target"] * 100, "fraction": partial_fraction(strategy) * 100}
 
 
-PARTIAL_STATUS = f"Realizar {fmt_num(EXIT['partialFraction'] * 100, 0)}%"
+def _hit_text(partial, strategy, money):
+    """"A compra de 28/09/2026 a R$ 49,13 atingiu +10% em 05/10/2026 (alvo de R$ 54,04)"."""
+    t = fmt_pct_value(strategy["target"])
+    due = partial["due"]
+    if len(due) == 1:
+        d = due[0]
+        return (f"A compra de {fmt_date(d['date'])} a {money(d['price'])} atingiu +{t}% em {fmt_date(d['hitDate'])} "
+                f"(alvo de {money(d['price'] * (1 + strategy['target']))})")
+    return f"{len(due)} compras atingiram +{t}%: " + "; ".join(
+        f"a de {fmt_date(d['date'])} a {money(d['price'])} (em {fmt_date(d['hitDate'])})" for d in due)
 
 
-def position_status(ind, i, partial=None):
-    """Situação da posição pelas regras de saída: "Vender" (exit_signal); "Realizar 50%" quando
-    alguma compra atingiu o alvo da saída parcial e a parte dela ainda não foi vendida
-    (partial_to_sell); "Atenção" se o fechamento perdeu as três médias (sem MM50 < MM200 ainda)
-    ou só a MM200; senão "Manter"."""
-    c = ind["closes"][i]
-    if exit_signal(ind, i):
-        return "Vender"
-    if partial:
-        return PARTIAL_STATUS
+def _partial_reason(partial, strategy, money):
+    q, fraction = partial["quantity"], partial_fraction(strategy)
+    sell = (f"Pela estratégia, venda {fmt_qty(q)} {'cota' if q == 1 else 'cotas'} "
+            f"({fmt_pct_value(fraction)}% {'dessa compra' if partial['lots'] == 1 else 'dessas compras'}")
+    if partial["rounded"]:
+        sell += f"; seriam {fmt_qty(partial['exact'])}, arredondado para baixo porque na B3 não há fração de cota"
+    if q >= partial["held"] - EPS:
+        rest = "; a venda zera a posição."
+    elif fraction < 1:
+        rest = "; o restante sai na reversão de tendência."
+    else:
+        rest = "."
+    return f"{_hit_text(partial, strategy, money)}. {sell}){rest}"
+
+
+SIGNAL_LABELS = {"sell": "VENDER", "buy": "COMPRAR", "hold": "MANTER", "attention": "MANTER"}
+
+
+def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="R$", setup=None):
+    """Indicação de uma posição da carteira: {key, label, reason}, sempre com o motivo.
+    VENDER: "sell" = reversão de tendência (exit_signal), vende tudo; "partial" = alguma compra
+    atingiu o alvo da estratégia e a parte dela ainda não foi vendida (partial_to_sell com
+    quantidade > 0), rótulo "VENDER 50%". COMPRAR ("buy"): setup de pullback no último pregão
+    fechado (setup) a pelo menos REENTRY_DISTANCE de cada compra aberta (outro pullback).
+    MANTER: "attention" = fechamento abaixo da MM200 sem reversão formada; "hold" = os demais.
+    ind None = menos de 200 pregões fechados: só a venda parcial é avaliada (senão None)."""
+    def money(v):
+        return f"{currency} {fmt_num(v, 2)}"
+
+    def signal(key, reason, label=None):
+        return {"key": key, "label": label or SIGNAL_LABELS[key], "reason": reason}
+
+    if ind is not None:
+        c, mm20, mm50, mm200 = (ind[k][i] for k in ("closes", "mm20", "mm50", "mm200"))
+        day = fmt_date(day_of(ind["candles"][i]["date"]))
+        if exit_signal(ind, i):
+            return signal("sell", f"Reversão de tendência no fechamento de {day}: {money(c)}, abaixo da MM20 "
+                                  f"({money(mm20)}), da MM50 ({money(mm50)}) e da MM200 ({money(mm200)}), com a MM50 "
+                                  "abaixo da MM200. Pela estratégia, venda toda a posição.")
+    if partial and partial["quantity"] > 0:
+        return signal("partial", _partial_reason(partial, strategy, money),
+                      f"VENDER {fmt_pct_value(partial_fraction(strategy))}%")
+    too_small = ""
+    if partial:  # atingiu o alvo, mas a parte a vender não chega a 1 cota inteira (B3)
+        held = partial["held"]
+        too_small = (f" {_hit_text(partial, strategy, money)}, mas {fmt_pct_value(partial_fraction(strategy))}% de "
+                     f"{fmt_qty(held)} {'cota' if held == 1 else 'cotas'} não chega a 1 cota inteira (na B3 não há "
+                     "fração de cota): não há venda parcial, e a posição sai inteira na reversão de tendência.")
+    if ind is None:
+        return signal("hold", f"Histórico curto para as médias (menos de 200 pregões).{too_small}") if partial else None
+
+    nearest = gap = pullback = None
+    if setup and setup.get("ok"):
+        nearest = min(lots, key=lambda lot: abs(c / lot["price"] - 1), default=None)
+        gap = abs(c / nearest["price"] - 1) if nearest else None
+        ma = setup["ma"]
+        pullback = f"pullback na {ma['name']} (+{fmt_num(ma['dist'] * 100)}% acima da média) no fechamento de {day}"
+        if nearest is None or gap >= REENTRY_DISTANCE:
+            where = (f", a {fmt_num(gap * 100)}% da compra aberta mais próxima ({fmt_date(nearest['date'])}, "
+                     f"{money(nearest['price'])})" if nearest else "")
+            return signal("buy", f"Novo {pullback}{where}: a estratégia volta a comprar em cada pullback novo, "
+                                 f"a {fmt_pct_value(REENTRY_DISTANCE)}% ou mais das compras abertas.")
+
     # Abaixo das três médias implica abaixo da MM200: as duas condições se resumem a c < MM200.
-    if c < ind["mm200"][i]:
-        return "Atenção"
-    return "Manter"
+    if c < mm200:
+        key = "attention"
+        reason = (f"Fechamento de {day} ({money(c)}) abaixo da MM200 ({money(mm200)}): tendência enfraquecendo, mas "
+                  "ainda sem reversão (a venda vem quando o fechamento ficar abaixo das três médias com a MM50 "
+                  "abaixo da MM200).")
+    else:
+        key = "hold"
+        reason = f"Tendência preservada: fechamento de {day} ({money(c)}) acima da MM200, sem reversão."
+    if nearest is not None:
+        reason += (f" Está em {pullback}, mas a só {fmt_num(gap * 100)}% da compra de {fmt_date(nearest['date'])} "
+                   f"({money(nearest['price'])}): mesma região, sem nova compra (recompra a "
+                   f"{fmt_pct_value(REENTRY_DISTANCE)}% ou mais).")
+    if too_small:
+        reason += too_small
+    elif partial_fraction(strategy) <= 0:
+        reason += " A estratégia vende 100% só na reversão de tendência."
+    else:
+        waiting = [lot for lot in lots if not lot["hitDate"]]
+        if waiting:
+            lot = min(waiting, key=lambda lot: lot["price"])
+            more = f" (e de mais {len(waiting) - 1} compra(s) acima)" if len(waiting) > 1 else ""
+            reason += (f" Próximo alvo: +{fmt_pct_value(strategy['target'])}% em "
+                       f"{money(lot['price'] * (1 + strategy['target']))}, da compra de {fmt_date(lot['date'])} a "
+                       f"{money(lot['price'])}{more}; o restante sai na reversão de tendência.")
+        else:
+            reason += " A venda parcial das compras já foi feita; o restante sai na reversão de tendência."
+    return signal(key, reason)
+
+
+def holding_signal(transactions, ticker, candles, market, strategy=DEFAULT_STRATEGY, now=None, memo=None):
+    """Lotes abertos, venda parcial pendente e indicação (position_signal) de um ativo com posição.
+    candles: histórico na moeda do ativo (com o candle do pregão em andamento, se houver: a
+    máxima do dia já conta para o alvo); a reversão, as médias e o setup usam só os pregões fechados."""
+    lots = open_lots(transactions, ticker, candles, strategy["target"], partial_fraction(strategy))
+    partial = partial_to_sell(lots, market, strategy)
+    closed = closed_for(candles, market, now)
+    ind = indicators_memo(closed, memo) if len(closed) >= 200 else None
+    setup = evaluate_setup(ind, len(closed) - 1) if len(closed) >= 220 else None
+    signal = position_signal(ind, len(closed) - 1, partial, lots, strategy, MARKETS[market]["currency"], setup)
+    return {"lots": lots, "partial": partial if signal and signal["key"] == "partial" else None, "signal": signal}
 
 
 def setup_now(candles, market, mode, now=None, memo=None):
@@ -755,7 +869,7 @@ def contribution_items(portfolio, analysis, mode):
             {"enough": False, "ok": False, "ma": None}
         items.append({"key": p["ticker"], "label": p["ticker"], "cls": p["cls"], "value": p["value"], "kind": "quote",
                       "market": p["market"], "priceBRL": p["price"] if p["hasQuote"] else 0,
-                      "sell": p["status"] == "Vender", "setup": setup,
+                      "sell": p["statusKey"] == "sell", "setup": setup,
                       "fixedTarget": (assets.get(p["ticker"]) or {}).get("target")})
     for f in analysis["fixed"]:
         if f["value"] > 0:
@@ -766,11 +880,13 @@ def contribution_items(portfolio, analysis, mode):
     return [{**i, "target": targets[i["key"]]["target"], "autoTarget": targets[i["key"]]["auto"]} for i in items], warnings
 
 
-def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None):
+def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, strategy=None):
     """Consolida a carteira: posições, renda fixa, proventos, alocação, KPIs e série de rentabilidade.
     histories: { TICKER: histórico na moeda do ativo, USDBRL: câmbio, BOVA11 }. Ativos fora da
-    B3 são convertidos para reais (convert_history); o setup e a situação usam o histórico original."""
+    B3 são convertidos para reais (convert_history); o setup e a situação usam o histórico original.
+    strategy: estratégia de venda (strategy.py) da situação de cada posição; None = a padrão."""
     as_of = as_of or today_iso(now)
+    strategy = strategy or DEFAULT_STRATEGY
     txs = portfolio.get("transactions") or []
     positions_map = build_positions(txs)
     brl = {BENCHMARK: histories.get(BENCHMARK)}
@@ -801,14 +917,12 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None):
         value = p["quantity"] * price
         dividends_total = div_by_ticker.get(p["ticker"], 0)
         profit = value + p["soldProceeds"] + dividends_total - p["bought"]
-        status = setup = partial = None
+        signal = setup = partial = None
         if n:
             memo = {}
-            closed = closed_for(raw, market, now)
             if p["quantity"] > 0:
-                partial = partial_to_sell(open_lots(txs, p["ticker"], raw), market)
-            if len(closed) >= 200:
-                status = position_status(indicators_memo(closed, memo), len(closed) - 1, partial)
+                held = holding_signal(txs, p["ticker"], raw, market, strategy, now, memo)
+                signal, partial = held["signal"], held["partial"]
             setup = {mode: setup_now(raw, market, mode, now, memo) for mode in ("fechamento", "intradiario")}
         positions.append({
             **p, "market": market, "currency": MARKETS[market]["currency"],
@@ -820,8 +934,9 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None):
             "dayChange": day_change,
             "dayValue": 0 if day_change is None else p["quantity"] * (candles[-1]["c"] - candles[-2]["c"]),
             "value": value, "dividends": dividends_total, "profit": profit,
-            "returnPct": profit / p["bought"] * 100 if p["bought"] else None, "status": status, "setup": setup,
-            "partial": partial if status == PARTIAL_STATUS else None,
+            "returnPct": profit / p["bought"] * 100 if p["bought"] else None, "setup": setup,
+            "status": signal and signal["label"], "statusKey": signal and signal["key"],
+            "statusReason": signal and signal["reason"], "partial": partial,
         })
     open_ = sorted((p for p in positions if p["quantity"] > 0), key=lambda p: -p["value"])
     fixed = [s for s in (fixed_income_summary(f, as_of) for f in portfolio.get("fixedIncome") or []) if s["entries"]]

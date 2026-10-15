@@ -92,7 +92,10 @@ class PartialExitTest(unittest.TestCase):
     def test_target_is_counted_only_after_the_purchase_day(self):
         lots = pf.open_lots([tx("2024-01-02", "compra", 100, 10)], "PETR4", self.CANDLES)
         self.assertEqual(lots[0]["hitDate"], "2024-01-04")  # a máxima de 12 no dia da compra não conta
-        self.assertEqual(pf.partial_to_sell(lots, "b3"), {"quantity": 50, "lots": 1, "target": 10.0, "fraction": 50.0})
+        partial = pf.partial_to_sell(lots, "b3")
+        self.assertEqual({k: partial[k] for k in ("quantity", "lots", "target", "fraction", "rounded")},
+                         {"quantity": 50, "lots": 1, "target": 10.0, "fraction": 50.0, "rounded": False})
+        self.assertEqual(partial["due"], [{"date": "2024-01-02", "price": 10, "hitDate": "2024-01-04"}])
 
     def test_sale_after_the_target_settles_the_partial(self):
         txs = [tx("2024-01-02", "compra", 100, 10), tx("2024-01-05", "venda", 50, 11)]
@@ -109,17 +112,59 @@ class PartialExitTest(unittest.TestCase):
         lots = pf.open_lots(txs, "PETR4", self.CANDLES)
         self.assertEqual([(lot["price"], lot["remaining"], lot["pending"]) for lot in lots], [(20, 50, 0)])
 
-    def test_whole_shares_on_b3_and_status(self):
+    def test_whole_shares_on_b3_and_signal(self):
         lots = pf.open_lots([tx("2024-01-02", "compra", 3, 10)], "PETR4", self.CANDLES)
         partial = pf.partial_to_sell(lots, "b3")
-        self.assertEqual(partial["quantity"], 1)
+        self.assertEqual((partial["quantity"], partial["rounded"]), (1, True))
         self.assertEqual(pf.partial_to_sell(lots, "us")["quantity"], 1.5)
-        ind = {"closes": [10], "mm20": [9], "mm50": [9], "mm200": [8]}
-        self.assertEqual(pf.position_status(ind, 0, partial), "Realizar 50%")
-        self.assertEqual(pf.position_status(ind, 0, None), "Manter")
-        sell = {"closes": [7], "mm20": [9], "mm50": [8], "mm200": [8.5]}
-        self.assertEqual(pf.position_status(sell, 0, partial), "Vender")  # a regra B vem antes
+        day = self.CANDLES[-1:]
+        ind = {"candles": day, "closes": [10], "mm20": [9], "mm50": [9], "mm200": [8]}
+        signal = pf.position_signal(ind, 0, partial, lots)
+        self.assertEqual((signal["key"], signal["label"]), ("partial", "VENDER 50%"))
+        self.assertIn("atingiu +10% em 04/01/2024", signal["reason"])
+        self.assertIn("venda 1 cota", signal["reason"])
+        hold = pf.position_signal(ind, 0, None, [])
+        self.assertEqual((hold["key"], hold["label"]), ("hold", "MANTER"))
+        self.assertTrue(hold["reason"])
+        sell = {"candles": day, "closes": [7], "mm20": [9], "mm50": [8], "mm200": [8.5]}
+        self.assertEqual(pf.position_signal(sell, 0, partial, lots)["label"], "VENDER")  # a reversão vem antes
+        weak = {"candles": day, "closes": [8], "mm20": [9], "mm50": [8.6], "mm200": [8.5]}
+        self.assertEqual(pf.position_signal(weak, 0, None, lots)["label"], "MANTER")
 
+    def test_buy_only_in_a_new_pullback(self):
+        day = self.CANDLES[-1:]
+        ind = {"candles": day, "closes": [10], "mm20": [9.9], "mm50": [9], "mm200": [8]}
+        setup = {"ok": True, "ma": {"name": "MM20", "dist": 0.01}}
+        far = [{"date": "2023-12-01", "price": 12, "hitDate": None, "pending": 0}]
+        buy = pf.position_signal(ind, 0, None, far, setup=setup)
+        self.assertEqual((buy["key"], buy["label"]), ("buy", "COMPRAR"))
+        near = [{"date": "2023-12-01", "price": 10.2, "hitDate": None, "pending": 0}]
+        hold = pf.position_signal(ind, 0, None, near, setup=setup)
+        self.assertEqual(hold["label"], "MANTER")
+        self.assertIn("mesma região", hold["reason"])
+
+    def test_one_share_keeps_holding_with_the_reason(self):
+        txs = [tx("2024-01-02", "compra", 1, 10)]
+        self.assertEqual(pf.partial_to_sell(pf.open_lots(txs, "PETR4", self.CANDLES), "b3")["quantity"], 0)
+        day = self.CANDLES[-1:]
+        ind = {"candles": day, "closes": [20.5], "mm20": [9], "mm50": [9], "mm200": [8]}
+        lots = pf.open_lots(txs, "PETR4", self.CANDLES)
+        signal = pf.position_signal(ind, 0, pf.partial_to_sell(lots, "b3"), lots)
+        self.assertEqual((signal["key"], signal["label"]), ("hold", "MANTER"))
+        self.assertIn("não chega a 1 cota inteira", signal["reason"])
+        two = [tx("2024-01-02", "compra", 2, 10)]
+        lots = pf.open_lots(two, "PETR4", self.CANDLES)
+        self.assertEqual(pf.position_signal(ind, 0, pf.partial_to_sell(lots, "b3"), lots)["label"], "VENDER 50%")
+
+    def test_strategy_changes_the_partial(self):
+        txs = [tx("2024-01-02", "compra", 10, 10)]
+        reversal = {"key": "reversao", "target": 0.10, "fraction": 0.5}
+        self.assertIsNone(pf.partial_to_sell(pf.open_lots(txs, "PETR4", self.CANDLES, 0.10, 0), "b3", reversal))
+        far = pf.open_lots(txs, "PETR4", self.CANDLES, 1.5, 0.3)
+        self.assertIsNone(pf.partial_to_sell(far, "b3"))
+        rule = {"key": "parcial", "target": 0.10, "fraction": 0.3}
+        hit = pf.partial_to_sell(pf.open_lots(txs, "PETR4", self.CANDLES, 0.10, 0.3), "b3", rule)
+        self.assertEqual((hit["quantity"], hit["fraction"]), (3, 30.0))
 
 if __name__ == "__main__":
     unittest.main()

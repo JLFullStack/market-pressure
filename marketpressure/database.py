@@ -77,6 +77,8 @@ SCHEMAS = {
                                ("withdrawal", _f64), ("initial", _f64), ("use_portfolio", _bool), ("monthly", _f64),
                                ("rate", _f64), ("inflation", _f64), ("adjust", _bool), ("target_date", _str),
                                ("created", _str)),
+    # Configurações (strategy.py): estratégia de venda, uma linha; alvo e parte vendida em fração
+    "settings": _schema(("strategy", _str), ("partial_target", _f64), ("partial_fraction", _f64)),
     # Screener
     "universe": _schema(("ticker", _str), ("name", _str), ("sector", _str), ("kind", _str), ("close", _f64),
                         ("volume", _f64), ("avg_volume", _f64)),

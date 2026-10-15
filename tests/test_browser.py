@@ -122,7 +122,11 @@ class BrowserBridgeTest(BrowserTestCase):
             status = json.loads(browser.handle("GET", "/api/scan"))["body"]
         self.assertEqual(status["state"], "done")
         self.assertEqual(status["scan"]["universeSize"], 2)
-        self.assertEqual(screener.scan_payload(screener.read_scan()), status["scan"])
+        saved = screener.scan_payload(screener.read_scan())
+        self.assertEqual(status["scan"]["views"].keys(), saved["views"].keys())
+        self.assertEqual({k: v for k, v in status["scan"].items() if k not in ("views", "strategy")},
+                         {k: v for k, v in saved.items() if k != "views"})
+        self.assertEqual(status["scan"]["strategy"]["key"], "parcial")
 
     def test_scan_failure_is_reported(self):
         job = screener.ScanJob()

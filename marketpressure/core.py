@@ -262,6 +262,11 @@ EXIT = {
 }
 
 
+# Recompra só em outro pullback: preço a pelo menos 5% de cada compra ainda aberta (backtest do
+# screener, indicação COMPRAR da carteira e AGUARDAR do ranking).
+REENTRY_DISTANCE = 0.05
+
+
 def exit_signal(ind, i):
     """Regra de venda (regra "B"): fechamento abaixo de MM20, MM50 e MM200 E tendência de baixa
     formada (MM50 < MM200). Usada no backtest do screener e na situação das posições da carteira."""
@@ -371,6 +376,12 @@ def fmt_num(v, d=1):
 
 def fmt_brl(v):
     return f"R$ {fmt_num(v, 2)}"
+
+
+def fmt_pct_value(v):
+    """Fração → número em % sem casas desnecessárias: 0,1 → "10"; 0,125 → "12,5"."""
+    v = round(v * 100, 4)
+    return fmt_num(v, 0 if float(v).is_integer() else 1)
 
 
 def fmt_qty(q):

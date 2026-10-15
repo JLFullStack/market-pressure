@@ -7,14 +7,19 @@ só faz o HTTP; as rotas ficam em api.py (as mesmas que o navegador usa na vers�
 
     GET  /                              -> web/analise_quantitativa_b3.html (aba Screener)
     GET  /carteira                      -> web/carteira.html (aba Carteira)
+    GET  /configuracoes                 -> web/configuracoes.html (aba Configurações)
     GET  /assets/...                    -> arquivos de web/assets/ (CSS e JS)
 
     Screener
     GET  /api/scan[?force=1]            -> varredura (inicia em segundo plano e informa o progresso)
     GET  /api/bova?mode=fechamento      -> KPI do BOVA11 (variação de 12 meses e médias)
 
+    Configurações
+    GET  /api/configuracoes             -> estratégia de venda salva (strategy.py)
+    POST /api/configuracoes             -> salva a estratégia ({strategy, target, fraction}, em %)
+
     Carteira
-    GET  /api/portfolios                -> carteiras salvas no banco data/ (já migradas)
+    GET  /api/portfolios               -> carteiras salvas no banco data/ (já migradas)
     PUT  /api/portfolios                -> grava o documento inteiro das carteiras
     POST /api/carteira/acao             -> uma alteração ({"action": ..., "id": ..., ...})
     GET  /api/carteira/{id}/estrutura   -> classes, histórico de lançamentos e seletores
@@ -57,6 +62,8 @@ PAGES = {
     "/carteira.html": "carteira.html",
     "/backtest": "backtest.html",
     "/backtest.html": "backtest.html",
+    "/configuracoes": "configuracoes.html",
+    "/configuracoes.html": "configuracoes.html",
 }
 # Só arquivos de web/ com estas extensões são servidos; o código e o banco (data/) ficam fora.
 CONTENT_TYPES = {

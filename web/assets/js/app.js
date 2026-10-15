@@ -4,6 +4,7 @@
 // escolhida (base × candle de rejeição) sem buscar de novo.
 
 const POLL_MS = 700; // intervalo entre as consultas de progresso da varredura
+const PORTFOLIO_KEY = "marketpressure_carteira_atual"; // carteira escolhida na aba Carteira
 let lastScan = null;
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -38,7 +39,11 @@ async function runScan(force) {
     const busy = busyStart(force ? "Iniciando varredura..." : "Carregando ranking...");
     try {
         const liquidity = document.getElementById('liquidity').value;
-        let status = await apiGet(`/scan?liquidez=${liquidity}${force ? '&force=1' : ''}`);
+        // Carteira da coluna "Indicação" (compras já feitas na região): a última aberta na aba Carteira.
+        let portfolio = '';
+        try { portfolio = localStorage.getItem(PORTFOLIO_KEY) || ''; } catch (e) { /* sem carteira salva */ }
+        const query = `liquidez=${liquidity}&carteira=${encodeURIComponent(portfolio)}`;
+        let status = await apiGet(`/scan?${query}${force ? '&force=1' : ''}`);
         const waited = status.state === 'running';
         while (status.state === 'running') {
             if (status.total) {
@@ -50,7 +55,7 @@ async function runScan(force) {
                 busy.text("Carregando a lista de ativos...");
             }
             await sleep(POLL_MS);
-            status = await apiGet(`/scan?liquidez=${liquidity}`);
+            status = await apiGet(`/scan?${query}`);
         }
         if (status.state === 'error') {
             banner.innerText = `Aviso: não foi possível concluir a varredura (${status.message}).`;
@@ -183,6 +188,7 @@ function rankingPanel(scan, r, result, strict) {
                             <th class="c">Pressão %</th>
                             <th class="c">Taxa Acerto %</th>
                             <th class="c">Estado da Garrafa</th>
+                            <th>Indicação</th>
                             <th>Justificativa Quantitativa (Volume &amp; Momentum)</th>
                         </tr>
                     </thead>
@@ -198,9 +204,12 @@ const BOTTLE_BADGE = {
     enchendo: `<span class="badge badge-low">Enchendo</span>`
 };
 
+// Indicação do ranking (screener.advice): só compra ou espera; a venda fica na aba Carteira.
+const ADVICE_BADGE = { comprar: 'badge-ok', aguardar: 'badge-fill' };
+
 function tableRows(top, kind) {
     if (top.length === 0) {
-        return `<tr><td colspan="9" class="empty-row">Nenhum ${kind === 'acoes' ? 'ativo' : 'ativo deste tipo'} atende a todos os critérios hoje.</td></tr>`;
+        return `<tr><td colspan="10" class="empty-row">Nenhum ${kind === 'acoes' ? 'ativo' : 'ativo deste tipo'} atende a todos os critérios hoje.</td></tr>`;
     }
     const medals = ['🥇', '🥈', '🥉'];
     return top.map((a, index) => `
@@ -215,6 +224,8 @@ function tableRows(top, kind) {
             <td class="c" style="font-weight: 600;">${fmtNum(a.pressure, 0)}%</td>
             <td class="c nowrap">${fmtNum(a.bt.winRate, 0)}% <span class="small muted">(${a.bt.wins}/${a.bt.trades})${a.bt.avgReturn === null ? '' : ` · méd. ${fmtPct(a.bt.avgReturn)}`}</span></td>
             <td class="c">${BOTTLE_BADGE[a.bottle]}</td>
+            <td>${a.advice ? `<span class="badge ${ADVICE_BADGE[a.advice.action] || 'badge-low'}">${escapeHTML(a.advice.label)}</span>
+                <div class="small muted signal-reason">${escapeHTML(a.advice.reason)}</div>` : '—'}</td>
             <td class="small muted" style="min-width: 320px;">${escapeHTML(a.justification)}</td>
         </tr>
     `).join('');

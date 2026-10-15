@@ -37,7 +37,8 @@ const SERIES = [
 ];
 const PERIODS = ['6M', '1A', '2A', 'Tudo']; // os mesmos do servidor (portfolio.PERIODS)
 const APORTE_MODES = { todos: 'Todos os ativos da carteira', escolher: 'Escolher ativos', pullback: 'Pelas regras do pullback' };
-const STATUS_BADGE = { Vender: 'badge-hot', 'Realizar 50%': 'badge-info', 'Atenção': 'badge-fill', Manter: 'badge-ok' };
+// Indicação da posição (COMPRAR, VENDER, MANTER; portfolio.position_signal: statusKey) → badge.
+const STATUS_BADGE = { sell: 'badge-hot', partial: 'badge-hot', buy: 'badge-ok', attention: 'badge-fill', hold: 'badge-info' };
 const PLAN_BADGE = { sell: 'badge-hot', fixed: 'badge-low', setup: 'badge-ok', wait: 'badge-fill' };
 const AMOUNT_DELAY_MS = 250; // espera após a digitação do valor do aporte antes de recalcular
 // Rótulo do campo de valor da meta, conforme o tipo.
@@ -906,8 +907,9 @@ function renderPositions(a) {
             <td class="r nowrap ${signClass(p.profit)}">${p.returnPct === null ? '—' : fmtPct(p.returnPct, 2)}</td>
             <td class="r nowrap">${fmtBRL(p.dividends)}</td>
             <td class="r nowrap">${fmtNum(p.weight)}%</td>
-            <td class="c">${p.status ? `<span class="badge ${STATUS_BADGE[p.status] || 'badge-low'}">${p.status}</span>` : '<span class="small muted">—</span>'}
-                ${p.partial ? `<div class="small muted nowrap">${fmtQty(p.partial.quantity)} de ${p.partial.lots} compra(s)</div>` : ''}</td>
+            <td>${p.status ? `<span class="badge ${STATUS_BADGE[p.statusKey] || 'badge-low'}">${escapeHTML(p.status)}</span>` : '<span class="small muted">—</span>'}
+                ${p.partial ? `<div class="small nowrap">${fmtQty(p.partial.quantity)} ${p.partial.quantity === 1 ? 'cota' : 'cotas'} de ${p.partial.lots} compra(s)</div>` : ''}
+                ${p.statusReason ? `<div class="small muted signal-reason">${escapeHTML(p.statusReason)}</div>` : ''}</td>
         </tr>`);
     const fixedRows = a.fixed.map(f => `
         <tr class="fi-section">

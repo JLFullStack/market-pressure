@@ -11,12 +11,13 @@ from datetime import date
 
 from . import goals as gl
 from . import market_data, runtime
+from . import strategy as st
 from .core import add_up, day_of, fmt_date, session_in_progress, today_iso
 from .portfolio import (APORTE_MODES, BENCHMARK, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
                         analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_items,
                         contribution_plan, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
-                        market_of, net_flows, normalize_ticker, parse_number, period_start, rebase_series, suggest_class,
-                        targets_off, tx_flow)
+                        market_of, net_flows, normalize_ticker, open_lots, parse_number, period_start, rebase_series,
+                        suggest_class, targets_off, tx_flow)
 
 log = logging.getLogger(__name__)
 
@@ -123,15 +124,18 @@ _analysis_cache: dict[str, tuple[str, dict]] = {}
 _analysis_lock = threading.Lock()
 
 
-def _signature(portfolio):
-    """O que muda a análise: tudo menos as metas (editar uma meta não recarrega cotações)."""
-    return json.dumps({k: v for k, v in portfolio.items() if k != "goals"}, sort_keys=True, ensure_ascii=False)
+def _signature(portfolio, strategy):
+    """O que muda a análise: a carteira, menos as metas (editar uma meta não recarrega cotações),
+    e a estratégia de venda (aba Configurações)."""
+    return json.dumps({"portfolio": {k: v for k, v in portfolio.items() if k != "goals"}, "strategy": strategy},
+                      sort_keys=True, ensure_ascii=False)
 
 
 def full_analysis(portfolio, reuse=False):
     """Carrega os dados e analisa a carteira. reuse: devolve a última análise se a carteira
     não mudou (usado pelo aporte)."""
-    signature = _signature(portfolio)
+    strategy = st.load()
+    signature = _signature(portfolio, strategy)
     if reuse:
         with _analysis_lock:
             hit = _analysis_cache.get(portfolio["id"])
@@ -143,7 +147,7 @@ def full_analysis(portfolio, reuse=False):
     except Exception as err:
         rates = []
         failed.append(f"CDI ({err})")
-    analysis = analyze_portfolio(portfolio, histories, rates)
+    analysis = analyze_portfolio(portfolio, histories, rates, strategy=strategy)
     bench = histories.get(BENCHMARK)
     analysis["live"] = bool(bench and bench["candles"] and session_in_progress(bench["candles"]))
     analysis["failed"] = failed
@@ -282,3 +286,17 @@ def goal_preview(portfolio, goal):
     today = today_iso()
     data = _portfolio_data(portfolio, today) if goal["usePortfolio"] else _portfolio_data({}, today)
     return {"warning": data["warning"], "portfolioValue": data["value"], "goal": _goal_view(goal, data, today)}
+
+
+def held_lots(portfolio, tickers):
+    """Compras ainda abertas (preço, data e quantidade restante) dos ativos da B3 da carteira que
+    estão em `tickers` (o ranking do Screener), para a indicação de recompra. Sem cotações: só os
+    lançamentos contam."""
+    txs = portfolio.get("transactions") or []
+    out = {}
+    for t in dict.fromkeys(tx["ticker"] for tx in txs):
+        if t in tickers and market_of(portfolio, t) == "b3":
+            lots = open_lots(txs, t, [])
+            if lots:
+                out[t] = lots
+    return out

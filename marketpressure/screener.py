@@ -15,8 +15,8 @@ import time
 
 from . import database as db
 from . import market_data, runtime
-from .core import (EXIT, SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
-                  evaluate_setup, exit_signal, fmt_brl, fmt_date, fmt_num, fmt_sessions, in_session_hours, last_close, session_in_progress)
+from .core import (EXIT, REENTRY_DISTANCE, SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
+                  evaluate_setup, exit_signal, fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_sessions, in_session_hours, last_close, session_in_progress)
 
 CONFIG = {
     # Universo: ativos da lista do Yahoo (market_data.load_universe) de quatro tipos, cada um com
@@ -60,9 +60,12 @@ CONFIG = {
     # de todas sai quando o fechamento fica abaixo de MM20, MM50 e MM200 com MM50 < MM200
     # (ver exit_signal).
     "backtestStart": 220,     # primeiro candle com MM200 e inclinação disponíveis
-    "reentryDistance": 0.05,  # recompra só a 5%+ do preço de cada compra da posição aberta (outro pullback)
+    "reentryDistance": REENTRY_DISTANCE,  # recompra só a 5%+ do preço de cada compra da posição aberta (outro pullback)
     "priorWinRate": 0.5,      # base neutra para suavizar taxas de acerto com poucas amostras
     "priorWeight": 4,
+    # Indicação do ranking (advice): AGUARDAR quando o backtest do ativo perdeu dinheiro em média
+    # com pelo menos este número de compras encerradas (com menos, a amostra não diz nada).
+    "adviceMinTrades": 3,
     "bovaLookback": 252,      # pregões da variação de 12 meses do BOVA11
     "minCandles": 261,
 }
@@ -453,6 +456,60 @@ def ranking_view(analyses, strict):
         "avgPressure": avg(a["pressure"] for a in top) if top else None,
         "avgWinRate": avg(a["bt"]["winRate"] for a in top) if top else None,
     }
+
+
+def advice(a, lots, strategy):
+    """Coluna "Indicação" do ranking: COMPRAR ou AGUARDAR, com o motivo (o Screener não indica
+    venda; isso é da Carteira). Todo ativo do ranking está no setup. AGUARDAR quando a carteira já
+    tem uma compra aberta a menos de reentryDistance do preço (mesmo pullback: a estratégia só
+    recompra em outro) ou quando, no backtest do próprio ativo, a estratégia perdeu dinheiro em
+    média com pelo menos adviceMinTrades compras encerradas. lots: compras abertas do ativo na
+    carteira (portfolio_service.held_lots) ou None; strategy: a de strategy.py (texto da saída)."""
+    price = a["price"]
+    dist = CONFIG["reentryDistance"]
+    nearest = min(lots or [], key=lambda lot: abs(price / lot["price"] - 1), default=None)
+    gap = abs(price / nearest["price"] - 1) if nearest else None
+    if nearest and gap < dist:
+        return {"action": "aguardar", "label": "AGUARDAR", "reason": (
+            f"Já comprado nesta região: compra de {fmt_date(nearest['date'])} a {fmt_brl(nearest['price'])}, "
+            f"a {fmt_num(gap * 100)}% do preço atual. A estratégia só recompra em outro pullback, "
+            f"a {fmt_pct_value(dist)}% ou mais de cada compra aberta.")}
+    bt = a["bt"]
+    if bt["trades"] >= CONFIG["adviceMinTrades"] and bt["avgReturn"] is not None and bt["avgReturn"] < 0:
+        return {"action": "aguardar", "label": "AGUARDAR", "reason": (
+            f"Está no setup, mas no histórico deste ativo a estratégia perdeu em média {fmt_num(bt['avgReturn'])}% "
+            f"por compra ({bt['wins']} de {bt['trades']} com lucro). Prefira um ativo com histórico favorável.")}
+    ma = a["setup"]["ma"]
+    reason = (f"Pullback na {ma['name']} (+{fmt_num(ma['dist'] * 100)}% acima da média), pressão "
+              f"{fmt_num(a['pressure'], 0)}% e Score {fmt_num(a['score'])}.")
+    if nearest:
+        reason = (f"Já na carteira, em novo pullback: {fmt_num(gap * 100)}% da compra mais próxima "
+                  f"({fmt_date(nearest['date'])}, {fmt_brl(nearest['price'])}). ") + reason
+    if strategy["key"] == "parcial":
+        rest = " e o restante na reversão de tendência" if strategy["fraction"] < 1 else ""
+        reason += (f" Saída: vender {fmt_pct_value(strategy['fraction'])}% em +{fmt_pct_value(strategy['target'])}% "
+                   f"({fmt_brl(price * (1 + strategy['target']))}){rest}.")
+    else:
+        reason += " Saída: vender tudo na reversão de tendência."
+    return {"action": "comprar", "label": "COMPRAR", "reason": reason}
+
+
+def top_tickers(payload):
+    """Tickers que aparecem em algum ranking do payload (todas as bases e visões)."""
+    return {a["ticker"] for view in payload["views"].values() for r in view["rankings"]
+            for k in ("loose", "strict") for a in r[k]["top"]}
+
+
+def with_advice(payload, lots, strategy):
+    """Cópia do payload da varredura com a indicação (advice) em cada linha dos rankings. O payload
+    em cache é o mesmo para todos; a indicação depende da carteira e da estratégia de quem pede."""
+    def ranked(result):
+        return {**result, "top": [{**a, "advice": advice(a, lots.get(a["ticker"]), strategy)} for a in result["top"]]}
+
+    views = {mode: {**view, "rankings": [{**r, "loose": ranked(r["loose"]), "strict": ranked(r["strict"])}
+                                        for r in view["rankings"]]}
+             for mode, view in payload["views"].items()}
+    return {**payload, "views": views}
 
 
 def above_floor(scan, liquidity="padrao"):

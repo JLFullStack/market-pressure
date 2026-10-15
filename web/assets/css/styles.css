@@ -431,3 +431,14 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
     .controls .select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
     .controls .toggle > .select { flex: 1 1 auto; width: 100%; }
 }
+
+/* Aba Configurações: as estratégias de venda como opções (rádio) com os parâmetros no texto */
+.strategy-options { border: 0; padding: 0; margin: 0 0 8px; display: grid; gap: 10px; }
+.strategy-option { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
+.strategy-option:has(input[type="radio"]:checked) { border-color: var(--accent); background: rgba(56, 139, 253, 0.06); }
+.strategy-option > input[type="radio"] { margin-top: 3px; }
+.strategy-option > span { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.strategy-params { font-size: 14px; line-height: 2; }
+.strategy-params .select { width: 4.5em; padding: 4px 6px; text-align: right; }
+.strategy-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.signal-reason { max-width: 360px; white-space: normal; margin-top: 4px; }

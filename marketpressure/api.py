@@ -17,6 +17,7 @@ from . import portfolio as pf
 from . import portfolio_backtest as pb
 from . import portfolio_service as svc
 from . import portfolio_store as store
+from . import strategy as st
 
 log = logging.getLogger(__name__)
 
@@ -94,7 +95,25 @@ def get_scan(req):
     liquidity = req.arg("liquidez", "padrao")
     if liquidity not in screener.LIQUIDITY:
         raise HTTPError(400, "liquidez deve ser padrao, 10, 5, 3, 2 ou 1 (milhões de R$ por pregão)")
-    return screener.scan_job.status(force=req.arg("force") == "1", liquidity=liquidity)
+    result = screener.scan_job.status(force=req.arg("force") == "1", liquidity=liquidity)
+    if not result.get("scan"):
+        return result
+    return {**result, "scan": scan_with_advice(result["scan"], req.arg("carteira"))}
+
+
+def scan_with_advice(payload, portfolio_id):
+    """Ranking com a coluna "Indicação" (COMPRAR/AGUARDAR) pela estratégia salva e pelas compras
+    abertas da carteira escolhida (a última aberta na aba Carteira; sem ela, a primeira)."""
+    strategy = st.load()
+    lots = {}
+    try:
+        portfolios = store.read_doc()["portfolios"]
+        portfolio = next((p for p in portfolios if p.get("id") == portfolio_id), portfolios[0] if portfolios else None)
+        if portfolio:
+            lots = svc.held_lots(portfolio, screener.top_tickers(payload))
+    except Exception:
+        log.warning("carteira indisponível para a indicação do screener", exc_info=True)
+    return {**screener.with_advice(payload, lots, strategy), "strategy": st.describe(strategy)}
 
 
 @route("GET", "/api/bova")
@@ -134,6 +153,23 @@ def get_backtest(req):
         return screener.backtest_view(ticker, market, target, fraction, req.arg("strict") == "1", start, end, amount)
     except ValueError as err:
         raise HTTPError(400, str(err)) from None
+
+# Configurações
+
+
+@route("GET", "/api/configuracoes")
+def get_settings(req):
+    return st.payload()
+
+
+@route("POST", "/api/configuracoes")
+def post_settings(req):
+    """Salva a estratégia de venda ({strategy: parcial|reversao, target, fraction}, em %)."""
+    strategy, error = st.from_form(req.json_object())
+    if error:
+        raise HTTPError(400, error)
+    st.save(strategy)
+    return {**st.payload(strategy), "message": "Estratégia salva. A Carteira e o Screener já seguem a nova regra."}
 
 # Carteira
 
