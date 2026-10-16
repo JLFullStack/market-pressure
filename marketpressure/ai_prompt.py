@@ -9,6 +9,7 @@ tipo, o BOVA11, a estratégia de saída salva e as compras abertas da carteira.
 import logging
 
 from . import market_data, screener
+from . import strategy as st
 from .core import (adjusted_candles, closed_candles, compute_indicators, day_of, fmt_brl, fmt_date, fmt_num,
                    fmt_pct_value, fmt_qty, local_time)
 
@@ -31,6 +32,10 @@ dessas décadas um histórico de ganhos expressivos e consistentes, sempre com d
 Domina análise técnica (médias móveis, volume, momentum, padrões de candle), análise fundamentalista \
 e leitura do cenário macroeconômico.
 
+Você investe para o médio e longo prazo: as posições duram meses, saem na reversão de tendência e não \
+têm stop curto. Sabe que perder uma alta inteira custa muito mais do que pagar um pouco mais caro na \
+entrada, e que a entrada perfeita quase nunca aparece.
+
 Fale com a clareza de um bom professor: qualquer pessoa leiga precisa entender sua recomendação. \
 Use frases curtas, evite jargão e, quando um termo técnico for inevitável, explique-o em poucas \
 palavras (por exemplo: "MM200, a média dos preços dos últimos 200 pregões, que mostra a tendência \
@@ -42,19 +47,50 @@ TASK = """# O que eu preciso de você
 1. **Resumo do ativo**: o que é a empresa/fundo, o setor e em que momento o preço está, em linguagem simples.
 2. **Leitura dos dados**: avalie as evidências abaixo (tendência, pullback, volume, momentum, \
 histórico da estratégia, contexto de mercado). Aponte o que é forte e o que é fraco ou contraditório.
-3. **Veredito claro**, começando a resposta por uma destas opções: **COMPRAR AGORA**, **ESPERAR** ou \
-**EVITAR**, com o motivo principal em uma frase.
-4. **Se for comprar**: faixa de preço razoável de entrada, o preço em que a tese deixa de valer \
-(onde eu deveria repensar ou sair), os alvos de saída pela minha estratégia e um tamanho de posição \
-prudente (em % do patrimônio).
-5. **Se for esperar**: o que precisa acontecer, de forma concreta (preço, média, volume ou candle), \
-para virar uma compra — e o que faria você desistir do ativo.
+3. **Veredito claro**, começando a resposta por uma destas opções: **COMPRAR AGORA**, **COMPRAR COM \
+POSIÇÃO MENOR** ou **EVITAR**, com o motivo principal em uma frase. Siga "Como decidir", abaixo.
+4. **Se for comprar**: faixa de preço de entrada para hoje (não um preço ideal que talvez não volte), \
+o preço em que a tese deixa de valer (onde eu deveria repensar), os alvos de saída pela minha \
+estratégia e o tamanho da posição em % do patrimônio (na posição menor, diga quanto menor e por quê).
+5. **Se for evitar**: o motivo concreto (da lista de "Como decidir" ou um fato que os números não \
+mostram) e o que faria o ativo voltar a ser uma compra.
 6. **Riscos**: os principais, incluindo o que os números não mostram (resultados, notícias, \
 dívida, setor, juros, câmbio). Se tiver acesso a notícias e dados atualizados, consulte-os e diga a \
 data; se não tiver, deixe isso claro.
 7. **Nota de confiança** de 0 a 10 para o seu veredito, com uma linha de justificativa.
 
 Termine com um resumo de três linhas, para quem não quiser ler o resto."""
+
+DECIDE = """# Como decidir (leia antes do veredito)
+
+- O ativo já passou pelos filtros do app: tendência de alta de longo prazo e recuo até uma média. \
+**O ponto de partida é comprar**; para não comprar é preciso um motivo concreto.
+- **Esperar uma entrada melhor tem custo.** Num backtest de carteira deste app (2017 a 2026, cerca de \
+2 mil decisões de um analista), esperar uma confirmação (candle de alta, rompimento, volume) antes de \
+comprar reduziu o retorno médio de cada compra em cerca de 3 pontos percentuais, e boa parte dos \
+ativos que não deram a confirmação subiu mesmo assim. Comprar tudo o que o analista não mandou evitar \
+rendeu cerca de 25% a mais no período do que esperar as confirmações.
+- Por isso não há a opção "esperar": se houver dúvida, **compre com posição menor** e diga quanto. \
+Use **EVITAR** só com um motivo concreto, como:
+  - tendência fraca nas ações: MM200 subindo menos de 1% em 20 pregões, retorno de 12 meses negativo ou recuo até a \
+MM200 (nos testes do app, essas compras renderam menos nas duas metades de 2017–2026 e esperá-las aumentou o lucro \
+da carteira; nos internacionais isso não valeu);
+  - tendência quebrando: MM20 bem abaixo da MM50 com MACD afundando;
+  - queda forte até a média ("faca caindo": 15% ou mais em poucos pregões, RSI perto de 30) em vez de um recuo ordenado;
+  - choque de notícia: gap ou queda forte com volume muito acima da média;
+  - volatilidade extrema para uma estratégia sem stop;
+  - um fato fundamentalista grave que os números do app não mostram (resultado, dívida, governança, evento).
+- Candle vermelho no dia do sinal, RSI ainda caindo, mercado misto ou dólar oscilando são normais num \
+recuo e não bastam para evitar. Regime defensivo também não: nos testes, as poucas ações em alta num \
+mercado defensivo renderam mais que a média.
+- **Ativos internacionais (BDRs e ETFs de ações do exterior)**: nos mesmos testes, até os sinais que o \
+analista mandou evitar renderam em média cerca de +10% por compra. Pense duas vezes antes de vetar um \
+internacional; o câmbio sozinho não é motivo.
+- **Histórico do próprio ativo**: o backtest de 10 anos quase não separou compras boas de ruins. O dos \
+últimos 3 anos separou nas ações (recente negativo: −1,5% por compra; positivo: +4,1%); nos BDRs, \
+nenhum dos dois antecipou nada. Mesmo assim, deixar de comprar ações pelo histórico negativo (de 10 \
+ou de 3 anos) reduziu o lucro da carteira nos testes. Use o histórico como um dado entre outros, \
+para calibrar o tamanho da posição, nunca como veto sozinho."""
 
 METHOD = """# Como o app chegou a este ativo (setup "Garrafa de Gás")
 
@@ -64,11 +100,17 @@ recuo (pullback) a partir da máxima de 20 pregões; fechamento entre 0% e {max_
 - **Pressão (0–100%)**: mede o "gás" comprador acumulado no recuo. Soma ponderada de Volume (volume secando no recuo, OBV versus preço), \
 Momentum (RSI que respeita a zona de 40, Estocástico que "zerou", divergência oculta de alta), Tendência (MACD e histograma se recuperando) e Estrutura \
 (compressão das Bandas de Bollinger e das últimas 5 barras). Descreve o padrão; **não é probabilidade de ganho**.
-- **Taxa de acerto**: a mesma estratégia aplicada aos ~10 anos de histórico do próprio ativo (compra na abertura seguinte ao sinal, recompra só em \
-um novo recuo a 5%+ das compras abertas, saída pela estratégia configurada). Suavizada para 50% quando há poucas operações. Sem custos, impostos ou proventos.
+- **Histórico da estratégia (backtest)**: a mesma estratégia aplicada aos ~10 anos de histórico do próprio ativo (compra na abertura seguinte ao sinal, \
+recompra só em um novo recuo a 5%+ das compras abertas, saída pela regra configurada para o tipo do ativo). Mostra as compras encerradas \
+(taxa de acerto suavizada para 50% quando há poucas e o retorno médio), as ainda abertas (marcadas pelo preço de hoje; num ativo em alta \
+costumam ser as melhores) e as encerradas nos últimos 3 anos. Sem custos, impostos ou proventos. Com a venda parcial, acerto alto com \
+retorno médio baixo (ou o contrário) é normal: olhe os dois juntos.
 - **Score Composto** = 60% × Pressão + 40% × Taxa de acerto. O ranking ordena por ele.
 - **Estado da garrafa**: Cheia (pressão ≥ 75%), Quase cheia (≥ 60%) ou Enchendo.
-- **Indicação do app**: COMPRAR ou AGUARDAR (já comprado nesta região, ou histórico da estratégia negativo no ativo). O app não usa stop loss."""
+- **Indicação automática do app**: uma regra fixa, não uma recomendação. AGUARDAR quando já tenho compra nesta região (a \
+estratégia recompra apenas em outro recuo) ou, fora dos internacionais, quando a tendência está fraca (MM200 subindo menos de 1% \
+em 20 pregões, retorno de 12 meses negativo ou recuo até a MM200); senão COMPRAR, com um alerta quando o backtest dos últimos \
+3 anos do ativo é negativo. O app não usa stop loss."""
 
 
 def _pct(v, d=1, sign=True):
@@ -165,25 +207,43 @@ def _bova(mode):
     return f"- BOVA11 (Ibovespa): {fmt_brl(b['close'])}, {_pct(b['change'])} em 12 meses, {position}"
 
 
-def build(scan, payload, ticker, mode, strict, lots, strategy):
+def _history_line(bt):
+    """O backtest do ativo em uma linha: encerradas, abertas e recentes."""
+    parts = [f"{bt['wins']} de {bt['trades']} compras encerradas com lucro em ~10 anos (acerto {fmt_num(bt['winRate'], 0)}% suavizado"
+             + (f", retorno médio {_pct(bt['avgReturn'])} por compra)" if bt.get("avgReturn") is not None else ")")]
+    if bt.get("open"):
+        parts.append(f"{bt['open']} compra(s) ainda aberta(s), {_pct(bt['openReturn'])} em média pelo preço de hoje")
+    if bt.get("recentTrades"):
+        parts.append(f"últimos 3 anos: {bt['recentWins']} de {bt['recentTrades']} com lucro, retorno médio {_pct(bt['recentReturn'])}")
+    elif "recentTrades" in bt:
+        parts.append("nenhuma compra encerrada nos últimos 3 anos")
+    return "; ".join(parts)
+
+
+def build(scan, payload, ticker, mode, strict, lots, settings):
     """Texto da análise de `ticker` (que precisa estar no ranking da visão escolhida) em Markdown.
-    scan: a varredura completa; payload: scan_payload na liquidez escolhida; lots: compras abertas
-    do ativo na carteira (ou None); strategy: strategy.describe. ValueError se o ticker não está."""
+    scan: a varredura completa; payload: scan_payload na liquidez e nas regras por tipo escolhidas;
+    lots: compras abertas do ativo na carteira (ou None); settings: strategy.load (a regra de saída
+    vem do tipo do ativo). ValueError se o ticker não está."""
     found = find_row(payload, ticker, mode, strict)
     if not found:
         raise ValueError(f"{ticker} não está no ranking desta visão.")
     pos, row, ranking = found
     side = "strict" if strict else "loose"
     analysis = next(a for a in screener.analyses_for(scan, mode) if a["ticker"] == ticker)
-    advice = screener.advice(row, lots, strategy)
-    p, d, setup, bt = analysis["pressure"], analysis["pressure"]["details"], row["setup"], row["bt"]
-    other_bt = analysis["backtest"]["loose" if strict else "strict"]
-    weights = screener.CONFIG["pressureWeights"].get(analysis.get("kind"), screener.CONFIG["pressureWeights"]["default"])
     kind = analysis.get("kind") or "acoes"
+    group = st.group_of(kind, "b3", row.get("name") or "")
+    strategy = st.describe_one(st.for_group(settings, group))
+    kinds = st.screener_kinds(settings)
+    advice = screener.advice(row, lots, strategy, group)
+    p, d, setup, bt = analysis["pressure"], analysis["pressure"]["details"], row["setup"], row["bt"]
+    other_bt = analysis["backtest"][screener.bt_key(not strict, group, kinds)]
+    weights = screener.CONFIG["pressureWeights"].get(analysis.get("kind"), screener.CONFIG["pressureWeights"]["default"])
+    peers = [a["bt"]["avgReturn"] for a in ranking[side]["top"] if a["bt"].get("avgReturn") is not None]
     stamp = local_time(scan["timestamp"] / 1000).strftime("%d/%m/%Y %H:%M")
     pattern = setup["pattern"] or "nenhum (sem candle de rejeição)"
 
-    lines = [ROLE, "", TASK, "", METHOD.format(max_dist=fmt_pct_value(screener.CONFIG["maxDistance"]),
+    lines = [ROLE, "", TASK, "", DECIDE, "", METHOD.format(max_dist=fmt_pct_value(screener.CONFIG["maxDistance"]),
                                                max_below=fmt_pct_value(screener.CONFIG["maxBelowDistance"])), ""]
     lines += [
         f"# Dados do ativo: {ticker}",
@@ -203,13 +263,12 @@ def build(scan, payload, ticker, mode, strict, lots, strategy):
         f"- **Pressão**: {fmt_num(row['pressure'], 0)}% · componentes: Volume {fmt_num(p['volume'], 0)} (peso {fmt_pct_value(weights['volume'])}%), "
         f"Momentum {fmt_num(p['momentum'], 0)} (peso {fmt_pct_value(weights['momentum'])}%), Tendência {fmt_num(p['trend'], 0)} "
         f"(peso {fmt_pct_value(weights['trend'])}%), Estrutura {fmt_num(p['structure'], 0)} (peso {fmt_pct_value(weights['structure'])}%)",
-        f"- **Taxa de acerto**: {fmt_num(bt['winRate'], 0)}% suavizada ({bt['wins']} de {bt['trades']} compras encerradas com lucro"
-        + (f"; retorno médio {_pct(bt['avgReturn'])} por compra)" if bt["avgReturn"] is not None else ")"),
-        f"- Mesmo backtest {'sem' if strict else 'com'} o candle de rejeição: {fmt_num(other_bt['winRate'], 0)}% "
-        f"({other_bt['wins']} de {other_bt['trades']}"
-        + (f"; retorno médio {_pct(other_bt['avgReturn'])})" if other_bt["avgReturn"] is not None else ")"),
+        f"- **Histórico da estratégia neste ativo** ({strategy['label'].lower()}): {_history_line(bt)}",
+        "- Referência: " + (f"retorno médio por compra no histórico dos {len(peers)} ativos do Top deste tipo: "
+                            f"{_pct(sum(peers) / len(peers))}" if peers else "sem histórico encerrado no Top deste tipo"),
+        f"- Mesmo backtest {'sem' if strict else 'com'} o candle de rejeição: {_history_line(other_bt)}",
         f"- **Estado da garrafa**: {BOTTLE_LABEL[row['bottle']]}",
-        f"- **Indicação do app**: {advice['label']} — {advice['reason'].replace(chr(10), ' ')}",
+        f"- Indicação automática do app (regra fixa, só um dado): {advice['label']} — {advice['reason'].replace(chr(10), ' ')}",
         "",
         "## Justificativa quantitativa (Volume & Momentum)",
         "",
@@ -245,7 +304,7 @@ def build(scan, payload, ticker, mode, strict, lots, strategy):
     lines.append("")
 
     target_price = row["price"] * (1 + strategy["target"])
-    lines += ["# Minha estratégia de saída (configurada no app)", "", f"- {strategy['text']}"]
+    lines += [f"# Minha estratégia de saída para {st.GROUPS[group]} (configurada no app)", "", f"- {strategy['text']}"]
     if strategy["key"] == "parcial":
         lines.append(f"- Alvo da venda parcial, se eu comprar hoje: {fmt_brl(target_price)} (+{fmt_pct_value(strategy['target'])}%)")
     lines += [f"- Reversão de tendência (venda do restante): {strategy['reversal']}",

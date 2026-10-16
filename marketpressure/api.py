@@ -96,10 +96,12 @@ def get_scan(req):
     liquidity = req.arg("liquidez", "padrao")
     if liquidity not in screener.LIQUIDITY:
         raise HTTPError(400, "liquidez deve ser padrao, 10, 5, 3, 2 ou 1 (milhões de R$ por pregão)")
-    result = screener.scan_job.status(force=req.arg("force") == "1", liquidity=liquidity)
+    settings = st.load()
+    result = screener.scan_job.status(force=req.arg("force") == "1", liquidity=liquidity,
+                                      kinds=st.screener_kinds(settings))
     if not result.get("scan"):
         return result
-    return {**result, "scan": scan_with_advice(result["scan"], req.arg("carteira"))}
+    return {**result, "scan": scan_with_advice(result["scan"], req.arg("carteira"), settings)}
 
 
 def open_lots_for(portfolio_id, tickers):
@@ -115,12 +117,13 @@ def open_lots_for(portfolio_id, tickers):
     return {}
 
 
-def scan_with_advice(payload, portfolio_id):
-    """Ranking com a coluna "Indicação" (COMPRAR/AGUARDAR) pela estratégia salva e pelas compras
-    abertas da carteira escolhida."""
-    strategy = st.load()
+def scan_with_advice(payload, portfolio_id, settings=None):
+    """Ranking com a coluna "Indicação" (COMPRAR/AGUARDAR) pela estratégia salva de cada tipo e
+    pelas compras abertas da carteira escolhida."""
+    settings = settings or st.load()
     lots = open_lots_for(portfolio_id, screener.top_tickers(payload))
-    return {**screener.with_advice(payload, lots, strategy), "strategy": st.describe(strategy)}
+    return {**screener.with_advice(payload, lots, lambda kind: st.for_group(settings, kind)),
+            "strategy": st.describe(settings)}
 
 
 @route("GET", "/api/scan/prompt")
@@ -137,9 +140,10 @@ def get_scan_prompt(req):
     if not job.scan:
         raise HTTPError(404, "Nenhuma varredura disponível; atualize o ranking.")
     lots = open_lots_for(req.arg("carteira"), {ticker}).get(ticker)
+    settings = st.load()
     try:
-        text = ai_prompt.build(job.scan, job.payload(liquidity), ticker, mode, req.arg("strict") == "1",
-                               lots, st.describe(st.load()))
+        text = ai_prompt.build(job.scan, job.payload(liquidity, st.screener_kinds(settings)), ticker, mode,
+                               req.arg("strict") == "1", lots, settings)
     except ValueError as err:
         raise HTTPError(404, str(err)) from None
     return {"ticker": ticker, "text": text}
@@ -167,8 +171,14 @@ def get_backtest(req):
     if market not in screener.BACKTEST_MARKETS:
         raise HTTPError(400, "market deve ser b3 ou us")
     ticker = valid_ticker(pf.normalize_ticker(req.arg("ticker")))
-    target = percent_arg(req, "target", screener.CONFIG["partialTarget"] * 100, 0.5, 500)
-    fraction = percent_arg(req, "fraction", screener.CONFIG["partialFraction"] * 100, 0, 100)
+    if req.arg("saida", "config") == "config":
+        # Saída das Configurações, pela regra do tipo do ativo (reversão = sem venda parcial).
+        name, kind = screener.asset_info(ticker, market)
+        rule = st.for_group(st.load(), st.group_of(kind, market, name))
+        target, fraction = rule["target"], rule["fraction"] if rule["key"] == "parcial" else 0.0
+    else:
+        target = percent_arg(req, "target", screener.CONFIG["partialTarget"] * 100, 0.5, 500)
+        fraction = percent_arg(req, "fraction", screener.CONFIG["partialFraction"] * 100, 0, 100)
     amount = pf.parse_number(req.arg("amount"), screener.BACKTEST_AMOUNT)
     if amount is None or not 1 <= amount <= 100_000_000:
         raise HTTPError(400, "O valor por compra deve ficar entre R$ 1 e R$ 100 milhões.")
@@ -193,12 +203,13 @@ def get_settings(req):
 
 @route("POST", "/api/configuracoes")
 def post_settings(req):
-    """Salva a estratégia de venda ({strategy: parcial|reversao, target, fraction}, em %)."""
+    """Salva a estratégia de venda ({target, fraction} em %, kinds: {grupo: parcial|reversao})."""
     strategy, error = st.from_form(req.json_object())
     if error:
         raise HTTPError(400, error)
     st.save(strategy)
-    return {**st.payload(strategy), "message": "Estratégia salva. A Carteira e o Screener já seguem a nova regra."}
+    return {**st.payload(strategy),
+            "message": "Estratégia salva. A Carteira, o Screener e o Backtest já seguem a regra de cada tipo."}
 
 # Carteira
 

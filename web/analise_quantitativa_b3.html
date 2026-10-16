@@ -154,13 +154,14 @@
                 <p>A pressão descreve o padrão do pullback; não é uma probabilidade de acerto.</p></dd>
             </div>
             <div>
-                <dt>Taxa de acerto</dt>
-                <dd><p>Backtest da estratégia nos 10 anos de histórico do próprio ativo: compra no pullback, na abertura do pregão seguinte ao sinal, e recompra a cada pullback novo (a pelo menos 5% das compras abertas). Cada compra vende 50% em +10% e o restante na reversão de tendência (fechamento abaixo da MM20, da MM50 e da MM200 com a MM50 abaixo da MM200). Sem custos.</p>
-                    <p>Acerto = compra com resultado positivo; compras ainda abertas não contam. A taxa é suavizada para uma base de 50% quando há poucas operações. Entre parênteses: acertos/operações e o retorno médio por operação.</p></dd>
+                <dt>Histórico (backtest)</dt>
+                <dd><p>Backtest da estratégia nos 10 anos de histórico do próprio ativo: compra no pullback, na abertura do pregão seguinte ao sinal, e recompra a cada pullback novo (a pelo menos 5% das compras abertas). A saída é a regra configurada para o tipo do ativo em <a href="configuracoes.html" class="inline-link">Configurações</a>: venda parcial (50% em +10%) e o restante na reversão de tendência, ou tudo na reversão (fechamento abaixo da MM20, da MM50 e da MM200 com a MM50 abaixo da MM200). Sem custos.</p>
+                    <p>Taxa de acerto = compras encerradas com resultado positivo, suavizada para uma base de 50% quando há poucas. Entre parênteses: acertos/compras e o retorno médio por compra. Com a venda parcial, acerto alto com média baixa (ou o contrário) é normal: olhe os dois juntos.</p>
+                    <p>Abaixo: as compras encerradas nos últimos 3 anos e as ainda abertas (pelo preço de hoje). Nos testes de carteira, o histórico recente foi o que melhor separou compras boas de ruins nas ações; nos BDRs, nenhum histórico antecipou nada.</p></dd>
             </div>
             <div>
                 <dt>Indicação</dt>
-                <dd><p>COMPRAR ou AGUARDAR, com o motivo ao tocar no selo. A saída segue a estratégia escolhida em <a href="configuracoes.html" class="inline-link">Configurações</a>; a venda é indicada só na Carteira.</p></dd>
+                <dd><p>COMPRAR ou AGUARDAR, com o motivo ao tocar no selo. AGUARDAR quando você já comprou o ativo nesta região (a estratégia recompra apenas em outro pullback) ou quando a tendência está fraca: MM200 subindo menos de 1% em 20 pregões, retorno de 12 meses negativo ou recuo até a MM200. Nos backtests (ações, 2017 a 2026), essas compras renderam menos nas duas metades do período e esperá-las aumentou o lucro da carteira; nos internacionais nenhuma condição justificou esperar, então eles não recebem AGUARDAR por tendência. O histórico do ativo não gera AGUARDAR: nos backtests de carteira, deixar de comprar pelo histórico negativo reduziu o lucro. Quando o backtest dos últimos 3 anos é negativo (fora dos BDRs), o COMPRAR traz um alerta no motivo. A saída segue a regra do tipo do ativo em <a href="configuracoes.html" class="inline-link">Configurações</a>; a venda é indicada só na Carteira.</p></dd>
             </div>
         </dl>
         <p class="method-disclaimer">Ferramenta de estudo — não constitui recomendação de investimento.</p>

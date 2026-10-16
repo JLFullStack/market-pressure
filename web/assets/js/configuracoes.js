@@ -1,34 +1,43 @@
-// Aba Configurações: escolha da estratégia de venda e dos parâmetros da venda parcial.
+// Aba Configurações: os parâmetros da venda parcial e a regra de venda de cada tipo de ativo.
 // A validação e os textos vêm do Python (strategy.py, rotas /api/configuracoes); aqui só se
 // preenche e envia o formulário.
 
 const form = document.getElementById('strategyForm');
 const msg = document.getElementById('strategyMsg');
 let defaults = null;
+let options = [];
 
 function showMsg(ok, text) {
     msg.className = `form-msg ${ok ? 'ok' : 'error'}`;
     msg.textContent = text;
 }
 
-// Preenche o formulário com uma estratégia ({key, targetPct, fractionPct}).
+// Uma linha por tipo de ativo, com a regra escolhida ({group, groupLabel, key}).
+function renderKinds(kinds) {
+    document.getElementById('kindsBody').innerHTML = kinds.map(k => `
+        <tr>
+            <td><strong>${escapeHTML(k.groupLabel)}</strong><div class="small muted">${escapeHTML(k.hint || '')}</div></td>
+            <td><select class="select strategy-kind" name="kind_${k.group}" aria-label="Regra de venda: ${escapeHTML(k.groupLabel)}">
+                ${options.map(o => `<option value="${o.key}"${o.key === k.key ? ' selected' : ''}>${escapeHTML(o.label)}</option>`).join('')}
+            </select></td>
+        </tr>`).join('');
+}
+
+// Preenche o formulário com as configurações ({targetPct, fractionPct, kinds}).
 function fill(s) {
-    form.elements.strategy.value = s.key;
     form.elements.target.value = fmtNum(s.targetPct, Number.isInteger(s.targetPct) ? 0 : 1);
     form.elements.fraction.value = fmtNum(s.fractionPct, Number.isInteger(s.fractionPct) ? 0 : 1);
+    renderKinds(s.kinds);
 }
 
 function show(data) {
     defaults = data.default;
+    options = data.options;
     fill(data.strategy);
-    document.getElementById('currentText').textContent = `${data.strategy.label} — ${data.strategy.text}`;
+    document.getElementById('currentText').innerHTML = data.strategy.kinds
+        .map(k => `<li><strong>${escapeHTML(k.groupLabel)}:</strong> ${escapeHTML(k.text)}</li>`).join('');
     document.getElementById('reversalText').textContent = `Reversão de tendência: ${data.strategy.reversal}.`;
 }
-
-// Mexer nos números da venda parcial já escolhe essa estratégia.
-['target', 'fraction'].forEach(name => form.elements[name].addEventListener('input', () => {
-    form.elements.strategy.value = 'parcial';
-}));
 
 document.getElementById('defaultBtn').addEventListener('click', () => {
     if (defaults) fill(defaults);
@@ -41,10 +50,12 @@ form.addEventListener('submit', async (event) => {
     button.disabled = true;
     const busy = busyStart('Salvando estratégia...');
     try {
+        const kinds = {};
+        form.querySelectorAll('select.strategy-kind').forEach(sel => { kinds[sel.name.slice(5)] = sel.value; });
         const data = await apiPost('/configuracoes', {
-            strategy: form.elements.strategy.value,
             target: form.elements.target.value,
             fraction: form.elements.fraction.value,
+            kinds,
         });
         show(data);
         showMsg(true, data.message);

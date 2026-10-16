@@ -126,7 +126,7 @@ class BrowserBridgeTest(BrowserTestCase):
         self.assertEqual(status["scan"]["views"].keys(), saved["views"].keys())
         self.assertEqual({k: v for k, v in status["scan"].items() if k not in ("views", "strategy")},
                          {k: v for k, v in saved.items() if k != "views"})
-        self.assertEqual(status["scan"]["strategy"]["key"], "parcial")
+        self.assertEqual(status["scan"]["strategy"]["kinds"][0]["key"], "parcial")
 
     def test_scan_failure_is_reported(self):
         job = screener.ScanJob()

@@ -41,35 +41,36 @@
 
     <div class="panel">
         <h2>⚙️ Estratégia de venda</h2>
-        <p class="muted">A estratégia escolhida vale para:</p>
+        <p class="muted">Cada tipo de ativo segue uma das duas regras de venda. A escolha vale para:</p>
         <ul class="notes">
             <li>a <a href="carteira.html" class="inline-link">Carteira</a>: a coluna "Situação" das posições indica quando e quanto vender, com o motivo;</li>
-            <li>o <a href="analise_quantitativa_b3.html" class="inline-link">Screener</a>: a coluna "Indicação" mostra o plano de saída de cada compra sugerida.</li>
+            <li>o <a href="analise_quantitativa_b3.html" class="inline-link">Screener</a>: o histórico (backtest), o Score e a "Indicação" de cada ativo, e o texto do "COPIAR ANÁLISE";</li>
+            <li>o <a href="backtest.html" class="inline-link">Backtest</a>, quando a saída escolhida lá é "Conforme as Configurações".</li>
         </ul>
         <form id="strategyForm" novalidate>
             <fieldset class="strategy-options">
-                <legend class="sr-only">Estratégia</legend>
-                <label class="strategy-option">
-                    <input type="radio" name="strategy" value="parcial">
-                    <span>
-                        <strong>Venda parcial no alvo + reversão de tendência</strong>
-                        <span class="strategy-params">
-                            Vender
-                            <input class="select" name="fraction" type="text" inputmode="decimal" size="4" aria-label="Parte de cada compra vendida no alvo (%)"> %
-                            de cada compra ao atingir
-                            <input class="select" name="target" type="text" inputmode="decimal" size="4" aria-label="Rentabilidade do alvo (%)"> %
-                            de rentabilidade sobre o preço dela; o restante na reversão de tendência.
-                        </span>
-                    </span>
-                </label>
-                <label class="strategy-option">
-                    <input type="radio" name="strategy" value="reversao">
-                    <span>
-                        <strong>Vender 100% na reversão de tendência</strong>
-                        <span class="small muted">Sem venda parcial: a posição inteira sai na reversão.</span>
-                    </span>
-                </label>
+                <legend class="strategy-legend">Venda parcial no alvo</legend>
+                <p class="strategy-params">
+                    Vender
+                    <input class="select" name="fraction" type="text" inputmode="decimal" size="4" aria-label="Parte de cada compra vendida no alvo (%)"> %
+                    de cada compra ao atingir
+                    <input class="select" name="target" type="text" inputmode="decimal" size="4" aria-label="Rentabilidade do alvo (%)"> %
+                    de rentabilidade sobre o preço dela; o restante na reversão de tendência.
+                </p>
             </fieldset>
+            <fieldset class="strategy-options">
+                <legend class="strategy-legend">Regra de cada tipo de ativo</legend>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Tipo de ativo</th><th>Regra de venda</th></tr></thead>
+                        <tbody id="kindsBody"></tbody>
+                    </table>
+                </div>
+            </fieldset>
+            <ul class="notes">
+                <li>Os tipos são as <strong>classes da Carteira</strong>: lá, a "Situação" de cada posição segue a regra da classe do ativo. No Screener e no Backtest vale o tipo do ativo (BDRs e ETFs do exterior entram em Internacionais).</li>
+                <li><strong>Internacionais</strong>: nos backtests de carteira, vender 50% em +10% vendeu os vencedores cedo demais; sair só na reversão rendeu mais. Por isso é o padrão deles.</li>
+            </ul>
             <p class="small muted" id="reversalText"></p>
             <div class="strategy-actions">
                 <button type="submit" class="btn">Salvar estratégia</button>
@@ -77,7 +78,7 @@
             </div>
         </form>
         <div class="form-msg" id="strategyMsg" role="status"></div>
-        <p class="small muted">Em vigor: <span id="currentText">—</span></p>
+        <div class="small muted">Em vigor: <ul class="notes" id="currentText"><li>—</li></ul></div>
     </div>
 </div>
 

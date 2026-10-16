@@ -475,6 +475,8 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 .strategy-option > span { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .strategy-params { font-size: 14px; line-height: 2; }
 .strategy-params .select { width: 4.5em; padding: 4px 6px; text-align: right; }
+.strategy-legend { font-weight: 600; margin-bottom: 4px; }
+.strategy-kind { min-width: 16em; }
 .strategy-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 /* Indicação (COMPRAR, VENDER, MANTER, AGUARDAR): badge clicável; o motivo abre na .tip-box */
 .signal-badge { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; font-weight: 700; cursor: help; white-space: nowrap; }

@@ -3,7 +3,7 @@
 import unittest
 from unittest import mock
 
-from marketpressure import database, portfolio_store as store
+from marketpressure import portfolio as pf, database, portfolio_store as store
 from tests.support import DatabaseTestCase
 
 
@@ -21,7 +21,7 @@ class ActionsTest(DatabaseTestCase):
     def test_new_portfolio_starts_with_default_classes(self):
         pid = self.new_portfolio()
         p = store.get_portfolio(pid)
-        self.assertEqual([c["name"] for c in p["classes"]], ["Ações", "FIIs", "Renda Fixa", "Ativos Internacionais"])
+        self.assertEqual([c["name"] for c in p["classes"]], pf.CLASS_NAMES)
 
     def test_transaction_is_saved_with_suggested_class_and_backup(self):
         pid = self.new_portfolio()
@@ -40,15 +40,21 @@ class ActionsTest(DatabaseTestCase):
             self.buy(pid, qty="101", date="2021-06-02", kind="venda")
         self.assertEqual(store.read_doc(), before)
 
-    def test_class_rename_updates_assets_and_removal_requires_empty_class(self):
+    def test_classes_are_fixed_only_targets_and_moves_change(self):
         pid = self.new_portfolio()
         self.buy(pid)
-        self.act("renomear_classe", id=pid, previous="Ações", name="Ações BR")
-        self.assertEqual(store.get_portfolio(pid)["assets"]["PETR4"]["class"], "Ações BR")
-        with self.assertRaisesRegex(store.ActionError, "PETR4"):
-            self.act("remover_classe", id=pid, name="Ações BR")
-        self.act("nova_classe", id=pid, name="Cripto", target="2,5")
-        self.assertIn({"name": "Cripto", "target": 2.5}, store.get_portfolio(pid)["classes"])
+        for action, body in (("renomear_classe", {"previous": "Ações", "name": "Ações BR"}),
+                             ("nova_classe", {"name": "Cripto", "target": "2,5"}),
+                             ("remover_classe", {"name": "ETFs Brasil"})):
+            with self.assertRaisesRegex(store.ActionError, "fixas"):
+                self.act(action, id=pid, **body)
+        self.act("meta_classe", id=pid, cls="Internacionais", target="40")
+        self.act("mover_ativo", id=pid, key="PETR4", cls="Internacionais")
+        p = store.get_portfolio(pid)
+        self.assertEqual(p["assets"]["PETR4"]["class"], "Internacionais")
+        self.assertIn({"name": "Internacionais", "target": 40}, p["classes"])
+        with self.assertRaises(store.ActionError):
+            self.act("mover_ativo", id=pid, key="PETR4", cls="Cripto")
 
     def test_deleting_last_entry_removes_asset(self):
         pid = self.new_portfolio()

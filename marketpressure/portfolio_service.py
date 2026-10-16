@@ -9,11 +9,12 @@ import threading
 import time
 from datetime import date
 
+from . import database as db
 from . import goals as gl
 from . import market_data, runtime
 from . import strategy as st
 from .core import add_up, day_of, fmt_date, session_in_progress, today_iso
-from .portfolio import (APORTE_MODES, BENCHMARK, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
+from .portfolio import (APORTE_MODES, BENCHMARK, CLASS_GROUP, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
                         analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_items,
                         contribution_plan, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
                         market_of, net_flows, normalize_ticker, open_lots, parse_number, period_start, rebase_series,
@@ -39,11 +40,16 @@ def structure(portfolio):
                             "type": FI_LABELS.get(e["type"], e["type"]), "amount": e["amount"]})
     history.sort(key=lambda r: r["date"], reverse=True)
     assets = portfolio["assets"]
+    settings = st.load()
+
+    def rule_text(name):
+        group = CLASS_GROUP.get(name)
+        return st.STRATEGIES[st.for_group(settings, group)["key"]] if group else "Sem regra de venda (títulos)"
     return {
         "today": today_iso(),
         "hasEntries": has_entries(portfolio),
-        "classes": [{"name": c["name"], "target": c["target"], "members": class_members(portfolio, c["name"])}
-                    for c in classes],
+        "classes": [{"name": c["name"], "target": c["target"], "members": class_members(portfolio, c["name"]),
+                     "rule": rule_text(c["name"])} for c in classes],
         "targetSum": add_up(c["target"] for c in classes),
         "targetsOff": bool(classes) and targets_off(add_up(c["target"] for c in classes)),
         "defaultClass": suggest_class("", "b3", classes),
@@ -62,7 +68,20 @@ def asset_info(portfolio, ticker, market):
     known = portfolio["assets"].get(ticker)
     market = (known.get("market") or "b3") if known else (market if market in MARKETS else "b3")
     return {"ticker": ticker, "isNew": bool(ticker) and not known, "market": market,
-            "currency": MARKETS[market]["currency"], "suggestedClass": suggest_class(ticker, market, portfolio["classes"])}
+            "currency": MARKETS[market]["currency"],
+            "suggestedClass": (known.get("class") if known else None) or suggested_class(ticker, market)}
+
+
+def suggested_class(ticker, market):
+    """Classe de um ativo novo pelo tipo: o da última lista do screener (tabela universe; ETFs do
+    exterior pelo nome) e, sem ela, o código (portfolio.suggest_class)."""
+    u = {}
+    if market == "b3":
+        try:
+            u = next((r for r in db.read_table("universe") if r["ticker"] == ticker), None) or {}
+        except Exception:
+            log.warning("não foi possível ler a lista de ativos salva; classe pelo código", exc_info=True)
+    return suggest_class(ticker, market, kind=u.get("kind"), international=market_data.international_etf(u.get("name")))
 
 
 def quote_history(ticker, market):
@@ -147,7 +166,8 @@ def full_analysis(portfolio, reuse=False):
     except Exception as err:
         rates = []
         failed.append(f"CDI ({err})")
-    analysis = analyze_portfolio(portfolio, histories, rates, strategy=strategy)
+    classes = {t: a.get("class") for t, a in portfolio["assets"].items()}
+    analysis = analyze_portfolio(portfolio, histories, rates, strategy=st.asset_rules(strategy, classes))
     bench = histories.get(BENCHMARK)
     analysis["live"] = bool(bench and bench["candles"] and session_in_progress(bench["candles"]))
     analysis["failed"] = failed

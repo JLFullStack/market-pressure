@@ -103,7 +103,7 @@ class ServerTest(DatabaseTestCase):
         self.assertEqual(len(data["equityB"]), len(data["equity"]))
         self.assertAlmostEqual(data["equityB"][-1]["value"], b["profit"])
         self.assertIn("a mais que", data["compare"])
-        only = self.request("GET", "/api/backtest?ticker=PETR4&fraction=0")[1]
+        only = self.request("GET", "/api/backtest?ticker=PETR4&fraction=0&saida=manual")[1]
         self.assertEqual((only["onlyB"], only["equityB"], only["compare"]), (None, None, None))
         doubled = self.request("GET", "/api/backtest?ticker=PETR4&amount=2000")[1]["stats"]
         self.assertAlmostEqual(doubled["profit"], 2 * s["profit"])
@@ -118,8 +118,8 @@ class ServerTest(DatabaseTestCase):
         early = self.request("GET", "/api/backtest?ticker=PETR4&from=2020-01-01")[1]
         self.assertEqual(early["bounds"]["from"], data["bounds"]["min"])  # ajustado: as médias precisam de 220 pregões
         self.assertIn("Início ajustado", early["note"])
-        for query in ("ticker=PETR4&market=xx", "ticker=PETR4&target=abc", "ticker=&market=b3",
-                      "ticker=PETR4&fraction=150", "ticker=PETR4&from=ontem", "ticker=PETR4&from=2021-12-01&to=2021-11-01",
+        for query in ("ticker=PETR4&market=xx", "ticker=PETR4&target=abc&saida=manual", "ticker=&market=b3",
+                      "ticker=PETR4&fraction=150&saida=manual", "ticker=PETR4&from=ontem", "ticker=PETR4&from=2021-12-01&to=2021-11-01",
                       "ticker=PETR4&to=2021-02-01", "ticker=PETR4&amount=0", "ticker=PETR4&amount=abc"):
             self.assertEqual(self.request("GET", f"/api/backtest?{query}")[0], 400, query)
 

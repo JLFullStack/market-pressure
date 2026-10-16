@@ -44,6 +44,8 @@ ANALYSIS_FIELDS = [
     ("price", ("price",), _f64),
     ("change", ("change",), _f64),
     ("above_rising_mm200", ("aboveRisingMM200",), _bool),
+    ("mm200_slope", ("mm200Slope",), _f64),
+    ("return_12m", ("return12m",), _f64),
     ("setup_ok", ("setup", "ok"), _bool),
     ("setup_ok_strict", ("setup", "okStrict"), _bool),
     ("setup_pullback", ("setup", "pullback"), _f64),
@@ -56,9 +58,14 @@ ANALYSIS_FIELDS = [
       for k in ("A", "B", "C", "obvPct", "closePct", "advanceRatio", "dryRatio", "regime", "reset",
                 "stochReset", "rsiMin", "stochMin", "hiddenDivergence", "hist", "zero", "macdAtr",
                 "support", "bbwPct", "range5Atr", "rsi", "stoch")],
-    *[(f"bt_{s}_{col}", ("backtest", s, key), kind) for s in ("loose", "strict")
+    # backtest do ativo com a venda parcial (loose/strict) e só com a reversão (looseRev/strictRev)
+    *[(f"bt_{col_s}_{col}", ("backtest", s, key), kind)
+      for s, col_s in (("loose", "loose"), ("strict", "strict"), ("looseRev", "loose_rev"), ("strictRev", "strict_rev"))
       for col, key, kind in (("wins", "wins", _i64), ("trades", "trades", _i64),
-                             ("win_rate", "winRate", _f64), ("avg_return", "avgReturn", _f64))],
+                             ("win_rate", "winRate", _f64), ("avg_return", "avgReturn", _f64),
+                             ("open", "open", _i64), ("open_return", "openReturn", _f64),
+                             ("recent_trades", "recentTrades", _i64), ("recent_wins", "recentWins", _i64),
+                             ("recent_return", "recentReturn", _f64))],
 ]
 
 SCHEMAS = {
@@ -79,6 +86,8 @@ SCHEMAS = {
                                ("created", _str)),
     # Configurações (strategy.py): estratégia de venda, uma linha; alvo e parte vendida em fração
     "settings": _schema(("strategy", _str), ("partial_target", _f64), ("partial_fraction", _f64)),
+    # regra de venda de cada tipo de ativo (strategy.GROUPS): "parcial" ou "reversao"
+    "settings_kinds": _schema(("kind", _str), ("strategy", _str)),
     # Screener
     "universe": _schema(("ticker", _str), ("name", _str), ("sector", _str), ("kind", _str), ("close", _f64),
                         ("volume", _f64), ("avg_volume", _f64)),

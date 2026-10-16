@@ -59,6 +59,8 @@ function init() {
     $('btForm').addEventListener('submit', (ev) => { ev.preventDefault(); if (state.mode === 'carteira') runPortfolio(); else run(); });
     $('btMode').addEventListener('click', (ev) => { const mode = ev.target.dataset?.mode; if (mode) setMode(mode); });
     $('pfUniverse').addEventListener('change', () => setMode(state.mode));
+    $('btExit').addEventListener('change', syncExit);
+    syncExit();
     try { $('pfLiquidity').value = localStorage.getItem(LIQUIDITY_KEY) || 'padrao'; } catch (e) { /* sem preferência salva */ }
     if (!$('pfLiquidity').value) $('pfLiquidity').value = 'padrao';
     $('pfLiquidity').addEventListener('change', () => {
@@ -92,10 +94,11 @@ function init() {
     const q = new URLSearchParams(location.search);
     if (q.get('mode') === 'carteira') {
         const fields = { universe: 'pfUniverse', tickers: 'pfTickers', topN: 'pfTopN', liquidity: 'pfLiquidity', initial: 'pfInitial', monthly: 'pfMonthly', position: 'pfPosition',
-                         maxAssets: 'pfMaxAssets', cost: 'pfCost', target: 'btTarget', fraction: 'btFraction', from: 'btFrom', to: 'btTo' };
+                         maxAssets: 'pfMaxAssets', cost: 'pfCost', target: 'btTarget', fraction: 'btFraction', from: 'btFrom', to: 'btTo', saida: 'btExit' };
         for (const [key, id] of Object.entries(fields)) if (q.get(key) !== null) $(id).value = q.get(key);
         $('btStrict').checked = q.get('strict') === '1';
         $('pfCdi').checked = q.get('cdi') !== '0';
+        syncExit();
         setMode('carteira');
         runPortfolio();
         return;
@@ -106,12 +109,22 @@ function init() {
         if (q.get('market')) $('btMarket').value = q.get('market') === 'us' ? 'us' : 'b3';
         if (q.get('target')) $('btTarget').value = q.get('target');
         if (q.get('fraction')) $('btFraction').value = q.get('fraction');
+        // Links antigos com alvo/parte e sem "saida" usam os valores do link.
+        $('btExit').value = q.get('saida') || (q.get('target') || q.get('fraction') ? 'manual' : 'config');
+        syncExit();
         if (q.get('amount')) $('btAmount').value = q.get('amount');
         if (q.get('from')) $('btFrom').value = q.get('from');
         if (q.get('to')) $('btTo').value = q.get('to');
         $('btStrict').checked = q.get('strict') === '1';
         run();
     }
+}
+
+// Saída "Conforme as Configurações": o alvo e a parte do formulário não valem (ficam desabilitados).
+function syncExit() {
+    const manual = $('btExit').value === 'manual';
+    $('btTarget').disabled = !manual;
+    $('btFraction').disabled = !manual;
 }
 
 // "Um ativo" ou "Carteira": mostra os campos e o resultado de cada modo.
@@ -141,7 +154,7 @@ async function run() {
     const params = new URLSearchParams({
         ticker: $('btTicker').value.trim(), market: $('btMarket').value,
         target: $('btTarget').value, fraction: $('btFraction').value, amount: $('btAmount').value,
-        strict: $('btStrict').checked ? '1' : '0'
+        strict: $('btStrict').checked ? '1' : '0', saida: $('btExit').value
     });
     // Período: só entra na consulta (e na URL) quando preenchido.
     if ($('btFrom').value) params.set('from', $('btFrom').value);
@@ -415,7 +428,8 @@ async function runPortfolio() {
         universe: $('pfUniverse').value, tickers: $('pfTickers').value, initial: $('pfInitial').value, monthly: $('pfMonthly').value,
         position: $('pfPosition').value, maxAssets: $('pfMaxAssets').value, topN: $('pfTopN').value, liquidity: $('pfLiquidity').value,
         cost: $('pfCost').value, target: $('btTarget').value,
-        fraction: $('btFraction').value, from: $('btFrom').value, to: $('btTo').value, strict: $('btStrict').checked, cdi: $('pfCdi').checked
+        fraction: $('btFraction').value, from: $('btFrom').value, to: $('btTo').value, strict: $('btStrict').checked, cdi: $('pfCdi').checked,
+        saida: $('btExit').value
     };
     const seq = ++state.seq;
     setMsg('');

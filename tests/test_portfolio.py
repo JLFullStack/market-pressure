@@ -20,10 +20,12 @@ class InputTest(unittest.TestCase):
         self.assertEqual(pf.normalize_ticker(" petr4.sa "), "PETR4")
 
     def test_suggest_class(self):
-        classes = [dict(c) for c in pf.DEFAULT_CLASSES]
-        self.assertEqual(pf.suggest_class("PETR4", "b3", classes), "Ações")
-        self.assertEqual(pf.suggest_class("HGLG11", "b3", classes), "FIIs")
-        self.assertEqual(pf.suggest_class("VOO", "us", classes), "Ativos Internacionais")
+        self.assertEqual(pf.suggest_class("PETR4", "b3"), "Ações")
+        self.assertEqual(pf.suggest_class("HGLG11", "b3"), "Fundos imobiliários")
+        self.assertEqual(pf.suggest_class("AAPL34", "b3"), "Internacionais")
+        self.assertEqual(pf.suggest_class("VOO", "us"), "Internacionais")
+        self.assertEqual(pf.suggest_class("BOVA11", "b3", kind="etfs"), "ETFs Brasil")
+        self.assertEqual(pf.suggest_class("IVVB11", "b3", kind="etfs", international=True), "Internacionais")
 
 
 class MigrationTest(unittest.TestCase):
@@ -35,10 +37,24 @@ class MigrationTest(unittest.TestCase):
         doc = pf.normalize_doc(legacy)
         p = doc["portfolios"][0]
         self.assertEqual(doc["version"], 2)
-        self.assertEqual(p["classes"], [{"name": "Ações", "target": 60}, {"name": "Renda fixa", "target": 40}])
+        self.assertEqual(p["classes"], [{"name": n, "target": {"Ações": 60, "Renda fixa": 40}.get(n, 0)} for n in pf.CLASS_NAMES])
         self.assertNotIn("targets", p)
         self.assertEqual(p["fixedIncome"][0]["class"], "Renda fixa")
         self.assertEqual(pf.normalize_doc(doc), doc)
+
+    def test_free_classes_become_the_fixed_ones(self):
+        old = {"id": "p", "name": "ARCA", "transactions": [], "fixedIncome": [],
+               "classes": [{"name": "Ações", "target": 60}, {"name": "ETFs", "target": 25},
+                           {"name": "Ativos Internacionais", "target": 10}, {"name": "Minha", "target": 5}],
+               "assets": {"PETR4": {"class": "Ações"}, "IVVB11": {"class": "Ativos Internacionais"},
+                          "AAPL34": {"class": "Minha"}, "VOO": {"class": "Minha", "market": "us"}}}
+        p = pf.normalize_portfolio(old)
+        self.assertEqual([c["name"] for c in p["classes"]], pf.CLASS_NAMES)
+        targets = {c["name"]: c["target"] for c in p["classes"]}
+        self.assertEqual((targets["Ações"], targets["ETFs Brasil"], targets["Internacionais"]), (60, 25, 15))
+        self.assertEqual({t: a["class"] for t, a in p["assets"].items()},
+                         {"PETR4": "Ações", "IVVB11": "Internacionais", "AAPL34": "Internacionais", "VOO": "Internacionais"})
+        self.assertEqual(pf.normalize_portfolio(p), p)
 
 
 class PositionsTest(unittest.TestCase):

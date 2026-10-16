@@ -14,7 +14,8 @@ class AnalysisTest(unittest.TestCase):
         self.assertTrue(result["setup"]["ok"])
         self.assertTrue(0 <= result["pressure"]["total"] <= 100)
         bt = screener.backtest(screener.compute_indicators(series), strict=False)
-        self.assertEqual(set(bt), {"wins", "trades", "winRate", "avgReturn"})
+        self.assertEqual(set(bt), {"wins", "trades", "winRate", "avgReturn", "open", "openReturn",
+                                   "recentTrades", "recentWins", "recentReturn"})
         parts = screener.justification(result)  # um aspecto por linha na coluna Justificativa
         self.assertEqual([p["label"] for p in parts], ["Setup", "Volume", "Momentum", "Tendência", "Estrutura"])
         self.assertTrue(all(p["items"] and all(i[0].isupper() for i in p["items"]) for p in parts))
@@ -269,14 +270,14 @@ class AnalysisPromptTest(DatabaseTestCase):
             scan = screener.run_scan()
             payload = screener.scan_payload(scan)
             lots = [{"date": "2021-05-01", "price": 120.0, "quantity": 100, "remaining": 100}]
-            text = ai_prompt.build(scan, payload, "AAAA3", "fechamento", False, lots, strategy.describe(strategy.DEFAULT))
+            text = ai_prompt.build(scan, payload, "AAAA3", "fechamento", False, lots, strategy.DEFAULT)
         row = payload["views"]["fechamento"]["rankings"][0]["loose"]["top"][0]
-        for part in ("50 anos", "COMPRAR AGORA", "ESPERAR", "Dados do ativo: AAAA3", "Rank**: 1º", "Score Composto**",
-                     "Média testada**: " + row["setup"]["ma"]["name"], "Estado da garrafa", "Indicação do app",
+        for part in ("50 anos", "COMPRAR AGORA", "COMPRAR COM", "Dados do ativo: AAAA3", "Rank**: 1º", "Score Composto**",
+                     "Média testada**: " + row["setup"]["ma"]["name"], "Estado da garrafa", "Indicação automática do app",
                      "Justificativa quantitativa", "Últimos 10 pregões", "MM200:", "BOVA11", "Compra aberta de 01/05/2021"):
             self.assertIn(part, text)
         with self.assertRaises(ValueError):  # fora do ranking
-            ai_prompt.build(scan, payload, "ZZZZ3", "fechamento", False, None, strategy.describe(strategy.DEFAULT))
+            ai_prompt.build(scan, payload, "ZZZZ3", "fechamento", False, None, strategy.DEFAULT)
 
 
 class DailyUpdateTest(DatabaseTestCase):

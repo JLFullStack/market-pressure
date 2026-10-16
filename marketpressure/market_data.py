@@ -177,6 +177,21 @@ def asset_kind(ticker: str, short_name: str = "", long_name: str = "") -> str | 
     return None
 
 
+# ETF do exterior (classe Internacionais): o nome cita um índice ou mercado de fora e não um do
+# Brasil (S&P/B3, Ibovespa, MSCI Brazil...). ETFs de ouro, dólar ou renda fixa ficam nos do Brasil.
+INTERNATIONAL_ETF_WORDS = ("EXTERIOR", "S&P 500", "S&P500", "NASDAQ", "GLOBAL", "WORLD", "ALL COUNTRIES",
+                           "MSCI US", "MSCI CHINA", " US ", "U.S", "USA", "CHINA", "EMERGING", "FANG", "ARGENTINA",
+                           "EX US", "RUSSELL", "SEMICONDUCTOR", "TECHNOLOGY", "HEALTHCARE", "URANIUM", "RARE EARTH",
+                           "VIDEO GAMING", "SMALLCAP 600", "LARGE CAP", "NYSE", "INVESTIMENTO NO EXTERIOR", " IE ")
+BRAZIL_ETF_WORDS = ("BRASIL", "BRAZIL", "IBOV", "BOVESPA", "B3", "IBRX", "IDIV", "IFIX")
+
+
+def international_etf(name):
+    """O ETF acompanha um índice do exterior (pelo nome do Yahoo/brapi)."""
+    words = f" {_plain(name or '')} "
+    return any(w in words for w in INTERNATIONAL_ETF_WORDS) and not any(w in words for w in BRAZIL_ETF_WORDS)
+
+
 def _yahoo_auth(refresh=False):
     """(opener com o cookie, crumb) da sessão do Yahoo, renovados a cada hora."""
     with _yahoo_lock:

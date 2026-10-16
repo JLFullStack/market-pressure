@@ -14,6 +14,7 @@ import threading
 import time
 
 from . import database as db
+from . import strategy as st
 from . import market_data, runtime
 from .core import (EXIT, REENTRY_DISTANCE, SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
                   evaluate_setup, exit_signal, fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_sessions, in_session_hours, last_close, session_in_progress)
@@ -63,16 +64,31 @@ CONFIG = {
     "reentryDistance": REENTRY_DISTANCE,  # recompra só a 5%+ do preço de cada compra da posição aberta (outro pullback)
     "priorWinRate": 0.5,      # base neutra para suavizar taxas de acerto com poucas amostras
     "priorWeight": 4,
-    # Indicação do ranking (advice): AGUARDAR quando o backtest do ativo perdeu dinheiro em média
-    # com pelo menos este número de compras encerradas (com menos, a amostra não diz nada).
-    "adviceMinTrades": 3,
+    # Backtest recente: compras encerradas nos últimos recentWindow pregões (3 anos). Nos backtests
+    # de carteira (2017–2026), cada compra de ações com o recente negativo rendeu −1,5% e com ele
+    # positivo +4,1% (o de 10 anos separava pouco); nos BDRs, recente negativo ainda deu +16,7%.
+    # Mesmo assim, tirar da carteira as ações com histórico negativo (10 ou 3 anos) reduziu o
+    # lucro (R$ 307 mil sem filtro x R$ 243–261 mil com): o histórico é um dado, não um veto.
+    "recentWindow": 756,
+    # Indicação do ranking (advice): com pelo menos este número de compras encerradas nos 3 anos e
+    # média negativa, o COMPRAR traz um alerta (nunca vira AGUARDAR), exceto nos tipos de
+    # adviceIgnoreKinds (grupos de strategy.GROUPS), em que o histórico não antecipou nada.
+    "adviceMinTrades": 2,
+    "adviceIgnoreKinds": ("internacionais",),
+    # AGUARDAR por tendência fraca (weak_trend), fora dos grupos de adviceIgnoreKinds: MM200 subindo
+    # menos de weakSlope em 20 pregões, retorno de 12 meses negativo ou recuo até a MM200. Nos
+    # backtests (ações, 2017–2026) essas compras renderam −2,1% x +0,8% (2017–2021) e −0,6% x
+    # +1,4% (2022–2026); na carteira, aguardá-las deu R$ 322 mil x R$ 307 mil comprando tudo, acima
+    # de 12 sorteios com o mesmo número de casos fora (R$ 192–310 mil). Nos internacionais nenhuma
+    # condição justificou esperar. Testado só em ações; fundos e ETFs Brasil seguem a mesma regra.
+    "weakSlope": 0.01,
     "bovaLookback": 252,      # pregões da variação de 12 meses do BOVA11
     "minCandles": 261,
 }
 
 log = logging.getLogger(__name__)
 
-SCAN_VERSION = 5  # mude se o formato das análises mudar (descarta a varredura salva no banco)
+SCAN_VERSION = 7  # mude se o formato das análises mudar (descarta a varredura salva no banco)
 MODES = ("fechamento", "intradiario")
 KINDS = ("acoes", "fundos", "etfs", "bdrs")  # tipos de ativo (market_data.asset_kind), um ranking cada
 
@@ -242,16 +258,45 @@ def lot_return(lot, fraction, mark=None):
     return end / entry - 1
 
 
-def backtest(ind, strict):
-    """Resumo de backtest_lots: cada compra encerrada é uma operação; acerto = retorno do lote
-    (parcial + saída) positivo. Compras ainda abertas no fim não contam."""
-    fraction = CONFIG["partialFraction"]
-    returns = [r for r in (lot_return(lot, fraction) for lot in backtest_lots(ind, strict)) if r is not None]
+def summarize_lots(lots, fraction, ind):
+    """Resumo de backtest_lots com `fraction` vendida no alvo (0 = só a reversão): cada compra
+    encerrada é uma operação; acerto = retorno do lote (parcial + saída) positivo, taxa suavizada
+    para priorWinRate. Também as compras ainda abertas (marcadas pelo último fechamento: num ativo
+    em tendência de alta costumam ser as melhores, e deixá-las de fora puxa o histórico para baixo)
+    e as encerradas nos últimos recentWindow pregões (o histórico recente)."""
+    last, mark = len(ind["candles"]) - 1, ind["candles"][-1].get("c")
+    closed = [(lot["exit"]["i"], lot_return(lot, fraction)) for lot in lots if lot["exit"]]
+    returns = [r for _, r in closed]
+    recent = [r for i, r in closed if i > last - CONFIG["recentWindow"]]
+    still = [lot for lot in lots if not lot["exit"]]
+    opened = [r for r in (lot_return(lot, fraction, mark) for lot in still) if r is not None]
     trades = len(returns)
     wins = sum(1 for r in returns if r > 0)
     smoothed = (wins + CONFIG["priorWinRate"] * CONFIG["priorWeight"]) / (trades + CONFIG["priorWeight"]) * 100
-    return {"wins": wins, "trades": trades, "winRate": smoothed,
-            "avgReturn": add_up(returns) / trades * 100 if trades else None}
+
+    def mean(values):
+        return add_up(values) / len(values) * 100 if values else None
+    return {"wins": wins, "trades": trades, "winRate": smoothed, "avgReturn": mean(returns),
+            "open": len(still), "openReturn": mean(opened),
+            "recentTrades": len(recent), "recentWins": sum(1 for r in recent if r > 0), "recentReturn": mean(recent)}
+
+
+def backtest(ind, strict, fraction=None):
+    """summarize_lots do backtest do ativo; fraction None = a do CONFIG."""
+    fraction = CONFIG["partialFraction"] if fraction is None else fraction
+    return summarize_lots(backtest_lots(ind, strict), fraction, ind)
+
+
+def backtests(ind):
+    """Os quatro backtests que o ranking usa: sem e com o candle de rejeição (loose/strict), com a
+    venda parcial do CONFIG e só com a reversão (sufixo Rev). As compras e saídas não dependem da
+    venda parcial, então cada filtro roda uma vez."""
+    out = {}
+    for strict, name in ((False, "loose"), (True, "strict")):
+        lots = backtest_lots(ind, strict)
+        out[name] = summarize_lots(lots, CONFIG["partialFraction"], ind)
+        out[name + "Rev"] = summarize_lots(lots, 0.0, ind)
+    return out
 
 
 def analyze_asset(candles, confirm_previous=False, kind="acoes"):
@@ -264,6 +309,10 @@ def analyze_asset(candles, confirm_previous=False, kind="acoes"):
         "price": candles[i]["c"],
         "change": (candles[i]["c"] / candles[i - 1]["c"] - 1) * 100,
         "aboveRisingMM200": setup["trend"],
+        # Força da tendência (indicação COMPRAR/AGUARDAR, weak_trend): inclinação da MM200 em 20
+        # pregões e retorno de 12 meses, em fração.
+        "mm200Slope": ind["mm200"][i] / ind["mm200"][i - 20] - 1 if i >= 20 and ind["mm200"][i - 20] else None,
+        "return12m": candles[i]["c"] / candles[i - 252]["c"] - 1 if i >= 252 else None,
         "setup": {k: setup[k] for k in ("ok", "okStrict", "pullback", "ma", "pattern")},
     }
     if not setup["ok"]:
@@ -271,7 +320,7 @@ def analyze_asset(candles, confirm_previous=False, kind="acoes"):
     return {
         **base,
         "pressure": pressure(ind, i, setup, confirm_previous, weights),
-        "backtest": {"loose": backtest(ind, False), "strict": backtest(ind, True)},
+        "backtest": backtests(ind),
     }
 
 
@@ -387,12 +436,24 @@ def build_scan(analyses, failures):
             "analyses": analyses, "failures": failures}
 
 
-def build_ranking(analyses, strict):
+def rule_group(a):
+    """Grupo da regra de venda de um ativo do ranking (strategy.group_of: BDRs e ETFs do exterior
+    são "internacionais")."""
+    return st.group_of(a.get("kind"), "b3", a.get("name") or "")
+
+
+def bt_key(strict, group, kinds=None):
+    """Qual backtest da análise vale para o grupo: com a venda parcial ("loose"/"strict") ou só com
+    a reversão (sufixo "Rev"), conforme a regra do grupo nas Configurações (kinds: {grupo: regra})."""
+    return ("strict" if strict else "loose") + ("Rev" if (kinds or {}).get(group or "acoes") == "reversao" else "")
+
+
+def build_ranking(analyses, strict, kinds=None):
     ranking = []
     for a in analyses:
         if not (a["setup"]["okStrict"] if strict else a["setup"]["ok"]):
             continue
-        bt = a["backtest"]["strict" if strict else "loose"]
+        bt = a["backtest"].get(bt_key(strict, rule_group(a), kinds)) or a["backtest"]["strict" if strict else "loose"]
         ranking.append({**a, "bt": bt, "score": a["pressure"]["total"] * 0.6 + bt["winRate"] * 0.4})
     ranking.sort(key=lambda a: -a["score"])
     return ranking
@@ -445,10 +506,10 @@ def analyses_for(scan, mode):
     return out
 
 
-def ranking_view(analyses, strict):
+def ranking_view(analyses, strict, kinds=None):
     """Top topN de um tipo (sem os ETFs duplicados), com as médias do top."""
-    ranking = build_ranking([a for a in analyses if not a.get("duplicateOf")], strict)
-    top = [{k: a[k] for k in ("ticker", "name", "sector", "price", "change", "setup", "bt", "score")}
+    ranking = build_ranking([a for a in analyses if not a.get("duplicateOf")], strict, kinds)
+    top = [{k: a.get(k) for k in ("ticker", "name", "sector", "price", "change", "setup", "bt", "score", "mm200Slope", "return12m")}
            | {"pressure": a["pressure"]["total"], "bottle": bottle_state(a["pressure"]["total"]),
               "justification": justification(a)} for a in ranking[:CONFIG["topN"]]]
     return {
@@ -459,13 +520,36 @@ def ranking_view(analyses, strict):
     }
 
 
-def advice(a, lots, strategy):
+def recent_negative(bt, kind):
+    """O backtest recente do ativo perdeu dinheiro em média (com adviceMinTrades compras ou mais)
+    num grupo em que isso pesou nas compras isoladas (fora de adviceIgnoreKinds)."""
+    return ((kind or "acoes") not in CONFIG["adviceIgnoreKinds"]
+            and (bt.get("recentTrades") or 0) >= CONFIG["adviceMinTrades"]
+            and bt.get("recentReturn") is not None and bt["recentReturn"] <= 0)
+
+
+def weak_trend(a):
+    """Motivos de tendência fraca do ativo do ranking (lista vazia = tendência firme)."""
+    reasons = []
+    if a.get("mm200Slope") is not None and a["mm200Slope"] < CONFIG["weakSlope"]:
+        reasons.append(f"a MM200 subiu só {fmt_num(a['mm200Slope'] * 100)}% em 20 pregões "
+                       f"(firme: {fmt_pct_value(CONFIG['weakSlope'])}% ou mais)")
+    if a.get("return12m") is not None and a["return12m"] < 0:
+        reasons.append(f"o preço caiu {fmt_num(-a['return12m'] * 100)}% em 12 meses")
+    if ((a.get("setup") or {}).get("ma") or {}).get("name") == "MM200":
+        reasons.append("o recuo chegou até a MM200, o último suporte da tendência")
+    return reasons
+
+
+def advice(a, lots, strategy, kind=None):
     """Coluna "Indicação" do ranking: COMPRAR ou AGUARDAR, com o motivo (o Screener não indica
     venda; isso é da Carteira). Todo ativo do ranking está no setup. AGUARDAR quando a carteira já
     tem uma compra aberta a menos de reentryDistance do preço (mesmo pullback: a estratégia só
-    recompra em outro) ou quando, no backtest do próprio ativo, a estratégia perdeu dinheiro em
-    média com pelo menos adviceMinTrades compras encerradas. lots: compras abertas do ativo na
-    carteira (portfolio_service.held_lots) ou None; strategy: a de strategy.py (texto da saída).
+    recompra em outro) ou quando a tendência está fraca (weak_trend; fora de adviceIgnoreKinds). O
+    histórico do ativo nunca gera AGUARDAR (nos backtests de carteira, vetar pelo histórico reduziu
+    o lucro); com o recente negativo (recent_negative), o COMPRAR traz um alerta. lots: compras abertas do ativo na carteira (portfolio_service.held_lots) ou None;
+    strategy: a regra do grupo ({key, target, fraction}, strategy.for_group), para o texto da
+    saída; kind: o grupo (rule_group).
     O motivo vem em parágrafos separados por "\n"."""
     price = a["price"]
     dist = CONFIG["reentryDistance"]
@@ -477,10 +561,14 @@ def advice(a, lots, strategy):
             f"a {fmt_num(gap * 100)}% do preço atual.\nA estratégia só recompra em outro pullback, "
             f"a {fmt_pct_value(dist)}% ou mais de cada compra aberta.")}
     bt = a["bt"]
-    if bt["trades"] >= CONFIG["adviceMinTrades"] and bt["avgReturn"] is not None and bt["avgReturn"] < 0:
+    weak = weak_trend(a) if (kind or "acoes") not in CONFIG["adviceIgnoreKinds"] else []
+    if weak:
         return {"action": "aguardar", "label": "AGUARDAR", "reason": (
-            f"Está no setup, mas no histórico deste ativo a estratégia perdeu em média {fmt_num(bt['avgReturn'])}% "
-            f"por compra ({bt['wins']} de {bt['trades']} com lucro).\nPrefira um ativo com histórico favorável.")}
+            "Está no setup, mas a tendência de alta está fraca: " + "; ".join(weak) + ".\n"
+            "Nos backtests do app (ações, 2017 a 2026), compras com a tendência fraca renderam em média menos que "
+            "as demais nas duas metades do período, e esperá-las aumentou o lucro da carteira.\n"
+            "Volta a ser compra num próximo pullback com a MM200 subindo firme, o retorno de 12 meses positivo e o "
+            "recuo segurando acima da MM50.")}
     ma = a["setup"]["ma"]
     reason = (f"Pullback na {ma['name']} (+{fmt_num(ma['dist'] * 100)}% acima da média), pressão "
               f"{fmt_num(a['pressure'], 0)}% e Score {fmt_num(a['score'])}.")
@@ -493,6 +581,10 @@ def advice(a, lots, strategy):
                    f"({fmt_brl(price * (1 + strategy['target']))}){rest}.")
     else:
         reason += "\nSaída: vender tudo na reversão de tendência."
+    if recent_negative(bt, kind):
+        reason += (f"\nAtenção: nos últimos 3 anos a estratégia perdeu em média {fmt_num(bt['recentReturn'])}% por compra "
+                   f"neste ativo ({bt['recentWins']} de {bt['recentTrades']} com lucro). É um dado, não um veto: nos "
+                   "testes de carteira, deixar de comprar pelo histórico reduziu o lucro.")
     return {"action": "comprar", "label": "COMPRAR", "reason": reason}
 
 
@@ -502,14 +594,19 @@ def top_tickers(payload):
             for k in ("loose", "strict") for a in r[k]["top"]}
 
 
-def with_advice(payload, lots, strategy):
+def with_advice(payload, lots, strategy_for):
     """Cópia do payload da varredura com a indicação (advice) em cada linha dos rankings. O payload
-    em cache é o mesmo para todos; a indicação depende da carteira e da estratégia de quem pede."""
-    def ranked(result):
-        return {**result, "top": [{**a, "advice": advice(a, lots.get(a["ticker"]), strategy)} for a in result["top"]]}
+    em cache é o mesmo para todos; a indicação depende da carteira e da estratégia de quem pede.
+    strategy_for(grupo) → a regra de venda do grupo ({key, target, fraction})."""
+    def ranked(result, kind):
+        def row(a):
+            group = rule_group({**a, "kind": kind})
+            return {**a, "advice": advice(a, lots.get(a["ticker"]), strategy_for(group), group)}
+        return {**result, "top": [row(a) for a in result["top"]]}
 
-    views = {mode: {**view, "rankings": [{**r, "loose": ranked(r["loose"]), "strict": ranked(r["strict"])}
-                                        for r in view["rankings"]]}
+    views = {mode: {**view, "rankings": [{**r, "loose": ranked(r["loose"], r["kind"]),
+                                          "strict": ranked(r["strict"], r["kind"])}
+                                         for r in view["rankings"]]}
              for mode, view in payload["views"].items()}
     return {**payload, "views": views}
 
@@ -520,7 +617,7 @@ def above_floor(scan, liquidity="padrao"):
             if (a.get("traded") or 0) >= liquidity_floor(a.get("kind") or "acoes", liquidity)]
 
 
-def views(scan, liquidity="padrao"):
+def views(scan, liquidity="padrao", kinds=None):
     """Tudo o que a página mostra, nas quatro combinações de base × candle de rejeição: um
     ranking por tipo de ativo (KINDS), cada um com a sua amplitude e regime (só com pelo menos
     regimeMinAssets ativos no tipo; abaixo disso, None = amostra pequena). Só os ativos acima
@@ -544,13 +641,15 @@ def views(scan, liquidity="padrao"):
                 "kind": kind, "scanned": len(group), "minAvgVolume": liquidity_floor(kind, liquidity),
                 "duplicates": sum(1 for a in group if a.get("duplicateOf")),
                 "breadth": breadth, "regime": regime(breadth) if breadth is not None else None,
-                "loose": ranking_view(group, False), "strict": ranking_view(group, True),
+                "loose": ranking_view(group, False, kinds), "strict": ranking_view(group, True, kinds),
             })
         result[mode] = view
     return result
 
 
-def scan_payload(scan, liquidity="padrao"):
+def scan_payload(scan, liquidity="padrao", kinds=None):
+    """O que /api/scan devolve. kinds: {tipo: regra de venda} das Configurações (muda a taxa de
+    acerto e o Score de cada tipo); None = venda parcial em todos."""
     failures = scan["failures"]
     return {
         "timestamp": scan["timestamp"],
@@ -560,7 +659,7 @@ def scan_payload(scan, liquidity="padrao"):
         "failures": len(failures),
         "apiErrors": sum(1 for f in failures if f["reason"] != "histórico insuficiente"),
         "liveSession": any(a["fechamento"]["date"] != a["intradiario"]["date"] for a in scan["analyses"]),
-        "views": views(scan, liquidity),
+        "views": views(scan, liquidity, kinds),
     }
 
 
@@ -646,13 +745,15 @@ class ScanJob:
         except Exception as err:
             self.fail(err)
 
-    def payload(self, liquidity="padrao"):
-        """Payload da varredura atual para a liquidez escolhida (montado uma vez por escolha)."""
+    def payload(self, liquidity="padrao", kinds=None):
+        """Payload da varredura atual para a liquidez e as regras de venda por tipo escolhidas
+        (montado uma vez por combinação)."""
         if not self.scan:
             return None
-        if liquidity not in self.payloads:
-            self.payloads[liquidity] = scan_payload(self.scan, liquidity)
-        return self.payloads[liquidity]
+        key = (liquidity, tuple(sorted((kinds or {}).items())))
+        if key not in self.payloads:
+            self.payloads[key] = scan_payload(self.scan, liquidity, kinds)
+        return self.payloads[key]
 
     def finish(self, scan):
         """Varredura concluída: guarda em memória e no banco."""
@@ -668,7 +769,7 @@ class ScanJob:
         with self.lock:
             self.error, self.running = str(err), False
 
-    def status(self, force=False, liquidity="padrao"):
+    def status(self, force=False, liquidity="padrao", kinds=None):
         with self.lock:
             if not self.running and not force and not self.error and not self._fresh():
                 self._reload()
@@ -680,8 +781,8 @@ class ScanJob:
             if self.error:
                 # Falhou: mostra a última varredura salva, se houver. A próxima chamada tenta de novo.
                 error, self.error = self.error, None
-                return {"state": "error", "message": error, "scan": self.payload(liquidity)}
-            return {"state": "done", "scan": self.payload(liquidity)}
+                return {"state": "error", "message": error, "scan": self.payload(liquidity, kinds)}
+            return {"state": "done", "scan": self.payload(liquidity, kinds)}
 
 
 scan_job = ScanJob()
@@ -715,7 +816,7 @@ def _pct_label(v):
     return fmt_num(v, 0 if float(v).is_integer() else 1)
 
 
-def _asset_info(ticker, market):
+def asset_info(ticker, market):
     """Nome e tipo do ativo pela última lista do screener (tabela universe); sem ela, pelo código."""
     if market != "b3":
         return ticker, "us"
@@ -806,7 +907,7 @@ def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False,
     histórico ou o período não bastam."""
     target = CONFIG["partialTarget"] if target is None else target
     fraction = CONFIG["partialFraction"] if fraction is None else fraction
-    name, kind = _asset_info(ticker, market)
+    name, kind = asset_info(ticker, market)
     candles = closed_candles(market_data.history(ticker, market)["candles"])
     if len(candles) < CONFIG["minCandles"]:
         raise ValueError(f"{ticker}: histórico insuficiente ({len(candles)} pregões; "

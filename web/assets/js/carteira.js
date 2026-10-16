@@ -141,8 +141,6 @@ async function init() {
     $('fiNewForm').addEventListener('submit', submitFixedIncomeItem);
     $('fiEntryForm').addEventListener('submit', submitFixedIncomeEntry);
     $('allocationBody').addEventListener('change', onAllocationChange);
-    $('allocationBody').addEventListener('click', onRemoveClass);
-    $('classForm').addEventListener('submit', submitClass);
     $('moveForm').addEventListener('submit', submitMove);
     $('historyBody').addEventListener('click', onHistoryClick);
     $('aporteAmount').addEventListener('input', onAporteInput);
@@ -803,25 +801,25 @@ function renderAllocation(a) {
         + 'Barra: preenchimento = % atual; traço = % meta.';
 }
 
-// Configurações: nome e meta editáveis de cada classe, o que há nela e o botão remover.
-// Usa só a estrutura da carteira (não precisa de cotações), então funciona antes do primeiro lançamento.
+// Configurações: as classes fixas (as mesmas da aba Configurações do site), com a meta editável, o
+// que há em cada uma e a regra de venda que a "Situação" segue. Usa só a estrutura da carteira (não
+// precisa de cotações), então funciona antes do primeiro lançamento.
 function renderClassConfig(st) {
     const classes = st?.classes || [];
     $('allocationBody').innerHTML = classes.map((c, k) => `
         <tr>
-            <td class="nowrap"><label class="sr-only" for="cls-${k}">Nome da classe</label>
-                <input type="text" class="select class-input" id="cls-${k}" data-rename="${escapeHTML(c.name)}" value="${escapeHTML(c.name)}" maxlength="40"></td>
+            <td class="nowrap"><strong>${escapeHTML(c.name)}</strong></td>
             <td class="r nowrap"><label class="sr-only" for="target-${k}">Meta de ${escapeHTML(c.name)} (%)</label>
                 <input type="number" class="select target-input" id="target-${k}" data-class="${escapeHTML(c.name)}" min="0" max="100" step="0.5" value="${c.target}"></td>
             <td class="small">${c.members.length ? escapeHTML(c.members.join(', ')) : '<span class="muted">vazia</span>'}</td>
-            <td class="c"><button type="button" class="link-btn" data-remove="${escapeHTML(c.name)}" aria-label="Remover a classe ${escapeHTML(c.name)}">Remover</button></td>
+            <td class="small muted">${escapeHTML(c.rule || '')}</td>
         </tr>`).join('') + `
         <tr><td><strong>Total</strong></td><td class="r nowrap"><strong>${fmtNum(st?.targetSum || 0)}%</strong></td><td colspan="2"></td></tr>`;
     const warn = $('targetsWarning');
     const off = !!st?.targetsOff;
     warn.style.color = off ? 'var(--warning)' : 'var(--text-muted)';
     warn.innerText = off ? `As metas somam ${fmtNum(st.targetSum)}%, não 100%. Ajuste os valores para que "para atingir a meta" e o aporte façam sentido.`
-        : 'Nome e meta são salvos na carteira ao editar. Só é possível remover uma classe vazia.';
+        : 'A meta é salva na carteira ao editar.';
 }
 
 // Configurações: meta de cada ativo com posição, agrupada por classe (mesmo cálculo do Aporte).
@@ -843,42 +841,13 @@ function renderAssetTargets(a) {
     $('assetTargetsWarnings').innerHTML = warnings.map(w => `<span class="warn-text">${escapeHTML(w)}</span>`).join('<br>');
 }
 
-// Edição de nome ou meta de uma classe na tabela de Configurações.
+// Edição da meta de uma classe na tabela de Configurações.
 async function onAllocationChange(ev) {
     const input = ev.target;
-    if (!current()) return;
-    if (input.dataset?.class !== undefined) {
-        const previous = state.structure?.classes.find(c => c.name === input.dataset.class)?.target ?? 0;
-        const res = await act('meta_classe', { cls: input.dataset.class, target: input.value });
-        if (res.error && !res.saveFailed) { input.value = previous; setMsg('classMsg', res.error, 'error'); }
-    } else if (input.dataset?.rename !== undefined) {
-        const previous = input.dataset.rename;
-        if (input.value.trim() === previous) return;
-        const res = await act('renomear_classe', { previous, name: input.value });
-        if (res.error && !res.saveFailed) input.value = previous;
-        setMsg('classMsg', res.error || res.message, res.error ? 'error' : 'ok');
-    }
-}
-
-async function onRemoveClass(ev) {
-    const btn = ev.target.closest?.('button[data-remove]');
-    if (!btn || !current()) return;
-    const name = btn.dataset.remove;
-    // Só pede confirmação quando a remoção é possível; senão o servidor explica o motivo.
-    const classes = state.structure?.classes || [];
-    const removable = classes.length > 1 && !classes.find(c => c.name === name)?.members.length;
-    if (removable && !confirm(`Remover a classe "${name}"?`)) return;
-    const res = await act('remover_classe', { name });
-    setMsg('classMsg', res.error || res.message, res.error ? 'error' : 'ok');
-}
-
-async function submitClass(ev) {
-    ev.preventDefault();
-    if (!current()) return;
-    const res = await act('nova_classe', { name: $('classNewName').value, target: $('classNewTarget').value });
-    if (res.error) return setMsg('classMsg', res.error, 'error');
-    $('classNewName').value = ''; $('classNewTarget').value = '';
-    setMsg('classMsg', res.message, 'ok');
+    if (!current() || input.dataset?.class === undefined) return;
+    const previous = state.structure?.classes.find(c => c.name === input.dataset.class)?.target ?? 0;
+    const res = await act('meta_classe', { cls: input.dataset.class, target: input.value });
+    if (res.error && !res.saveFailed) { input.value = previous; setMsg('classMsg', res.error, 'error'); }
 }
 
 // Move um ativo (ou título de renda fixa) para outra classe. A meta fixada do ativo é mantida.

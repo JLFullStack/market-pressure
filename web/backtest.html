@@ -102,6 +102,12 @@
                 <label class="field" data-mode="carteira" hidden><span>Custo por operação (%) <span class="tip" tabindex="0" data-tip="Corretagem, emolumentos e diferença de preço na execução, em % de cada compra e de cada venda." aria-label="Ajuda: Corretagem, emolumentos e diferença de preço na execução, em % de cada compra e de cada venda.">?</span></span>
                     <input type="number" id="pfCost" class="select" min="0" max="5" step="0.05" value="0.1" inputmode="decimal">
                 </label>
+                <label class="field"><span>Saída <span class="tip" tabindex="0" data-tip="Conforme as Configurações: cada tipo de ativo sai pela regra escolhida na aba Configurações (venda parcial no alvo + reversão, ou só a reversão). Informada aqui: o alvo e a parte vendida abaixo valem para todos os ativos." aria-label="Ajuda: Conforme as Configurações: cada tipo de ativo sai pela regra escolhida na aba Configurações (venda parcial no alvo + reversão, ou só a reversão). Informada aqui: o alvo e a parte vendida abaixo valem para todos os ativos.">?</span></span>
+                    <select id="btExit" class="select">
+                        <option value="config">Conforme as Configurações</option>
+                        <option value="manual">Informada aqui</option>
+                    </select>
+                </label>
                 <label class="field"><span>Alvo da venda parcial (%) <span class="tip" tabindex="0" data-tip="Alta sobre o preço de cada compra em que parte dela é vendida. Ex.: 10 = vende quando o preço sobe 10% acima do que você pagou naquela compra." aria-label="Ajuda: Alta sobre o preço de cada compra em que parte dela é vendida. Ex.: 10 = vende quando o preço sobe 10% acima do que você pagou naquela compra.">?</span></span>
                     <input type="number" id="btTarget" class="select" min="0.5" max="500" step="0.5" value="10" inputmode="decimal">
                 </label>

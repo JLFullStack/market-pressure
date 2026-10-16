@@ -27,6 +27,7 @@ from datetime import date
 from . import database as db
 from . import market_data, runtime
 from . import screener as sc
+from . import strategy as st
 from .core import (EXIT, add_up, adjusted_candles, closed_candles, compute_indicators, day_of, evaluate_setup,
                    exit_signal, fmt_brl, fmt_date, fmt_num, fmt_sessions)
 
@@ -83,7 +84,7 @@ def parse_params(body):
                 raise ValueError("Informe as datas do período como AAAA-MM-DD.") from None
     if start and end and start >= end:
         raise ValueError("O início do período deve ser antes do fim.")
-    return {
+    params = {
         "universe": universe, "tickers": tickers, "start": start, "end": end,
         "initial": _number(body, "initial", 10_000, 100, 1e9, "O capital inicial"),
         "monthly": _number(body, "monthly", 0, 0, 1e8, "O aporte mensal"),
@@ -96,7 +97,21 @@ def parse_params(body):
         "strict": bool(body.get("strict")),
         "cdi": body.get("cdi", True) is not False,
         "liquidity": _liquidity(body.get("liquidity")),
+        "exit": _exit(body.get("saida")),
     }
+    if params["exit"] == "config":
+        # Saída das Configurações: a regra de cada grupo (reversão = sem venda parcial).
+        settings = st.load()
+        params["rules"] = {group: (rule["target"], rule["fraction"] if rule["key"] == "parcial" else 0.0)
+                           for group in st.GROUPS for rule in [st.for_group(settings, group)]}
+    return params
+
+
+def _exit(value):
+    value = str(value or "config")
+    if value not in ("config", "manual"):
+        raise ValueError("Escolha a saída: a das Configurações ou a informada no formulário.")
+    return value
 
 
 def _liquidity(value):
@@ -230,8 +245,20 @@ def _first_sessions(cal):
 
 def simulate(data, cal, params, fraction, cdi):
     """Uma carteira do primeiro ao último dia de cal. Devolve a curva diária (patrimônio, aportado,
-    caixa), os aportes e as operações (uma por compra)."""
+    caixa), os aportes e as operações (uma por compra). fraction None = a regra de cada tipo
+    (params["rules"]: {grupo: (alvo, parte vendida)}, grupo pelo tipo e nome do ativo,
+    screener.rule_group); um número = a mesma parte para todos."""
     target, cost, reentry = params["target"], params["cost"], sc.CONFIG["reentryDistance"]
+    rules = params.get("rules") if fraction is None else None
+
+    groups = {}
+
+    def rule_of(t):
+        if not rules:
+            return target, fraction
+        if t not in groups:
+            groups[t] = sc.rule_group(data[t])
+        return rules.get(groups[t], (target, 0.0))
     months = _first_sessions(cal)
     cash = contributed = params["initial"]
     flows = [(cal[0], params["initial"])]
@@ -294,14 +321,15 @@ def simulate(data, cal, params, fraction, cdi):
             a = data[t]
             c = a["candles"][i]
             last_px[t] = c["c"]
+            tg, fr = rule_of(t)
             for lot in hold.get(t, ()):
                 trade = trades[lot["trade"]]
                 trade["peakClose"] = max(trade["peakClose"], c["c"])
                 trade["peakHigh"] = max(trade["peakHigh"], c["h"])
-                goal = lot["price"] * (1 + target)
-                if fraction > 0 and not lot["hit"] and i > lot["i"] and c["h"] >= goal:
+                goal = lot["price"] * (1 + tg)
+                if fr > 0 and not lot["hit"] and i > lot["i"] and c["h"] >= goal:
                     price = max(goal, c["o"])
-                    qty = lot["qty"] * fraction
+                    qty = lot["qty"] * fr
                     value = qty * price * (1 - cost)
                     cash += value
                     lot["qty"] -= qty
@@ -522,11 +550,18 @@ def run(params):
             log.warning("CDI indisponível para o backtest de carteira", exc_info=True)
             warnings.append(f"CDI indisponível ({err}): o caixa parado não rendeu juros e a linha do CDI ficou de fora.")
 
-    fraction = params["fraction"]
     pct = lambda v: fmt_num(v * 100, 0 if float(round(v * 100, 4)).is_integer() else 1)
-    rule_label = f"{pct(fraction)}% em +{pct(params['target'])}% + regra B" if fraction > 0 else "Só a regra B"
+    if params.get("rules"):
+        fraction = None
+        used = {sc.rule_group(data[t]) for t in data}
+        has_partial = any(params["rules"].get(k, (0, 0.0))[1] > 0 for k in used)
+        rule_label = "Saída das Configurações (por tipo)"
+    else:
+        fraction = params["fraction"]
+        has_partial = fraction > 0
+        rule_label = f"{pct(fraction)}% em +{pct(params['target'])}% + regra B" if fraction > 0 else "Só a regra B"
     runs = [("rule", rule_label, fraction)]
-    if fraction > 0:
+    if has_partial:
         runs.append(("onlyB", "Só a regra B", 0.0))
     strategies, trades_main, flows = [], [], None
     for key, label, f in runs:
@@ -545,7 +580,7 @@ def run(params):
                            "curve": _profit_series(cdi_curve), "years": _yearly(cdi_curve, flows)})
 
     compare = None
-    if fraction > 0:
+    if has_partial:
         a, b = strategies[0]["metrics"]["profit"], strategies[1]["metrics"]["profit"]
         partial, only_b = f"a estratégia com venda parcial ({rule_label})", "só a regra B"
         if abs(a - b) < 0.005:
@@ -577,9 +612,11 @@ def run(params):
         "bounds": {"min": first_day, "max": last_day, "from": cal[0], "to": cal[-1]}, "note": note,
         "universe": {"label": UNIVERSES[params["universe"]], "candidates": len(assets), "ranked": len(data),
                      "illiquid": illiquid},
-        "params": {k: params[k] for k in ("initial", "monthly", "maxAssets", "topN", "strict", "cdi", "liquidity")}
+        "params": {k: params[k] for k in ("initial", "monthly", "maxAssets", "topN", "strict", "cdi", "liquidity", "exit")}
                   | {"position": params["position"] * 100, "cost": params["cost"] * 100,
-                     "target": params["target"] * 100, "fraction": fraction * 100},
+                     "target": params["target"] * 100, "fraction": params["fraction"] * 100,
+                     "rules": {k: {"target": v[0] * 100, "fraction": v[1] * 100}
+                               for k, v in (params.get("rules") or {}).items()}},
         "strategies": strategies, "compare": compare, "trades": rows, "markers": _markers(rows),
         "assets": sorted(traded.values(), key=lambda x: (-x["trades"], x["ticker"])), "warnings": warnings,
     }

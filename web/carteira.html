@@ -137,7 +137,7 @@
             <div class="panel">
                 <div class="panel-head">
                     <h2>Alocação por classe</h2>
-                    <a href="#configuracoes" class="inline-link small">Editar classes e metas</a>
+                    <a href="#configuracoes" class="inline-link small">Editar metas e classes dos ativos</a>
                 </div>
                 <div class="table-container">
                     <table>
@@ -594,24 +594,18 @@
                             <th>Classe</th>
                             <th class="r">Meta (%)</th>
                             <th>Ativos e títulos</th>
-                            <th class="c"><span class="sr-only">Remover</span></th>
+                            <th>Regra de venda</th>
                         </tr>
                     </thead>
                     <tbody id="allocationBody"></tbody>
                 </table>
             </div>
             <p class="small" id="targetsWarning" role="status"></p>
-            <form id="classForm" novalidate>
-                <div class="form-grid">
-                    <label class="field">Nova classe
-                        <input type="text" id="classNewName" class="select" maxlength="40" placeholder="Ex.: Cripto" autocomplete="off">
-                    </label>
-                    <label class="field">Meta (%)
-                        <input type="number" id="classNewTarget" class="select" min="0" max="100" step="0.5" inputmode="decimal" placeholder="0">
-                    </label>
-                    <div><button type="submit" class="btn-secondary">Adicionar classe</button></div>
-                </div>
-            </form>
+            <ul class="notes">
+                <li>As <strong>classes são fixas</strong> e as mesmas da aba <a href="configuracoes.html" class="inline-link">Configurações</a>: a "Situação" de cada posição segue a regra de venda da classe do ativo.</li>
+                <li><strong>Internacionais</strong>: BDRs, ETFs do exterior (IVVB11, WRLD11...), ativos dos EUA e cripto. <strong>ETFs Brasil</strong>: ETFs de índices brasileiros (BOVA11, SMAL11...).</li>
+                <li>Se um ativo estiver na classe errada, use "Mover ativo".</li>
+            </ul>
             <form id="moveForm" novalidate style="margin-top: 12px;">
                 <div class="form-grid">
                     <label class="field">Mover ativo

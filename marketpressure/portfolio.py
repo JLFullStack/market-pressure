@@ -14,13 +14,31 @@ from decimal import ROUND_HALF_UP, Decimal
 from .core import (EXIT, REENTRY_DISTANCE, add_up, closed_candles, compute_indicators, day_of, evaluate_setup, exit_signal,
                   fmt_date, fmt_num, fmt_pct_value, fmt_qty, iso_day_in, js_round, today_iso)
 
-# Classes sugeridas para uma carteira nova (método ARCA). O usuário cria, renomeia e remove.
-DEFAULT_CLASSES = [
-    {"name": "Ações", "target": 35},
-    {"name": "FIIs", "target": 20},
-    {"name": "Renda Fixa", "target": 10},
-    {"name": "Ativos Internacionais", "target": 35},
+# Classes da carteira: fixas e as mesmas da aba Configurações. "group" é o grupo da regra de
+# venda (strategy.py); a situação de cada posição segue a regra da classe do ativo. Renda fixa
+# (títulos) não tem regra. O usuário só muda as metas e a classe de cada ativo.
+CLASSES = [
+    {"name": "Ações", "group": "acoes"},
+    {"name": "Fundos imobiliários", "group": "fundos"},
+    {"name": "ETFs Brasil", "group": "etfs"},
+    {"name": "Internacionais", "group": "internacionais"},
+    {"name": "Renda fixa", "group": None},
 ]
+CLASS_NAMES = [c["name"] for c in CLASSES]
+CLASS_GROUP = {c["name"]: c["group"] for c in CLASSES}
+FIXED_INCOME_CLASS = "Renda fixa"
+INTERNATIONAL_CLASS = "Internacionais"
+# Metas de uma carteira nova (método ARCA).
+DEFAULT_TARGETS = {"Ações": 35, "Fundos imobiliários": 20, "ETFs Brasil": 0, "Internacionais": 35, "Renda fixa": 10}
+DEFAULT_CLASSES = [{"name": n, "target": DEFAULT_TARGETS[n]} for n in CLASS_NAMES]
+# Nomes das classes livres de antes → classe fixa (migração; o primeiro que casar vale).
+CLASS_ALIASES = (
+    (r"renda\s*fixa|tesouro|\bcdb\b", "Renda fixa"),
+    (r"internac|exterior|global|\bbdr|\beua\b|usa|cripto|crypto", "Internacionais"),
+    (r"\bfii|fundo|imobili|fiagro", "Fundos imobiliários"),
+    (r"\betf", "ETFs Brasil"),
+    (r"^a[cç][oõ]es$|^acao$|^ação$", "Ações"),
+)
 # Ordem das classes fixas do formato antigo (portfolio.targets), usada na migração.
 LEGACY_CLASSES = ["Ações", "ETFs", "FIIs", "BDRs", "Renda fixa"]
 # Mercados de um ativo (assets[TICKER].market; ausente = "b3"). Fora da B3 o preço é em US$.
@@ -112,24 +130,35 @@ def find_class(classes, pattern):
     return next((c["name"] for c in classes if re.search(pattern, c["name"], re.I)), None)
 
 
-def suggest_class(ticker, market, classes):
-    """Classe sugerida para um ticker novo: EUA/cripto vão para a classe internacional; na B3,
-    final 32/33/34/35/39 = BDR, 11 = FII (pode ser ETF); o resto, ações."""
-    first = classes[0]["name"] if classes else None
-    intl = find_class(classes, r"internac|exterior|global")
-    acoes = find_class(classes, r"^a[cç][oõ]es$")
+def class_for_name(name):
+    """Classe fixa que corresponde ao nome de uma classe livre antiga (CLASS_ALIASES), ou None."""
+    name = str(name or "").strip()
+    if name in CLASS_NAMES:
+        return name
+    return next((cls for pattern, cls in CLASS_ALIASES if re.search(pattern, name, re.I)), None)
+
+
+def suggest_class(ticker, market, classes=None, kind=None, international=False):
+    """Classe de um ativo pelo tipo: EUA/cripto, BDRs e ETFs do exterior → Internacionais; na B3,
+    o tipo do screener (kind: "acoes", "fundos", "etfs", "bdrs"; international = ETF do exterior)
+    ou, sem ele, o código: final 32/33/34/35/39 = BDR, 11 = fundo imobiliário (pode ser ETF), o
+    resto ações. classes: ignorado (as classes são fixas)."""
     if market and market != "b3":
-        return intl or first
-    if re.search(r"(32|33|34|35|39)$", ticker):
-        return find_class(classes, r"^bdr") or intl or acoes or first
-    if ticker.endswith("11"):
-        return find_class(classes, r"^fii") or first
-    return acoes or first
+        return INTERNATIONAL_CLASS
+    if kind == "bdrs" or (kind == "etfs" and international):
+        return INTERNATIONAL_CLASS
+    if kind in ("acoes", "fundos", "etfs"):
+        return next(c["name"] for c in CLASSES if c["group"] == kind)
+    if re.search(r"(32|33|34|35|39)$", ticker or ""):
+        return INTERNATIONAL_CLASS
+    if (ticker or "").endswith("11"):
+        return "Fundos imobiliários"
+    return "Ações"
 
 
-def fixed_income_class(classes):
-    """Classe padrão dos títulos de renda fixa: a que se chama "Renda fixa" (qualquer caixa)."""
-    return find_class(classes, r"^renda fixa$") or "Renda Fixa"
+def fixed_income_class(classes=None):
+    """Classe padrão dos títulos de renda fixa."""
+    return FIXED_INCOME_CLASS
 
 
 def _number(v):
@@ -141,26 +170,42 @@ def _number(v):
 
 
 def normalize_portfolio(p):
-    """Migração transparente para o formato com classes configuráveis. Carteiras antigas têm
-    targets: { Ações, ETFs, FIIs, BDRs, Renda fixa }; viram classes com as mesmas metas, sem
-    perder nada. Toda classe citada por um ativo ou título passa a existir (meta 0 se nova).
-    Idempotente: uma carteira já normalizada volta igual."""
+    """Migração transparente para as classes fixas (CLASSES). Cada ativo vai para a classe fixa
+    que corresponde ao nome da sua classe antiga (CLASS_ALIASES) ou, sem correspondência, à do
+    seu tipo pelo código (suggest_class); títulos sem correspondência vão para Renda fixa. A meta
+    de cada classe fixa é a soma das metas das classes antigas que caíram nela (pelo nome ou, sem
+    correspondência, pela classe para onde foi a maioria dos seus ativos). Carteiras ainda mais
+    antigas têm targets: { Ações, ETFs, FIIs, BDRs, Renda fixa }. Idempotente: uma carteira já
+    normalizada volta igual."""
     if isinstance(p.get("classes"), list):
-        classes = [{"name": str(c.get("name")), "target": _number(c.get("target"))} for c in p["classes"]]
+        old = [{"name": str(c.get("name")), "target": _number(c.get("target"))} for c in p["classes"]]
     elif isinstance(p.get("targets"), dict):
         t = p["targets"]
         names = [n for n in LEGACY_CLASSES if n in t] + [n for n in t if n not in LEGACY_CLASSES]
-        classes = [{"name": n, "target": _number(t[n])} for n in names]
+        old = [{"name": n, "target": _number(t[n])} for n in names]
     else:
-        classes = [dict(c) for c in DEFAULT_CLASSES]
-    fi_class = fixed_income_class(classes)
-    fixed_income = [{**f, "class": f.get("class") or fi_class, "entries": f.get("entries") or []}
-                    for f in p.get("fixedIncome") or []]
-    assets = dict(p.get("assets") or {})
-    used = [a.get("class") for a in assets.values()] + [f["class"] for f in fixed_income]
-    for name in used:
-        if name and not any(c["name"] == name for c in classes):
-            classes.append({"name": name, "target": 0})
+        old = None
+    moved = {}  # classe antiga → [classes fixas para onde foram os seus ativos e títulos]
+    assets = {}
+    for t, a in (p.get("assets") or {}).items():
+        new = class_for_name(a.get("class")) or suggest_class(t, a.get("market") or "b3")
+        moved.setdefault(a.get("class"), []).append(new)
+        assets[t] = {**a, "class": new}
+    fixed_income = []
+    for f in p.get("fixedIncome") or []:
+        new = class_for_name(f.get("class")) or FIXED_INCOME_CLASS
+        moved.setdefault(f.get("class"), []).append(new)
+        fixed_income.append({**f, "class": new, "entries": f.get("entries") or []})
+    if old is None:
+        targets = dict(DEFAULT_TARGETS)
+    else:
+        targets = dict.fromkeys(CLASS_NAMES, 0)
+        for c in old:
+            went = moved.get(c["name"]) or []
+            new = class_for_name(c["name"]) or (max(set(went), key=went.count) if went else None)
+            if new:
+                targets[new] += c["target"]
+    classes = [{"name": n, "target": targets[n]} for n in CLASS_NAMES]
     rest = {k: v for k, v in p.items() if k != "targets"}
     return {**rest, "classes": classes, "assets": assets, "transactions": p.get("transactions") or [],
             "fixedIncome": fixed_income,
@@ -890,9 +935,11 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, str
     """Consolida a carteira: posições, renda fixa, proventos, alocação, KPIs e série de rentabilidade.
     histories: { TICKER: histórico na moeda do ativo, USDBRL: câmbio, BOVA11 }. Ativos fora da
     B3 são convertidos para reais (convert_history); o setup e a situação usam o histórico original.
-    strategy: estratégia de venda (strategy.py) da situação de cada posição; None = a padrão."""
+    strategy: estratégia de venda (strategy.py) da situação de cada posição — uma regra
+    ({key, target, fraction}) para todas, ou uma função (ticker, market) → regra (a do tipo de
+    cada ativo); None = a padrão."""
     as_of = as_of or today_iso(now)
-    strategy = strategy or DEFAULT_STRATEGY
+    rule_for = strategy if callable(strategy) else (lambda t, m, s=strategy or DEFAULT_STRATEGY: s)
     txs = portfolio.get("transactions") or []
     positions_map = build_positions(txs)
     brl = {BENCHMARK: histories.get(BENCHMARK)}
@@ -927,7 +974,7 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, str
         if n:
             memo = {}
             if p["quantity"] > 0:
-                held = holding_signal(txs, p["ticker"], raw, market, strategy, now, memo)
+                held = holding_signal(txs, p["ticker"], raw, market, rule_for(p["ticker"], market), now, memo)
                 signal, partial = held["signal"], held["partial"]
             setup = {mode: setup_now(raw, market, mode, now, memo) for mode in ("fechamento", "intradiario")}
         positions.append({

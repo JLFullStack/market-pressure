@@ -5,7 +5,7 @@ from tests.support import DatabaseTestCase, raw_history
 
 
 def params(**kw):
-    base = {"universe": "lista", "tickers": "PETR4, VALE3, ITUB4", "initial": "10000", "cdi": False}
+    base = {"universe": "lista", "tickers": "PETR4, VALE3, ITUB4", "initial": "10000", "cdi": False, "saida": "manual"}
     return pb.parse_params({**base, **kw})
 
 

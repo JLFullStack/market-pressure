@@ -264,6 +264,11 @@ def set_class_target(doc, body):
     return {}
 
 
+def fixed_classes(doc, body):
+    raise ActionError("As classes são fixas (as mesmas da aba Configurações): só a meta de cada uma e a classe "
+                      "de cada ativo podem mudar.")
+
+
 def rename_class(doc, body):
     cur = _find(doc, body.get("id"))
     previous, name = body.get("previous"), str(body.get("name") or "").strip()
@@ -422,9 +427,9 @@ ACTIONS = {
     "lancamento_titulo": add_fixed_income_entry,
     "excluir_lancamento": delete_entry,
     "meta_classe": set_class_target,
-    "renomear_classe": rename_class,
-    "nova_classe": add_class,
-    "remover_classe": remove_class,
+    "renomear_classe": fixed_classes,
+    "nova_classe": fixed_classes,
+    "remover_classe": fixed_classes,
     "mover_ativo": move_asset,
     "meta_ativo": set_asset_target,
     "registrar_lote": register_batch,
