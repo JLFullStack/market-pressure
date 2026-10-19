@@ -126,6 +126,7 @@ async function init() {
     $('renamePortfolioBtn').addEventListener('click', renamePortfolio);
     $('deletePortfolioBtn').addEventListener('click', deletePortfolio);
     $('refreshBtn').addEventListener('click', () => refresh());
+    $('analyzePortfolioBtn').addEventListener('click', analyzePortfolio);
     $('periodButtons').addEventListener('click', (ev) => {
         const period = ev.target.dataset?.period;
         if (!period) return;
@@ -1341,6 +1342,19 @@ async function onGoalsClick(ev) {
         const res = await act('excluir_meta', { goalId: g.id });
         setMsg('goalMsg', res.error || res.message, res.error ? 'error' : 'ok');
         if (!res.error && state.editingGoal === g.id) resetGoalForm();
+    }
+}
+
+// "ANALISAR CARTEIRA": o texto para uma IA sobre a carteira e cada ativo dela vem pronto do
+// servidor (portfolio_prompt.py); copyServerText (core.js) copia ou abre a janela para copiar.
+async function analyzePortfolio() {
+    const portfolio = current();
+    if (!portfolio) return;
+    try {
+        await copyServerText($('analyzePortfolioBtn'), apiGet(`/carteira/${portfolio.id}/prompt`).then(r => r.text),
+            `Análise da carteira ${portfolio.name}`);
+    } catch (e) {
+        showError(`Não foi possível montar a análise da carteira (${e.message}).`);
     }
 }
 

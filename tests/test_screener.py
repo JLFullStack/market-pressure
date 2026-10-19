@@ -2,7 +2,8 @@ import unittest
 from datetime import datetime
 from unittest import mock
 
-from marketpressure import ai_prompt, screener, strategy, update
+from marketpressure import ai_prompt, portfolio_prompt, screener, strategy, update
+from marketpressure import portfolio as pf
 from marketpressure.core import SAO_PAULO
 from tests.support import DatabaseTestCase, candles, raw_history
 
@@ -278,6 +279,23 @@ class AnalysisPromptTest(DatabaseTestCase):
             self.assertIn(part, text)
         with self.assertRaises(ValueError):  # fora do ranking
             ai_prompt.build(scan, payload, "ZZZZ3", "fechamento", False, None, strategy.DEFAULT)
+
+    def test_portfolio_prompt_ranks_only_classes_with_a_target(self):
+        n = next(n for n in range(262, 400) if screener.analyze_asset(candles(n))["setup"]["ok"])
+        universe = [{"ticker": "AAAA3", "name": "Empresa A", "sector": "Energia", "kind": "acoes"},
+                    {"ticker": "AAPL34", "name": "Apple", "sector": "", "kind": "bdrs"}]
+        with mock.patch.object(screener, "load_universe", return_value=universe), \
+                mock.patch.object(screener.market_data, "raw_history", lambda t, market="b3": raw_history(t, n=n)):
+            rankings = screener.scan_payload(screener.run_scan())["views"]["fechamento"]["rankings"]
+        portfolio = {"classes": [{"name": c, "target": 100 if c == "Ações" else 0} for c in pf.CLASS_NAMES],
+                     "assets": {}, "transactions": []}
+        text = "\n".join(portfolio_prompt._screener_section(portfolio, rankings, strategy.DEFAULT))
+        self.assertIn("## Ações (meta 100,0%)", text)
+        self.assertIn("| 1º | AAAA3 — Empresa A |", text)
+        self.assertNotIn("## Internacionais", text)  # meta 0%: o ranking de BDRs fica de fora
+        self.assertNotIn("AAPL34", text)
+        portfolio["classes"] = [{"name": c, "target": 0} for c in pf.CLASS_NAMES]
+        self.assertEqual(portfolio_prompt._screener_section(portfolio, rankings, strategy.DEFAULT), [])
 
 
 class DailyUpdateTest(DatabaseTestCase):

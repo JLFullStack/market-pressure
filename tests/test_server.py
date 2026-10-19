@@ -149,5 +149,21 @@ class ServerTest(DatabaseTestCase):
         self.assertGreater(data["goals"][0]["result"]["reach"]["months"], 0)
 
 
+    def test_portfolio_prompt(self):
+        pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "IA"})[1]["id"]
+        self.assertEqual(self.request("GET", f"/api/carteira/{pid}/prompt")[0], 400)
+        for ticker, price in (("PETR4", 120), ("VALE3", 125)):
+            self.request("POST", "/api/carteira/acao", {"action": "nova_operacao", "id": pid, "ticker": ticker, "market": "b3",
+                                                        "type": "compra", "date": "2021-09-01", "quantity": "10",
+                                                        "price": str(price), "fees": "0"})
+        with mock.patch.object(market_data, "cdi", lambda start: {"rates": []}):
+            status, data, _ = self.request("GET", f"/api/carteira/{pid}/prompt")
+        self.assertEqual(status, 200)
+        self.assertEqual(data["name"], "IA")
+        for part in ("# Minha carteira: IA", "## PETR4", "## VALE3", "# Alocação por classe", "Situação do app",
+                     "Compras abertas: 01/09/2021", "MANTER", "**Ações**"):
+            self.assertIn(part, data["text"])
+        self.assertEqual(self.request("GET", "/api/carteira/nao-existe/prompt")[0], 404)
+
 if __name__ == "__main__":
     unittest.main()

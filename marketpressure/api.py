@@ -16,6 +16,7 @@ from . import goals as gl
 from . import market_data, screener
 from . import portfolio as pf
 from . import portfolio_backtest as pb
+from . import portfolio_prompt
 from . import portfolio_service as svc
 from . import portfolio_store as store
 from . import strategy as st
@@ -249,6 +250,12 @@ def get_asset_info(req):
 @route("GET", f"/api/carteira/{PORTFOLIO_ID}/analise")
 def get_analysis(req):
     return svc.analysis_payload(portfolio_of(req, needs_entries=True))
+
+
+@route("GET", f"/api/carteira/{PORTFOLIO_ID}/prompt")
+def get_portfolio_prompt(req):
+    """Botão "ANALISAR CARTEIRA": o texto para uma IA sobre a carteira e cada ativo dela."""
+    return portfolio_prompt.prompt(portfolio_of(req, needs_entries=True))
 
 
 @route("GET", f"/api/carteira/{PORTFOLIO_ID}/proventos")

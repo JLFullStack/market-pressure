@@ -269,6 +269,60 @@ function setupTips() {
 }
 document.addEventListener('DOMContentLoaded', () => { setupTips(); keepTipsWithText(); });
 
+// ---------------------------------------------------------------- Copiar texto para IA
+
+// Botões que copiam um texto montado no servidor (as análises para IA do Screener e da Carteira).
+// O ClipboardItem recebe a promessa do texto, para a cópia valer como parte do clique mesmo com a
+// resposta chegando depois (o Safari exige); sem ele, copia ao chegar. Se o navegador recusar,
+// o texto abre numa janela para copiar à mão. Erro ao montar o texto: o botão mostra "ERRO" e a
+// promessa devolvida é rejeitada com ele, para a página mostrar a mensagem.
+async function copyServerText(btn, textPromise, title, doneText = 'COPIADA ✓') {
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'COPIANDO...';
+    textPromise.catch(() => { /* tratado abaixo */ });
+    let done = doneText, error = null;
+    try {
+        if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+            const blob = textPromise.then(t => new Blob([t], { type: 'text/plain' }));
+            await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+        } else {
+            await navigator.clipboard.writeText(await textPromise);
+        }
+    } catch (err) {
+        const text = await textPromise.catch(e => { error = e; return null; });
+        if (text !== null) {
+            done = label;
+            showCopyDialog(title, text);
+        } else {
+            done = 'ERRO';
+        }
+    }
+    btn.textContent = done;
+    setTimeout(() => {
+        btn.textContent = label;
+        btn.disabled = false;
+    }, 2000);
+    if (error) throw error;
+}
+
+function showCopyDialog(title, text) {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'copy-dialog';
+    dialog.innerHTML = `<h3>${escapeHTML(title)}</h3>
+        <p class="small muted">O navegador não deixou copiar sozinho. Selecione o texto (já selecionado) e copie com Ctrl+C.</p>
+        <textarea readonly></textarea>
+        <div class="copy-dialog-actions"><button type="button" class="btn">Fechar</button></div>`;
+    const area = dialog.querySelector('textarea');
+    area.value = text;
+    dialog.querySelector('button').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', () => dialog.remove());
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    area.focus();
+    area.select();
+}
+
 // ---------------------------------------------------------------- Formatadores
 
 const fmtBRL = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

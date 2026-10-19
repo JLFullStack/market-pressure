@@ -257,66 +257,24 @@ function tableRows(top, kind) {
 
 // ---------------------------------------------------------------- Copiar análise
 
-// "COPIAR ANÁLISE": o texto vem pronto do servidor (ai_prompt.py), na visão que a página mostra.
-// O ClipboardItem recebe a promessa do texto, para a cópia valer como parte do clique mesmo com a
-// resposta chegando depois (o Safari exige); sem ele, copia ao chegar. Se o navegador recusar,
-// o texto abre numa janela para copiar à mão.
+// "COPIAR ANÁLISE": o texto vem pronto do servidor (ai_prompt.py), na visão que a página mostra
+// (copyServerText, em core.js).
 async function copyAnalysis(btn) {
+    const ticker = btn.dataset.ticker;
     const params = new URLSearchParams({
-        ticker: btn.dataset.ticker,
+        ticker,
         mode: document.getElementById('baseMode').value,
         strict: document.getElementById('requireCandle').checked ? '1' : '0',
         liquidez: document.getElementById('liquidity').value,
         carteira: currentPortfolio(),
     });
-    const label = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'COPIANDO...';
-    const textPromise = apiGet(`/scan/prompt?${params}`).then(r => r.text);
-    textPromise.catch(() => { /* tratado abaixo */ });
-    let done = 'COPIADA ✓';
     try {
-        if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
-            const blob = textPromise.then(t => new Blob([t], { type: 'text/plain' }));
-            await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
-        } else {
-            await navigator.clipboard.writeText(await textPromise);
-        }
-    } catch (err) {
-        const text = await textPromise.catch(e => {
-            const banner = document.getElementById('errorBanner');
-            banner.innerText = `Não foi possível montar a análise de ${btn.dataset.ticker} (${e.message}).`;
-            banner.style.display = 'block';
-            done = 'ERRO';
-            return null;
-        });
-        if (text !== null) {
-            done = label;
-            showCopyDialog(btn.dataset.ticker, text);
-        }
+        await copyServerText(btn, apiGet(`/scan/prompt?${params}`).then(r => r.text), `Análise de ${ticker}`);
+    } catch (e) {
+        const banner = document.getElementById('errorBanner');
+        banner.innerText = `Não foi possível montar a análise de ${ticker} (${e.message}).`;
+        banner.style.display = 'block';
     }
-    btn.textContent = done;
-    setTimeout(() => {
-        btn.textContent = label;
-        btn.disabled = false;
-    }, 2000);
-}
-
-function showCopyDialog(ticker, text) {
-    const dialog = document.createElement('dialog');
-    dialog.className = 'copy-dialog';
-    dialog.innerHTML = `<h3>Análise de ${escapeHTML(ticker)}</h3>
-        <p class="small muted">O navegador não deixou copiar sozinho. Selecione o texto (já selecionado) e copie com Ctrl+C.</p>
-        <textarea readonly></textarea>
-        <div class="copy-dialog-actions"><button type="button" class="btn">Fechar</button></div>`;
-    const area = dialog.querySelector('textarea');
-    area.value = text;
-    dialog.querySelector('button').addEventListener('click', () => dialog.close());
-    dialog.addEventListener('close', () => dialog.remove());
-    document.body.appendChild(dialog);
-    dialog.showModal();
-    area.focus();
-    area.select();
 }
 
 // ---------------------------------------------------------------- KPI do BOVA11
