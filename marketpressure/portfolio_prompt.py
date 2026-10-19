@@ -65,6 +65,12 @@ na reversão de tendência, da diversificação e do tamanho de cada compra. Nã
 prefira posição menor ou EVITAR.
 - **REDUZIR** quando a venda parcial da estratégia está pendente (Situação "VENDER 50%") ou quando \
 uma posição ficou grande demais para o risco dela; diga para qual peso.
+- **Venda parcial com a alta ainda forte** (a posição mostra "Força da alta: forte"): decida entre \
+vender os 50% agora ou segurar até o fechamento perder a MM20. Nos testes do app, segurar rendeu mais \
+por compra (cerca de +0,8 ponto), mas menos na carteira, porque o dinheiro da parcial volta ao caixa e \
+compra os próximos pullbacks. Recomende segurar só se o ranking do Screener (abaixo) não tiver boas \
+compras nas classes abaixo da meta e a posição não estiver grande demais; diga o ponto de venda (a \
+MM20). Com a alta já sem força, venda como manda a regra.
 - **AUMENTAR** quando o ativo está num recuo de compra (Situação "COMPRAR" ou "no setup" e, de \
 preferência, no ranking do Screener), a tendência é firme e a posição está abaixo da meta. Eu só \
 recompro a 5% ou mais de cada compra ainda aberta.
@@ -256,6 +262,11 @@ def _position(p, info, ranked, rule, transactions):
     ]
     if p.get("status"):
         lines.append(f"- **Situação do app**: {p['status']} — {(p.get('statusReason') or '').replace(chr(10), ' ')}")
+        force = p.get("statusStrength")
+        if force:
+            lines.append(f"- **Força da alta**: {'forte' if force['strong'] else 'perdeu força'} (RSI {fmt_num(force['rsi'], 0)}, "
+                         f"fechamento {fmt_num(force['atrAboveMm20'], 1)} ATR em relação à MM20 de "
+                         f"{_money(force['mm20'], currency)})")
     elif not p.get("hasQuote"):
         lines.append("- Situação do app: sem cotação (valores pelo último preço lançado)")
     setup = (p.get("setup") or {}).get(SETUP_MODE) or {}

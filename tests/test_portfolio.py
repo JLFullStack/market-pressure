@@ -198,3 +198,13 @@ class EntryFilterAporteTest(unittest.TestCase):
         self.assertTrue(rows["FIRM3"]["eligible"])
         self.assertFalse(rows["WEAK3"]["eligible"])
         self.assertIn("tendência fraca", rows["WEAK3"]["excluded"])
+
+
+class StrengthTextTest(unittest.TestCase):
+    def test_partial_reason_tells_if_the_rally_is_still_strong(self):
+        money = lambda v: f"R$ {v:.2f}"
+        strong = pf._strength_text({"strong": True, "rsi": 72.0, "atrAboveMm20": 1.8, "mm20": 52.81}, money)
+        self.assertIn("A alta ainda está forte", strong)
+        self.assertIn("abaixo da MM20 (hoje R$ 52.81)", strong)
+        faded = pf._strength_text({"strong": False, "rsi": 55.0, "atrAboveMm20": 0.4, "mm20": 52.81}, money)
+        self.assertIn("já perdeu força", faded)

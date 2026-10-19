@@ -274,6 +274,26 @@ REENTRY_DISTANCE = 0.05
 ENTRY = {"weakSlope": 0.01, "relativeWindow": 126}
 
 
+# Força da alta quando uma compra atinge o alvo da venda parcial (só informação, na Situação da
+# Carteira e no "Analisar carteira"): forte = fechamento a atrAboveMm20 ATR ou mais acima da MM20
+# e RSI ≥ rsi. Nos backtests (ações, 2017–2026), adiar a parcial até o fechamento perder a MM20
+# rendeu mais por compra nas duas metades do período, mas menos na carteira: o dinheiro da parcial
+# volta ao caixa e compra os próximos pullbacks.
+STRENGTH = {"atrAboveMm20": 1.0, "rsi": 65}
+
+
+def trend_strength(ind, i):
+    """{strong, rsi, atrAboveMm20, mm20} no candle i, ou None sem MM20/ATR/RSI."""
+    if not all(k in ind for k in ("closes", "mm20", "atr14", "rsi")):
+        return None
+    c, mm20, atr_now, r = ind["closes"][i], ind["mm20"][i], ind["atr14"][i], ind["rsi"][i]
+    if not mm20 or not atr_now or r is None:
+        return None
+    above = (c - mm20) / atr_now
+    return {"strong": above >= STRENGTH["atrAboveMm20"] and r >= STRENGTH["rsi"], "rsi": r,
+            "atrAboveMm20": above, "mm20": mm20}
+
+
 def entry_stats(closes, mm200, i):
     """Força da tendência no candle i: inclinação da MM200 em 20 pregões e retornos de 12 e 6
     meses, em fração (None sem histórico)."""

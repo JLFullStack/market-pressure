@@ -11,7 +11,7 @@ import time
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from .core import (ENTRY, EXIT, REENTRY_DISTANCE, add_up, closed_candles, compute_indicators, day_of, entry_stats,
+from .core import (ENTRY, EXIT, REENTRY_DISTANCE, add_up, trend_strength, closed_candles, compute_indicators, day_of, entry_stats,
                   entry_warnings, evaluate_setup, exit_signal,
                   fmt_date, fmt_num, fmt_pct_value, fmt_qty, iso_day_in, js_round, today_iso)
 
@@ -468,6 +468,19 @@ def _partial_reason(partial, strategy, money):
     return "\n".join(paragraphs)
 
 
+def _strength_text(st, money):
+    """A força da alta na venda parcial: informação para decidir entre vender agora e segurar."""
+    numbers = (f"RSI {fmt_num(st['rsi'], 0)} e fechamento {fmt_num(st['atrAboveMm20'], 1)} ATR "
+               f"{'acima' if st['atrAboveMm20'] >= 0 else 'abaixo'} da MM20 ({money(st['mm20'])})")
+    if not st["strong"]:
+        return f"A alta já perdeu força ({numbers}): a venda segue a regra."
+    return (f"A alta ainda está forte ({numbers}; forte = 1 ATR ou mais acima da MM20 e RSI 65 ou mais). "
+            "Nos testes do app, segurar os 50% até o fechamento perder a MM20 rendeu mais por compra, mas menos "
+            "na carteira, porque o dinheiro da parcial volta ao caixa e compra os próximos pullbacks. Segurar faz "
+            "sentido se não houver boas compras no ranking para esse dinheiro; nesse caso, venda os 50% quando o "
+            f"fechamento ficar abaixo da MM20 (hoje {money(st['mm20'])}).")
+
+
 SIGNAL_LABELS = {"sell": "VENDER", "buy": "COMPRAR", "hold": "MANTER", "attention": "MANTER"}
 
 
@@ -483,10 +496,10 @@ def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="
     def money(v):
         return f"{currency} {fmt_num(v, 2)}"
 
-    def signal(key, reason, label=None):
+    def signal(key, reason, label=None, strength=None):
         if isinstance(reason, list):
             reason = "\n".join(p for p in reason if p)
-        return {"key": key, "label": label or SIGNAL_LABELS[key], "reason": reason}
+        return {"key": key, "label": label or SIGNAL_LABELS[key], "reason": reason, "strength": strength}
 
     if ind is not None:
         c, mm20, mm50, mm200 = (ind[k][i] for k in ("closes", "mm20", "mm50", "mm200"))
@@ -496,8 +509,11 @@ def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="
                                    f"({money(mm20)}), da MM50 ({money(mm50)}) e da MM200 ({money(mm200)}), com a MM50 "
                                    "abaixo da MM200.", "Pela estratégia, venda toda a posição."])
     if partial and partial["quantity"] > 0:
-        return signal("partial", _partial_reason(partial, strategy, money),
-                      f"VENDER {fmt_pct_value(partial_fraction(strategy))}%")
+        strength = trend_strength(ind, i) if ind is not None else None
+        reason = _partial_reason(partial, strategy, money)
+        if strength:
+            reason += "\n" + _strength_text(strength, money)
+        return signal("partial", reason, f"VENDER {fmt_pct_value(partial_fraction(strategy))}%", strength)
     too_small = []
     if partial:  # atingiu o alvo, mas a parte a vender não chega a 1 cota inteira (B3)
         held = partial["held"]
@@ -1015,7 +1031,8 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, str
             "value": value, "dividends": dividends_total, "profit": profit,
             "returnPct": profit / p["bought"] * 100 if p["bought"] else None, "setup": setup,
             "status": signal and signal["label"], "statusKey": signal and signal["key"],
-            "statusReason": signal and signal["reason"], "partial": partial,
+            "statusReason": signal and signal["reason"], "statusStrength": signal and signal.get("strength"),
+            "partial": partial,
         })
     open_ = sorted((p for p in positions if p["quantity"] > 0), key=lambda p: -p["value"])
     fixed = [s for s in (fixed_income_summary(f, as_of) for f in portfolio.get("fixedIncome") or []) if s["entries"]]

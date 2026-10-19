@@ -75,3 +75,13 @@ class EntryFilterTest(unittest.TestCase):
         self.assertIn("Ibovespa", core.entry_warnings(firm, "MM20", 0.15)[0])
         stats = core.entry_stats([100.0] * 300, [100.0] * 300, 299)
         self.assertEqual((stats["mm200Slope"], stats["return12m"], stats["return6m"]), (0.0, 0.0, 0.0))
+
+
+class TrendStrengthTest(unittest.TestCase):
+    def test_strong_rally_vs_faded(self):
+        ind = core.compute_indicators(candles(400))
+        found = [core.trend_strength(ind, i) for i in range(250, 400)]
+        self.assertTrue(all(f is not None for f in found))
+        for f in found:
+            self.assertEqual(f["strong"], f["atrAboveMm20"] >= 1 and f["rsi"] >= 65)
+        self.assertIsNone(core.trend_strength({"closes": [1.0]}, 0))
