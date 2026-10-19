@@ -46,6 +46,7 @@ ANALYSIS_FIELDS = [
     ("above_rising_mm200", ("aboveRisingMM200",), _bool),
     ("mm200_slope", ("mm200Slope",), _f64),
     ("return_12m", ("return12m",), _f64),
+    ("return_6m", ("return6m",), _f64),
     ("setup_ok", ("setup", "ok"), _bool),
     ("setup_ok_strict", ("setup", "okStrict"), _bool),
     ("setup_pullback", ("setup", "pullback"), _f64),

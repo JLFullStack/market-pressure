@@ -72,14 +72,18 @@ ativos que não deram a confirmação subiu mesmo assim. Comprar tudo o que o an
 rendeu cerca de 25% a mais no período do que esperar as confirmações.
 - Por isso não há a opção "esperar": se houver dúvida, **compre com posição menor** e diga quanto. \
 Use **EVITAR** só com um motivo concreto, como:
-  - tendência fraca nas ações: MM200 subindo menos de 1% em 20 pregões, retorno de 12 meses negativo ou recuo até a \
-MM200 (nos testes do app, essas compras renderam menos nas duas metades de 2017–2026 e esperá-las aumentou o lucro \
-da carteira; nos internacionais isso não valeu);
+  - tendência fraca nas ações: MM200 subindo menos de 1% em 20 pregões, retorno de 12 meses negativo, recuo até a \
+MM200 ou ação rendendo menos que o Ibovespa em 6 meses (nos testes do app, essas compras renderam menos nas duas \
+metades de 2017–2026; nos internacionais isso não valeu);
   - tendência quebrando: MM20 bem abaixo da MM50 com MACD afundando;
   - queda forte até a média ("faca caindo": 15% ou mais em poucos pregões, RSI perto de 30) em vez de um recuo ordenado;
   - choque de notícia: gap ou queda forte com volume muito acima da média;
   - volatilidade extrema para uma estratégia sem stop;
   - um fato fundamentalista grave que os números do app não mostram (resultado, dívida, governança, evento).
+- **Prioridade**: no Top 5 do ranking do tipo ou com Score ≥ 65, as compras renderam mais em média nas duas metades \
+de 2017–2026; nesses casos uma fatia maior (até 1,5x a normal) é razoável.
+- A pressão sozinha (garrafa cheia) não antecipou compras melhores nos testes: ela vale dentro do Score, junto com o \
+histórico do ativo, e não como motivo isolado para comprar mais ou evitar.
 - Candle vermelho no dia do sinal, RSI ainda caindo, mercado misto ou dólar oscilando são normais num \
 recuo e não bastam para evitar. Regime defensivo também não: nos testes, as poucas ações em alta num \
 mercado defensivo renderam mais que a média.
@@ -109,8 +113,8 @@ retorno médio baixo (ou o contrário) é normal: olhe os dois juntos.
 - **Estado da garrafa**: Cheia (pressão ≥ 75%), Quase cheia (≥ 60%) ou Enchendo.
 - **Indicação automática do app**: uma regra fixa, não uma recomendação. AGUARDAR quando já tenho compra nesta região (a \
 estratégia recompra apenas em outro recuo) ou, fora dos internacionais, quando a tendência está fraca (MM200 subindo menos de 1% \
-em 20 pregões, retorno de 12 meses negativo ou recuo até a MM200); senão COMPRAR, com um alerta quando o backtest dos últimos \
-3 anos do ativo é negativo. O app não usa stop loss."""
+em 20 pregões, retorno de 12 meses negativo ou recuo até a MM200) ou o ativo rendeu menos que o Ibovespa em 6 meses; COMPRAR \
+com prioridade (o motivo começa por "Prioridade") no Top 5 do tipo ou com Score ≥ 65; senão COMPRAR, com um alerta quando o backtest dos últimos 3 anos é negativo. O app não usa stop loss."""
 
 
 def _pct(v, d=1, sign=True):
@@ -235,7 +239,7 @@ def build(scan, payload, ticker, mode, strict, lots, settings):
     group = st.group_of(kind, "b3", row.get("name") or "")
     strategy = st.describe_one(st.for_group(settings, group))
     kinds = st.screener_kinds(settings)
-    advice = screener.advice(row, lots, strategy, group)
+    advice = screener.advice(row, lots, strategy, group, pos)
     p, d, setup, bt = analysis["pressure"], analysis["pressure"]["details"], row["setup"], row["bt"]
     other_bt = analysis["backtest"][screener.bt_key(not strict, group, kinds)]
     weights = screener.CONFIG["pressureWeights"].get(analysis.get("kind"), screener.CONFIG["pressureWeights"]["default"])

@@ -11,7 +11,8 @@ import time
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from .core import (EXIT, REENTRY_DISTANCE, add_up, closed_candles, compute_indicators, day_of, evaluate_setup, exit_signal,
+from .core import (ENTRY, EXIT, REENTRY_DISTANCE, add_up, closed_candles, compute_indicators, day_of, entry_stats,
+                  entry_warnings, evaluate_setup, exit_signal,
                   fmt_date, fmt_num, fmt_pct_value, fmt_qty, iso_day_in, js_round, today_iso)
 
 # Classes da carteira: fixas e as mesmas da aba Configurações. "group" é o grupo da regra de
@@ -509,7 +510,8 @@ def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="
         return signal("hold", ["Histórico curto para as médias (menos de 200 pregões).", *too_small]) if partial else None
 
     nearest = gap = pullback = None
-    if setup and setup.get("ok"):
+    wait = (setup or {}).get("wait") or []
+    if setup and setup.get("ok") and not wait:
         nearest = min(lots, key=lambda lot: abs(c / lot["price"] - 1), default=None)
         gap = abs(c / nearest["price"] - 1) if nearest else None
         ma = setup["ma"]
@@ -530,6 +532,10 @@ def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="
     else:
         key = "hold"
         reason = [f"Tendência preservada: fechamento de {day} ({money(c)}) acima da MM200, sem reversão."]
+    if setup and setup.get("ok") and wait:
+        ma = setup["ma"]
+        reason.append(f"Está em pullback na {ma['name']}, mas a tendência está fraca: " + "; ".join(wait)
+                      + ". O Screener indicaria AGUARDAR: sem nova compra por enquanto.")
     if nearest is not None:
         reason.append(f"Está em {pullback}, mas a só {fmt_num(gap * 100)}% da compra de {fmt_date(nearest['date'])} "
                    f"({money(nearest['price'])}): mesma região, sem nova compra (recompra a "
@@ -551,20 +557,26 @@ def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="
     return signal(key, reason)
 
 
-def holding_signal(transactions, ticker, candles, market, strategy=DEFAULT_STRATEGY, now=None, memo=None):
+def holding_signal(transactions, ticker, candles, market, strategy=DEFAULT_STRATEGY, now=None, memo=None,
+                   bench6m=None, check_entry=False):
     """Lotes abertos, venda parcial pendente e indicação (position_signal) de um ativo com posição.
     candles: histórico na moeda do ativo (com o candle do pregão em andamento, se houver: a
-    máxima do dia já conta para o alvo); a reversão, as médias e o setup usam só os pregões fechados."""
+    máxima do dia já conta para o alvo); a reversão, as médias e o setup usam só os pregões fechados.
+    check_entry: aplica o filtro de entrada do Screener (core.entry_warnings, com bench6m = retorno
+    de 6 meses do BOVA11) ao COMPRAR — fora dos internacionais."""
     lots = open_lots(transactions, ticker, candles, strategy["target"], partial_fraction(strategy))
     partial = partial_to_sell(lots, market, strategy)
     closed = closed_for(candles, market, now)
     ind = indicators_memo(closed, memo) if len(closed) >= 200 else None
     setup = evaluate_setup(ind, len(closed) - 1) if len(closed) >= 220 else None
+    if setup and setup.get("ok") and check_entry:
+        i = len(closed) - 1
+        setup = {**setup, "wait": entry_warnings(entry_stats(ind["closes"], ind["mm200"], i), setup["ma"]["name"], bench6m)}
     signal = position_signal(ind, len(closed) - 1, partial, lots, strategy, MARKETS[market]["currency"], setup)
     return {"lots": lots, "partial": partial if signal and signal["key"] == "partial" else None, "signal": signal}
 
 
-def setup_now(candles, market, mode, now=None, memo=None):
+def setup_now(candles, market, mode, now=None, memo=None, bench6m=None, check_entry=False):
     """O ativo está no setup de pullback agora? Mesma regra e mesma base do screener: na base
     "fechamento" descarta o candle do pregão em andamento; no "intradiario" usa o candle do dia
     e exige que o último pregão fechado também esteja acima da média (confirm_previous).
@@ -577,7 +589,9 @@ def setup_now(candles, market, mode, now=None, memo=None):
         return {"enough": False, "ok": False, "ma": None}
     ind = indicators_memo(use, memo)
     s = evaluate_setup(ind, len(use) - 1, mode == "intradiario" and live)
-    return {"enough": True, "ok": bool(s["ok"]), "ma": s["ma"], "close": use[-1]["c"]}
+    wait = (entry_warnings(entry_stats(ind["closes"], ind["mm200"], len(use) - 1), s["ma"]["name"], bench6m)
+            if s["ok"] and check_entry else [])
+    return {"enough": True, "ok": bool(s["ok"]), "ma": s["ma"], "close": use[-1]["c"], "wait": wait}
 
 
 def indicators_memo(candles, memo):
@@ -848,6 +862,8 @@ def contribution_plan(classes, items, total, amount, mode, selected=()):
             status = {"key": "sell", "label": "Vender"}
         elif i["kind"] == "fixed":
             status = {"key": "fixed", "label": "Renda fixa"}
+        elif setup.get("ok") and setup.get("wait"):
+            status = {"key": "wait", "label": f"Pullback ({setup['ma']['name']}) em tendência fraca"}
         elif setup.get("ok"):
             status = {"key": "setup", "label": f"Em pullback ({setup['ma']['name']})"}
         else:
@@ -859,6 +875,7 @@ def contribution_plan(classes, items, total, amount, mode, selected=()):
             excluded = "Não selecionado"
         elif mode == "pullback" and status["key"] == "wait":
             excluded = ("Aguardar pullback (histórico insuficiente para a MM200)" if setup.get("enough") is False
+                        else "Aguardar: tendência fraca — " + "; ".join(setup["wait"]) if setup.get("wait")
                         else "Aguardar pullback")
         rows.append({**i, "pct": i["value"] / total * 100 if total else 0, "ideal": ideal, "diff": ideal - i["value"],
                      "status": status, "excluded": excluded, "eligible": not excluded})
@@ -958,6 +975,12 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, str
     for d in dividends:
         div_by_ticker[d["ticker"]] = div_by_ticker.get(d["ticker"], 0) + d["total"]
 
+    # Retorno de 6 meses do BOVA11 em cada base (força relativa do filtro de entrada).
+    bench_raw = (histories.get(BENCHMARK) or {}).get("candles") or []
+    bench6m = {}
+    for mode, use in (("fechamento", closed_for(bench_raw, "b3", now)), ("intradiario", bench_raw)):
+        w = ENTRY["relativeWindow"]
+        bench6m[mode] = use[-1]["c"] / use[-1 - w]["c"] - 1 if len(use) > w else None
     positions = []
     for p in positions_map.values():
         market = market_of(portfolio, p["ticker"])
@@ -974,9 +997,12 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, str
         if n:
             memo = {}
             if p["quantity"] > 0:
-                held = holding_signal(txs, p["ticker"], raw, market, rule_for(p["ticker"], market), now, memo)
+                rule = rule_for(p["ticker"], market)
+                check = market == "b3" and rule.get("group") != "internacionais"
+                held = holding_signal(txs, p["ticker"], raw, market, rule, now, memo, bench6m["fechamento"], check)
                 signal, partial = held["signal"], held["partial"]
-            setup = {mode: setup_now(raw, market, mode, now, memo) for mode in ("fechamento", "intradiario")}
+            check = market == "b3" and rule_for(p["ticker"], market).get("group") != "internacionais"
+            setup = {mode: setup_now(raw, market, mode, now, memo, bench6m[mode], check) for mode in ("fechamento", "intradiario")}
         positions.append({
             **p, "market": market, "currency": MARKETS[market]["currency"],
             "cls": (portfolio.get("assets", {}).get(p["ticker"]) or {}).get("class")

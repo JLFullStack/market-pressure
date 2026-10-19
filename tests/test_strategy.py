@@ -22,7 +22,7 @@ class StrategyTest(DatabaseTestCase):
         loaded = st.load()
         self.assertEqual((loaded["target"], loaded["fraction"]), (0.155, 0.3))
         self.assertEqual(loaded["kinds"]["etfs"], "reversao")
-        self.assertEqual(st.for_group(loaded, "acoes"), {"key": "parcial", "target": 0.155, "fraction": 0.3})
+        self.assertEqual(st.for_group(loaded, "acoes"), {"key": "parcial", "target": 0.155, "fraction": 0.3, "group": "acoes"})
         acoes = next(k for k in st.describe(loaded)["kinds"] if k["group"] == "acoes")
         self.assertEqual(acoes["text"], "Vende 30% de cada compra ao atingir +15,5% sobre o preço dela; "
                                         "o restante na reversão de tendência.")
@@ -112,7 +112,7 @@ class RuleByKindTest(DatabaseTestCase):
 
 
 class AdviceTest(unittest.TestCase):
-    ROW = {"ticker": "PETR4", "price": 50.0, "score": 70.0, "pressure": 65.0,
+    ROW = {"ticker": "PETR4", "price": 50.0, "score": 60.0, "pressure": 65.0,
            "setup": {"ma": {"name": "MM20", "dist": 0.012}},
            "bt": {"wins": 6, "trades": 8, "winRate": 66.0, "avgReturn": 4.2,
                   "recentTrades": 3, "recentWins": 2, "recentReturn": 3.0}}
@@ -140,8 +140,27 @@ class AdviceTest(unittest.TestCase):
             row = {**firm, **weak}
             a = screener.advice(row, None, PARTIAL, "acoes")
             self.assertEqual(a["action"], "aguardar", weak)
-            self.assertIn("tendência de alta está fraca", a["reason"])
+            self.assertIn("tendência está fraca", a["reason"])
             self.assertEqual(screener.advice(row, None, PARTIAL, "internacionais")["action"], "comprar")
+
+    def test_wait_when_weaker_than_the_index(self):
+        row = {**self.ROW, "mm200Slope": 0.03, "return12m": 0.2, "return6m": 0.02, "benchmark6m": 0.08}
+        a = screener.advice(row, None, PARTIAL, "acoes")
+        self.assertEqual(a["action"], "aguardar")
+        self.assertIn("abaixo dos 8,0% do Ibovespa", a["reason"])
+        self.assertEqual(screener.advice(row, None, PARTIAL, "internacionais")["action"], "comprar")
+        stronger = {**row, "return6m": 0.1}
+        self.assertEqual(screener.advice(stronger, None, PARTIAL, "acoes")["action"], "comprar")
+
+    def test_priority_for_the_top_5_or_a_high_score(self):
+        firm = {**self.ROW, "mm200Slope": 0.03, "return12m": 0.2}
+        self.assertEqual(screener.advice(firm, None, PARTIAL, "acoes", 6)["action"], "comprar")
+        top = screener.advice(firm, None, PARTIAL, "acoes", 3)
+        self.assertEqual((top["action"], top["label"], top.get("priority")), ("comprar", "COMPRAR", True))
+        self.assertIn("3º do ranking", top["reason"])
+        self.assertTrue(screener.advice({**firm, "score": 66.0}, None, PARTIAL, "acoes", 12).get("priority"))
+        weak = {**firm, "return12m": -0.1}   # tendência fraca: AGUARDAR mesmo no Top 5
+        self.assertEqual(screener.advice(weak, None, PARTIAL, "acoes", 1)["action"], "aguardar")
 
     def test_history_never_blocks_only_warns(self):
         old_loss = {**self.ROW, "bt": {**self.ROW["bt"], "avgReturn": -1.4}}   # 10 anos negativo

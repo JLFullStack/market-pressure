@@ -61,16 +61,20 @@ preferência, no ranking do Screener), a tendência é firme e a posição está
 recompro a 5% ou mais de cada compra ainda aberta.
 - **MANTER** é o padrão para uma posição em tendência de alta sem sinal de saída: o lucro vem de \
 segurar os vencedores. Ações em tendência fraca (MM200 subindo menos de 1% em 20 pregões, retorno \
-de 12 meses negativo ou preço perto da MM200) pedem atenção, não venda automática.
+de 12 meses negativo, preço perto da MM200 ou rendendo menos que o Ibovespa em 6 meses) pedem \
+atenção e não recebem compra nova (o app não indica COMPRAR nelas), mas não são venda automática.
 - **Ativos internacionais** (BDRs, ETFs e ações do exterior, cripto): nos testes, vender na \
 parcial cortava os vencedores cedo, por isso saem só na reversão; o câmbio sozinho não é motivo \
 para vender.
 - **Rebalancear pelos aportes**: classe acima da meta deixa de receber dinheiro novo em vez de ser \
 vendida (vender gera imposto e custo); classe abaixo recebe mais.
 - **Ativo novo**: prefira os do ranking do Screener das classes abaixo da meta, com Indicação \
-COMPRAR; o ponto de partida é comprar, e para não comprar é preciso um motivo concreto (tendência \
+COMPRAR, e entre eles os com prioridade (Top 5 do tipo ou Score ≥ 65, que nos testes \
+renderam mais por compra; uma fatia até 1,5x a normal é razoável); o ponto de partida é comprar, e para não comprar é preciso um motivo concreto (tendência \
 quebrando, queda forte, choque de notícia, fato fundamentalista grave). O histórico do ativo calibra \
 o tamanho da posição, nunca veta sozinho.
+- A **pressão** sozinha (garrafa cheia) não antecipou compras melhores nos testes do app: ela vale \
+dentro do Score, junto com o histórico do ativo, não como motivo isolado.
 - A **Situação** de cada ativo é uma regra fixa do app, só um dado: confronte-a com o resto."""
 
 METHOD = """# Como o app calcula os números
@@ -84,13 +88,17 @@ BOVA11 com os mesmos dias.
 - **Situação**: VENDER quando a reversão de tendência disparou (fechamento abaixo da MM20, MM50 e \
 MM200, com a MM50 abaixo da MM200); VENDER 50% quando compras atingiram o alvo da venda parcial; \
 COMPRAR quando o ativo está no setup de recuo ("Garrafa de Gás": tendência de alta de longo prazo e \
-fechamento até 3% acima de uma média testada) longe das compras abertas; MANTER nos outros casos.
+fechamento até 3% acima de uma média testada) longe das compras abertas e, fora dos internacionais, \
+sem tendência fraca nem força relativa abaixo do Ibovespa (a mesma regra da Indicação do Screener); \
+MANTER nos outros casos.
 - **Ranking do Screener**: os 20 melhores de cada tipo de ativo da B3 no setup, pelo Score \
 Composto (60% pressão compradora do recuo + 40% taxa de acerto da estratégia no histórico do ativo). \
 Histórico = compras com lucro / compras encerradas e o retorno médio por compra no backtest da \
 estratégia no próprio ativo (10 anos e últimos 3). Garrafa: cheia (pressão ≥ 75%), quase (≥ 60%) \
 ou enchendo. Indicação AGUARDAR = já comprado nesta região ou, fora dos internacionais, tendência \
-fraca (MM200 subindo menos de 1% em 20 pregões, retorno de 12 meses negativo ou recuo até a MM200)."""
+fraca (MM200 subindo menos de 1% em 20 pregões, retorno de 12 meses negativo ou recuo até a MM200) \
+ou ativo rendendo menos que o Ibovespa em 6 meses; COMPRAR com prioridade = Top 5 do tipo ou Score ≥ 65; \
+senão COMPRAR."""
 
 
 def _names():
@@ -122,14 +130,14 @@ def _ranked(rankings):
     return {row["ticker"]: (pos, r["kind"], row) for r in rankings for pos, row in enumerate(r["loose"]["top"], 1)}
 
 
-def _advice_label(row, kind, lots, settings):
-    """A Indicação do Screener em poucas palavras: COMPRAR (com o alerta do histórico recente) ou
-    AGUARDAR com o primeiro motivo."""
+def _advice_label(row, kind, lots, settings, rank=None):
+    """A Indicação do Screener em poucas palavras: COMPRAR (com prioridade) (com o alerta do
+    histórico recente) ou AGUARDAR com o primeiro motivo."""
     group = screener.rule_group({**row, "kind": kind})
-    a = screener.advice(row, lots, st.for_group(settings, group), group)
+    a = screener.advice(row, lots, st.for_group(settings, group), group, rank)
     if a["action"] == "aguardar":
         return "AGUARDAR: " + a["reason"].split("\n")[0]
-    return "COMPRAR" + (" (histórico recente negativo)" if screener.recent_negative(row["bt"], group) else "")
+    return a["label"] + (" com prioridade" if a.get("priority") else "") + (" (histórico recente negativo)" if screener.recent_negative(row["bt"], group) else "")
 
 
 def _screener_section(portfolio, rankings, settings):
@@ -172,7 +180,7 @@ def _screener_section(portfolio, rankings, settings):
             name = (row.get("name") or row["ticker"]).replace("|", "/")
             lines.append(f"| {place} | {row['ticker']} — {name} | {row.get('sector') or '—'} | {fmt_brl(row['price'])} | "
                          f"{fmt_num(row['score'])} | {fmt_num(row['pressure'], 0)}% | {row['bottle']} | {history} | "
-                         f"{_advice_label(row, r['kind'], lots.get(row['ticker']), settings)} | "
+                         f"{_advice_label(row, r['kind'], lots.get(row['ticker']), settings, pos)} | "
                          f"{'sim' if row['ticker'] in lots else 'não'} |")
         lines.append("")
     return lines

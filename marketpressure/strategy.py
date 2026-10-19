@@ -51,8 +51,9 @@ REVERSAL_TEXT = "fechamento abaixo da MM20, MM50 e MM200 com a MM50 abaixo da MM
 
 def for_group(settings, group):
     """Regra de um grupo no formato que a Carteira e o Screener usam: {key, target, fraction}."""
-    key = settings["kinds"].get(group if group in GROUPS else "acoes", "parcial")
-    return {"key": key, "target": settings["target"], "fraction": settings["fraction"]}
+    group = group if group in GROUPS else "acoes"
+    return {"key": settings["kinds"].get(group, "parcial"), "target": settings["target"], "fraction": settings["fraction"],
+            "group": group}
 
 
 def group_of(kind=None, market="b3", name=""):

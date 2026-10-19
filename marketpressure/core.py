@@ -266,6 +266,41 @@ EXIT = {
 # screener, indicação COMPRAR da carteira e AGUARDAR do ranking).
 REENTRY_DISTANCE = 0.05
 
+# Filtro de entrada (indicação AGUARDAR do Screener, Situação da Carteira e modo pullback do
+# aporte), fora dos internacionais: tendência fraca (MM200 subindo menos de weakSlope em 20
+# pregões, retorno de 12 meses negativo ou recuo até a MM200) ou ativo mais fraco que o BOVA11
+# em relativeWindow pregões. Nos backtests de 2017–2026 essas compras de ações renderam menos nas
+# duas metades do período (ver screener.CONFIG).
+ENTRY = {"weakSlope": 0.01, "relativeWindow": 126}
+
+
+def entry_stats(closes, mm200, i):
+    """Força da tendência no candle i: inclinação da MM200 em 20 pregões e retornos de 12 e 6
+    meses, em fração (None sem histórico)."""
+    w = ENTRY["relativeWindow"]
+    return {
+        "mm200Slope": mm200[i] / mm200[i - 20] - 1 if i >= 20 and mm200[i] and mm200[i - 20] else None,
+        "return12m": closes[i] / closes[i - 252] - 1 if i >= 252 else None,
+        "return6m": closes[i] / closes[i - w] - 1 if i >= w else None,
+    }
+
+
+def entry_warnings(stats, ma_name=None, bench6m=None):
+    """Motivos para aguardar uma compra no setup (lista vazia = entrada firme). stats: entry_stats;
+    ma_name: a média testada; bench6m: retorno de 6 meses do BOVA11 na mesma base."""
+    reasons = []
+    slope, r12, r6 = stats.get("mm200Slope"), stats.get("return12m"), stats.get("return6m")
+    if slope is not None and slope < ENTRY["weakSlope"]:
+        reasons.append(f"a MM200 subiu só {fmt_num(slope * 100)}% em 20 pregões (firme: {fmt_pct_value(ENTRY['weakSlope'])}% ou mais)")
+    if r12 is not None and r12 < 0:
+        reasons.append(f"o preço caiu {fmt_num(-r12 * 100)}% em 12 meses")
+    if ma_name == "MM200":
+        reasons.append("o recuo chegou até a MM200, o último suporte da tendência")
+    if r6 is not None and bench6m is not None and r6 < bench6m:
+        reasons.append(f"rendeu {fmt_num(r6 * 100)}% em 6 meses, abaixo dos {fmt_num(bench6m * 100)}% do Ibovespa "
+                       "(BOVA11): está mais fraco que o mercado")
+    return reasons
+
 
 def exit_signal(ind, i):
     """Regra de venda (regra "B"): fechamento abaixo de MM20, MM50 e MM200 E tendência de baixa

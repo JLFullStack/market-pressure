@@ -185,7 +185,7 @@
                     <li><strong>Lucro e rentabilidade</strong> incluem valorização, vendas e proventos, sobre o total comprado do ativo.</li>
                     <li><strong>Situação</strong> segue a estratégia de venda escolhida em <a href="configuracoes.html" class="inline-link">Configurações</a>; toque no selo para ver o motivo.
                         <strong>VENDER</strong> na reversão de tendência (vende tudo) ou <strong>VENDER X%</strong> quando uma compra atingiu o alvo;
-                        <strong>COMPRAR</strong> num pullback novo, a 5% ou mais das compras abertas; <strong>MANTER</strong> nos demais casos.</li>
+                        <strong>COMPRAR</strong> num pullback novo, a 5% ou mais das compras abertas e, fora dos internacionais, sem tendência fraca nem desempenho abaixo do Ibovespa em 6 meses (a mesma regra da Indicação do Screener); <strong>MANTER</strong> nos demais casos.</li>
                     <li>Na venda parcial, a quantidade aparece abaixo do selo, inteira na B3; com poucas cotas (ex.: 50% de 1 cota) não há venda parcial. As médias usam o último pregão fechado.</li>
                 </ul>
             </div>
@@ -339,7 +339,7 @@
             <ul class="notes">
                 <li><strong>Valor ideal</strong> = (patrimônio atual + aporte) × % meta; <strong>"a investir"</strong> pode ser negativo (acima do ideal).</li>
                 <li><strong>Meta de cada ativo:</strong> por padrão, a meta da classe dividida igualmente entre os ativos com posição. Digite um % para fixá-la (os demais dividem o restante) ou apague o campo para voltar ao automático.</li>
-                <li><strong>Sugestão</strong> só compra: divide o aporte entre os ativos elegíveis, proporcionalmente ao que falta para o valor ideal. Ativos com situação <strong>Vender</strong> nunca recebem aporte; no modo pullback, só recebem os ativos em setup agora (mesma regra e base do screener) e a renda fixa, pela meta.</li>
+                <li><strong>Sugestão</strong> só compra: divide o aporte entre os ativos elegíveis, proporcionalmente ao que falta para o valor ideal. Ativos com situação <strong>Vender</strong> nunca recebem aporte; no modo pullback, só recebem os ativos em setup agora (mesma regra e base do screener), fora os de tendência fraca ou mais fracos que o Ibovespa (exceto internacionais), e a renda fixa, pela meta.</li>
                 <li><strong>Cotas</strong> = sugestão ÷ preço em reais, arredondado para baixo (inteiras na B3; 4 casas para EUA e cripto).</li>
                 <li><strong>Barras:</strong> faixa de cima = % atual; de baixo = % após a sugestão; traço = meta.</li>
                 <li><strong>"Registrar compras sugeridas"</strong> abre a lista para conferir quantidade, preço, câmbio e data antes de gravar; os lançamentos entram juntos no histórico.</li>

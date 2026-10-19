@@ -16,8 +16,9 @@ import time
 from . import database as db
 from . import strategy as st
 from . import market_data, runtime
-from .core import (EXIT, REENTRY_DISTANCE, SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
-                  evaluate_setup, exit_signal, fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_sessions, in_session_hours, last_close, session_in_progress)
+from .core import (ENTRY, EXIT, REENTRY_DISTANCE, SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
+                  entry_stats, entry_warnings, evaluate_setup, exit_signal, fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_sessions,
+                  in_session_hours, last_close, session_in_progress)
 
 CONFIG = {
     # Universo: ativos da lista do Yahoo (market_data.load_universe) de quatro tipos, cada um com
@@ -81,14 +82,26 @@ CONFIG = {
     # +1,4% (2022–2026); na carteira, aguardá-las deu R$ 322 mil x R$ 307 mil comprando tudo, acima
     # de 12 sorteios com o mesmo número de casos fora (R$ 192–310 mil). Nos internacionais nenhuma
     # condição justificou esperar. Testado só em ações; fundos e ETFs Brasil seguem a mesma regra.
-    "weakSlope": 0.01,
+    "weakSlope": ENTRY["weakSlope"],
+    # AGUARDAR por força relativa (weak_relative), fora de adviceIgnoreKinds: o ativo rendeu menos
+    # que o BOVA11 nos últimos relativeWindow pregões. Nas ações (2017–2026), essas compras
+    # renderam −3,5% x +1,6% (2017–2021) e −2,8% x +2,4% (2022–2026) por compra.
+    "relativeWindow": ENTRY["relativeWindow"],
+    # COMPRAR com prioridade: posição no Top priorityRank do tipo ou Score ≥ priorityScore. Nas
+    # ações, +6,8% x −1,3% (2017–2021) e +3,7% x +0,8% (2022–2026) por compra; na carteira, com
+    # uma fatia de prioritySize × a normal, o conjunto "tendência fraca + força relativa +
+    # prioridade" deu R$ 84 mil x R$ 57 mil sem regras desde 2022 (R$ 292 mil x R$ 303 mil no
+    # período todo: em lucro total nenhum conjunto de regras se mostrou melhor que o acaso).
+    "priorityRank": 5,
+    "priorityScore": 65,
+    "prioritySize": 1.5,
     "bovaLookback": 252,      # pregões da variação de 12 meses do BOVA11
     "minCandles": 261,
 }
 
 log = logging.getLogger(__name__)
 
-SCAN_VERSION = 7  # mude se o formato das análises mudar (descarta a varredura salva no banco)
+SCAN_VERSION = 8  # mude se o formato das análises mudar (descarta a varredura salva no banco)
 MODES = ("fechamento", "intradiario")
 KINDS = ("acoes", "fundos", "etfs", "bdrs")  # tipos de ativo (market_data.asset_kind), um ranking cada
 
@@ -309,10 +322,9 @@ def analyze_asset(candles, confirm_previous=False, kind="acoes"):
         "price": candles[i]["c"],
         "change": (candles[i]["c"] / candles[i - 1]["c"] - 1) * 100,
         "aboveRisingMM200": setup["trend"],
-        # Força da tendência (indicação COMPRAR/AGUARDAR, weak_trend): inclinação da MM200 em 20
-        # pregões e retorno de 12 meses, em fração.
-        "mm200Slope": ind["mm200"][i] / ind["mm200"][i - 20] - 1 if i >= 20 and ind["mm200"][i - 20] else None,
-        "return12m": candles[i]["c"] / candles[i - 252]["c"] - 1 if i >= 252 else None,
+        # Força da tendência (indicação COMPRAR/AGUARDAR, core.entry_warnings): inclinação da MM200
+        # em 20 pregões e retornos de 12 e 6 meses, em fração.
+        **entry_stats(ind["closes"], ind["mm200"], i),
         "setup": {k: setup[k] for k in ("ok", "okStrict", "pullback", "ma", "pattern")},
     }
     if not setup["ok"]:
@@ -506,11 +518,13 @@ def analyses_for(scan, mode):
     return out
 
 
-def ranking_view(analyses, strict, kinds=None):
-    """Top topN de um tipo (sem os ETFs duplicados), com as médias do top."""
+def ranking_view(analyses, strict, kinds=None, benchmark6m=None):
+    """Top topN de um tipo (sem os ETFs duplicados), com as médias do top. benchmark6m: retorno de
+    6 meses do BOVA11 na mesma base (força relativa da indicação)."""
     ranking = build_ranking([a for a in analyses if not a.get("duplicateOf")], strict, kinds)
-    top = [{k: a.get(k) for k in ("ticker", "name", "sector", "price", "change", "setup", "bt", "score", "mm200Slope", "return12m")}
-           | {"pressure": a["pressure"]["total"], "bottle": bottle_state(a["pressure"]["total"]),
+    top = [{k: a.get(k) for k in ("ticker", "name", "sector", "price", "change", "setup", "bt", "score",
+                                  "mm200Slope", "return12m", "return6m")}
+           | {"benchmark6m": benchmark6m, "pressure": a["pressure"]["total"], "bottle": bottle_state(a["pressure"]["total"]),
               "justification": justification(a)} for a in ranking[:CONFIG["topN"]]]
     return {
         "qualified": len(ranking),
@@ -529,23 +543,33 @@ def recent_negative(bt, kind):
 
 
 def weak_trend(a):
-    """Motivos de tendência fraca do ativo do ranking (lista vazia = tendência firme)."""
-    reasons = []
-    if a.get("mm200Slope") is not None and a["mm200Slope"] < CONFIG["weakSlope"]:
-        reasons.append(f"a MM200 subiu só {fmt_num(a['mm200Slope'] * 100)}% em 20 pregões "
-                       f"(firme: {fmt_pct_value(CONFIG['weakSlope'])}% ou mais)")
-    if a.get("return12m") is not None and a["return12m"] < 0:
-        reasons.append(f"o preço caiu {fmt_num(-a['return12m'] * 100)}% em 12 meses")
-    if ((a.get("setup") or {}).get("ma") or {}).get("name") == "MM200":
-        reasons.append("o recuo chegou até a MM200, o último suporte da tendência")
-    return reasons
+    """Motivos de tendência fraca do ativo do ranking (core.entry_warnings sem a força relativa)."""
+    ma = (a.get("setup") or {}).get("ma") or {}
+    return entry_warnings({k: a.get(k) for k in ("mm200Slope", "return12m")}, ma.get("name"))
 
 
-def advice(a, lots, strategy, kind=None):
+RELATIVE_BENCHMARK = "BOVA11"
+
+
+def weak_relative(a):
+    """Motivo de força relativa fraca (o ativo rendeu menos que o BOVA11 em 6 meses) ou None."""
+    found = entry_warnings({"return6m": a.get("return6m")}, None, a.get("benchmark6m"))
+    return found[0] if found else None
+
+
+def is_priority(a, rank):
+    """COMPRAR com prioridade: no Top priorityRank do tipo ou com Score ≥ priorityScore."""
+    return (rank is not None and rank <= CONFIG["priorityRank"]) or (a.get("score") or 0) >= CONFIG["priorityScore"]
+
+
+def advice(a, lots, strategy, kind=None, rank=None):
     """Coluna "Indicação" do ranking: COMPRAR ou AGUARDAR, com o motivo (o Screener não indica
     venda; isso é da Carteira). Todo ativo do ranking está no setup. AGUARDAR quando a carteira já
     tem uma compra aberta a menos de reentryDistance do preço (mesmo pullback: a estratégia só
-    recompra em outro) ou quando a tendência está fraca (weak_trend; fora de adviceIgnoreKinds). O
+    recompra em outro) ou, fora de adviceIgnoreKinds, quando a tendência está fraca (weak_trend) ou o
+    ativo está mais fraco que o BOVA11 em 6 meses (weak_relative). COMPRAR com prioridade
+    (COMPRAR com "priority" e o motivo começando por "Prioridade") no Top priorityRank do tipo (rank)
+    ou com Score ≥ priorityScore (is_priority). O
     histórico do ativo nunca gera AGUARDAR (nos backtests de carteira, vetar pelo histórico reduziu
     o lucro); com o recente negativo (recent_negative), o COMPRAR traz um alerta. lots: compras abertas do ativo na carteira (portfolio_service.held_lots) ou None;
     strategy: a regra do grupo ({key, target, fraction}, strategy.for_group), para o texto da
@@ -561,14 +585,16 @@ def advice(a, lots, strategy, kind=None):
             f"a {fmt_num(gap * 100)}% do preço atual.\nA estratégia só recompra em outro pullback, "
             f"a {fmt_pct_value(dist)}% ou mais de cada compra aberta.")}
     bt = a["bt"]
-    weak = weak_trend(a) if (kind or "acoes") not in CONFIG["adviceIgnoreKinds"] else []
+    weak = []
+    if (kind or "acoes") not in CONFIG["adviceIgnoreKinds"]:
+        weak = weak_trend(a) + [r for r in (weak_relative(a),) if r]
     if weak:
         return {"action": "aguardar", "label": "AGUARDAR", "reason": (
-            "Está no setup, mas a tendência de alta está fraca: " + "; ".join(weak) + ".\n"
-            "Nos backtests do app (ações, 2017 a 2026), compras com a tendência fraca renderam em média menos que "
-            "as demais nas duas metades do período, e esperá-las aumentou o lucro da carteira.\n"
+            "Está no setup, mas a tendência está fraca: " + "; ".join(weak) + ".\n"
+            "Nos backtests do app (ações, 2017 a 2026), compras com a tendência fraca ou mais fracas que o Ibovespa "
+            "renderam em média menos que as demais nas duas metades do período.\n"
             "Volta a ser compra num próximo pullback com a MM200 subindo firme, o retorno de 12 meses positivo e o "
-            "recuo segurando acima da MM50.")}
+            "ativo rendendo mais que o Ibovespa em 6 meses.")}
     ma = a["setup"]["ma"]
     reason = (f"Pullback na {ma['name']} (+{fmt_num(ma['dist'] * 100)}% acima da média), pressão "
               f"{fmt_num(a['pressure'], 0)}% e Score {fmt_num(a['score'])}.")
@@ -585,6 +611,13 @@ def advice(a, lots, strategy, kind=None):
         reason += (f"\nAtenção: nos últimos 3 anos a estratégia perdeu em média {fmt_num(bt['recentReturn'])}% por compra "
                    f"neste ativo ({bt['recentWins']} de {bt['recentTrades']} com lucro). É um dado, não um veto: nos "
                    "testes de carteira, deixar de comprar pelo histórico reduziu o lucro.")
+    if is_priority(a, rank):
+        why = (f"{rank}º do ranking do tipo" if rank is not None and rank <= CONFIG["priorityRank"] else
+               f"Score {fmt_num(a['score'])}")
+        return {"action": "comprar", "label": "COMPRAR", "priority": True, "reason": (
+            f"Prioridade: {why} (Top {CONFIG['priorityRank']} ou Score ≥ {fmt_num(CONFIG['priorityScore'], 0)}). Nos backtests "
+            f"do app, essas compras renderam mais em média nas duas metades de 2017 a 2026; considere uma fatia de até "
+            f"{fmt_num(CONFIG['prioritySize'], 1)}x a compra normal.\n") + reason}
     return {"action": "comprar", "label": "COMPRAR", "reason": reason}
 
 
@@ -599,10 +632,10 @@ def with_advice(payload, lots, strategy_for):
     em cache é o mesmo para todos; a indicação depende da carteira e da estratégia de quem pede.
     strategy_for(grupo) → a regra de venda do grupo ({key, target, fraction})."""
     def ranked(result, kind):
-        def row(a):
+        def row(a, rank):
             group = rule_group({**a, "kind": kind})
-            return {**a, "advice": advice(a, lots.get(a["ticker"]), strategy_for(group), group)}
-        return {**result, "top": [row(a) for a in result["top"]]}
+            return {**a, "advice": advice(a, lots.get(a["ticker"]), strategy_for(group), group, rank)}
+        return {**result, "top": [row(a, rank) for rank, a in enumerate(result["top"], 1)]}
 
     views = {mode: {**view, "rankings": [{**r, "loose": ranked(r["loose"], r["kind"]),
                                           "strict": ranked(r["strict"], r["kind"])}
@@ -633,6 +666,7 @@ def views(scan, liquidity="padrao", kinds=None):
                 for kind in KINDS]}
             continue
         view = {"refDate": day_of(max(a["date"] for a in analyses)), "scanned": len(analyses), "rankings": []}
+        bench = next((a.get("return6m") for a in analyses if a["ticker"] == RELATIVE_BENCHMARK), None)
         for kind in KINDS:
             group = [a for a in analyses if (a.get("kind") or "acoes") == kind]
             breadth = (sum(1 for a in group if a["aboveRisingMM200"]) / len(group) * 100
@@ -641,7 +675,7 @@ def views(scan, liquidity="padrao", kinds=None):
                 "kind": kind, "scanned": len(group), "minAvgVolume": liquidity_floor(kind, liquidity),
                 "duplicates": sum(1 for a in group if a.get("duplicateOf")),
                 "breadth": breadth, "regime": regime(breadth) if breadth is not None else None,
-                "loose": ranking_view(group, False, kinds), "strict": ranking_view(group, True, kinds),
+                "loose": ranking_view(group, False, kinds, bench), "strict": ranking_view(group, True, kinds, bench),
             })
         result[mode] = view
     return result

@@ -184,3 +184,17 @@ class PartialExitTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EntryFilterAporteTest(unittest.TestCase):
+    def test_pullback_mode_skips_weak_trend(self):
+        classes = [{"name": "Ações", "target": 100}]
+        item = lambda key, wait: {"key": key, "label": key, "cls": "Ações", "value": 1000, "kind": "quote", "market": "b3",
+                                  "priceBRL": 10, "sell": False, "target": 50, "fixedTarget": None,
+                                  "setup": {"enough": True, "ok": True, "ma": {"name": "MM20"}, "wait": wait}}
+        plan = pf.contribution_plan(classes, [item("FIRM3", []), item("WEAK3", ["o preço caiu 5,0% em 12 meses"])],
+                                    2000, 1000, "pullback")
+        rows = {r["key"]: r for r in plan["rows"]}
+        self.assertTrue(rows["FIRM3"]["eligible"])
+        self.assertFalse(rows["WEAK3"]["eligible"])
+        self.assertIn("tendência fraca", rows["WEAK3"]["excluded"])

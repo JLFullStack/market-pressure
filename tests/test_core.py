@@ -64,3 +64,14 @@ class DurationTest(unittest.TestCase):
         self.assertEqual([fmt_sessions(n) for n in (5, 21, 252, 303, 1025)],
                          ["menos de 1 mês", "1 mês", "1 ano", "1 ano e 2 meses", "4 anos e 1 mês"])
         self.assertEqual(fmt_duration(26), "2 anos e 2 meses")
+
+
+class EntryFilterTest(unittest.TestCase):
+    def test_entry_warnings(self):
+        firm = {"mm200Slope": 0.03, "return12m": 0.2, "return6m": 0.1}
+        self.assertEqual(core.entry_warnings(firm, "MM20", 0.05), [])
+        self.assertEqual(len(core.entry_warnings({**firm, "mm200Slope": 0.005}, "MM20", 0.05)), 1)
+        self.assertEqual(len(core.entry_warnings(firm, "MM200", 0.05)), 1)
+        self.assertIn("Ibovespa", core.entry_warnings(firm, "MM20", 0.15)[0])
+        stats = core.entry_stats([100.0] * 300, [100.0] * 300, 299)
+        self.assertEqual((stats["mm200Slope"], stats["return12m"], stats["return6m"]), (0.0, 0.0, 0.0))
