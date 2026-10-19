@@ -591,6 +591,11 @@ def restamp_days(hist: dict, zone: str) -> dict:
 
 BAD_CANDLE_RATIO = 0.5  # fechamento 50%+ longe dos vizinhos dos dois lados = dado corrompido
 BAD_CANDLE_NEIGHBORS = 5
+# Desdobramento não ajustado (adjust_splits): salto que bate com 1 para k (ou k para 1) a até 3%,
+# k de 2 a 50, e que se mantém nos 5 pregões seguintes.
+SPLIT_MAX_FACTOR = 50
+SPLIT_TOLERANCE = 0.03
+SPLIT_CONFIRM = 5
 
 
 def drop_bad_candles(candles: list, ticker: str = "") -> list:
@@ -614,6 +619,48 @@ def drop_bad_candles(candles: list, ticker: str = "") -> list:
     return kept
 
 
+def _split_factor(ratio):
+    """Proporção de desdobramento (k > 1: 1 cota vira k) ou grupamento (k < 1) que explica a razão
+    entre a abertura e o fechamento anterior, ou None. k inteiro de 2 a SPLIT_MAX_FACTOR, com
+    tolerância SPLIT_TOLERANCE (uma queda real, como os −77% da AMER3 em 2023, não bate)."""
+    for k in range(2, SPLIT_MAX_FACTOR + 1):
+        if abs(ratio * k - 1) <= SPLIT_TOLERANCE:
+            return k
+        if abs(ratio / k - 1) <= SPLIT_TOLERANCE:
+            return 1 / k
+    return None
+
+
+def adjust_splits(candles: list, dividends: list, ticker: str = "") -> tuple:
+    """Ajusta desdobramentos e grupamentos que o Yahoo deixou de ajustar (SPXI11 abre a ~50 em
+    22/01/2026 depois de fechar a ~400: 1 para 8). Um salto cuja abertura e fechamento batem com
+    uma proporção inteira (_split_factor) e que se mantém nos SPLIT_CONFIRM pregões seguintes
+    (mediana dos fechamentos a até SPLIT_TOLERANCE × 5 do novo patamar, e o patamar anterior também
+    estável) divide os preços anteriores
+    pela proporção, multiplica o volume e divide os proventos por cota anteriores."""
+    candles, dividends = list(candles), list(dividends)
+    for j in range(1, len(candles)):
+        prev, cur = candles[j - 1], candles[j]
+        k = _split_factor(cur["o"] / prev["c"]) if prev["c"] else None
+        if k is None or _split_factor(cur["c"] / prev["c"]) != k:
+            continue
+        # Os dois patamares precisam ser estáveis: um candle isolado fora do lugar (que volta no
+        # dia seguinte) não é desdobramento.
+        after = sorted(c["c"] for c in candles[j:j + SPLIT_CONFIRM])
+        before = sorted(c["c"] for c in candles[max(0, j - SPLIT_CONFIRM):j])
+        if (len(after) < 2 or abs(after[len(after) // 2] / cur["c"] - 1) > SPLIT_TOLERANCE * 5
+                or abs(before[len(before) // 2] / prev["c"] - 1) > SPLIT_TOLERANCE * 5):
+            continue
+        log.warning("%s: desdobramento não ajustado pelo Yahoo em %s (%s), preços anteriores ajustados", ticker,
+                    day_of(cur["date"]), f"1 para {k}" if k > 1 else f"grupamento de {round(1 / k)} para 1")
+        for i in range(j):
+            c = candles[i]
+            candles[i] = {**c, "o": c["o"] / k, "h": c["h"] / k, "l": c["l"] / k, "c": c["c"] / k,
+                          "adj": c["adj"] / k, "v": c["v"] * k}
+        dividends = [{**d, "amount": d["amount"] / k} if d["date"] < cur["date"] else d for d in dividends]
+    return candles, dividends
+
+
 def history(ticker: str, market: str = "b3") -> dict:
     """Histórico completo de um ticker na moeda do mercado: candles e proventos (data-ex e valor
     por cota). Preços sem ajuste por proventos (o Yahoo já ajusta desdobramentos), como o
@@ -626,7 +673,8 @@ def history(ticker: str, market: str = "b3") -> dict:
                      key=lambda c: c["date"])
     candles = [{"date": c["date"], "o": c["open"], "h": c["high"], "l": c["low"], "c": c["close"],
                 "v": c.get("volume") or 0, "adj": c.get("adjustedClose") or c["close"]} for c in candles]
-    hist = {"candles": drop_bad_candles(candles, ticker), "dividends": list(data.get("dividends") or [])}
+    candles, dividends = adjust_splits(drop_bad_candles(candles, ticker), data.get("dividends") or [], ticker)
+    hist = {"candles": candles, "dividends": dividends}
     if market not in ("crypto", "fx"):
         return hist
     if not candles:

@@ -87,6 +87,15 @@ histórico do ativo, e não como motivo isolado para comprar mais ou evitar.
 - Candle vermelho no dia do sinal, RSI ainda caindo, mercado misto ou dólar oscilando são normais num \
 recuo e não bastam para evitar. Regime defensivo também não: nos testes, as poucas ações em alta num \
 mercado defensivo renderam mais que a média.
+- **Por que não há stop loss**: nos backtests de carteira do app (2017 a 2026, as mesmas compras), \
+stops de −15%, −20% e −25% e stop móvel por ATR não aumentaram o lucro de forma consistente. O stop \
+móvel subiu o acerto de 53% para 69%, mas reduziu o lucro (R$ 242 mil contra R$ 292 mil); os stops \
+fixos variaram sem padrão (de R$ 192 mil a R$ 320 mil). O sistema ganha deixando os vencedores correrem \
+(ganho médio de +26% contra perda média de −12%, com acerto perto de 50%): um stop corta justamente as \
+altas grandes, que pagam as perdas, e quedas em gap passam por qualquer stop. A proteção vem da saída \
+na reversão de tendência, da diversificação e do tamanho de cada compra. Não sugira stop curto; o preço \
+"em que a tese deixa de valer" é um ponto para repensar, não uma ordem de stop. Se o risco for alto, \
+prefira posição menor ou EVITAR.
 - **Ativos internacionais (BDRs e ETFs de ações do exterior)**: nos mesmos testes, até os sinais que o \
 analista mandou evitar renderam em média cerca de +10% por compra. Pense duas vezes antes de vetar um \
 internacional; o câmbio sozinho não é motivo.

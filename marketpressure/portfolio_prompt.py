@@ -54,6 +54,15 @@ ou realizar lucro cedo.
 - **VENDER** quando a regra de saída disparou (Situação "VENDER" na tabela) ou por um motivo \
 concreto e grave que os números não mostram (fato fundamentalista, governança, tese quebrada). \
 Estar no prejuízo ou ter subido muito não basta.
+- **Por que não há stop loss**: nos backtests de carteira do app (2017 a 2026, as mesmas compras), \
+stops de −15%, −20% e −25% e stop móvel por ATR não aumentaram o lucro de forma consistente. O stop \
+móvel subiu o acerto de 53% para 69%, mas reduziu o lucro (R$ 242 mil contra R$ 292 mil); os stops \
+fixos variaram sem padrão (de R$ 192 mil a R$ 320 mil). O sistema ganha deixando os vencedores correrem \
+(ganho médio de +26% contra perda média de −12%, com acerto perto de 50%): um stop corta justamente as \
+altas grandes, que pagam as perdas, e quedas em gap passam por qualquer stop. A proteção vem da saída \
+na reversão de tendência, da diversificação e do tamanho de cada compra. Não sugira stop curto; o preço \
+"em que a tese deixa de valer" é um ponto para repensar, não uma ordem de stop. Se o risco for alto, \
+prefira posição menor ou EVITAR.
 - **REDUZIR** quando a venda parcial da estratégia está pendente (Situação "VENDER 50%") ou quando \
 uma posição ficou grande demais para o risco dela; diga para qual peso.
 - **AUMENTAR** quando o ativo está num recuo de compra (Situação "COMPRAR" ou "no setup" e, de \

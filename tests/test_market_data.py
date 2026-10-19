@@ -3,6 +3,7 @@ nada é pedido; no pregão, só o candle do dia (5d); mudança no passado (desdo
 novo) baixa os 10 anos de novo; o salvo no formato antigo, cortado em 5 anos, é baixado de novo
 com os 10 anos."""
 
+import unittest
 import json
 import urllib.parse
 from unittest import mock
@@ -186,3 +187,26 @@ class UniverseFallbackTest(DatabaseTestCase):
             assets = self.load(None)
         self.assertEqual([a["ticker"] for a in assets], ["PETR4"])
         self.assertFalse(database.exists("universe"))
+
+
+class SplitAdjustTest(unittest.TestCase):
+    @staticmethod
+    def series(closes):
+        return [{"date": 1_700_000_000 + k * 86400, "o": c, "h": c * 1.01, "l": c * 0.99, "c": c, "v": 100, "adj": c}
+                for k, c in enumerate(closes)]
+
+    def test_unadjusted_split_is_adjusted(self):
+        candles = self.series([400.0, 402.0, 400.5] + [50.0, 50.2, 49.9, 50.1, 50.3, 50.0])
+        divs = [{"date": candles[1]["date"], "amount": 8.0}, {"date": candles[5]["date"], "amount": 1.0}]
+        fixed, fixed_divs = market_data.adjust_splits(candles, divs, "TEST11")
+        self.assertAlmostEqual(fixed[0]["c"], 50.0)
+        self.assertAlmostEqual(fixed[2]["c"], 400.5 / 8)
+        self.assertEqual(fixed[0]["v"], 800)
+        self.assertEqual([d["amount"] for d in fixed_divs], [1.0, 1.0])
+        self.assertEqual(fixed[3:], candles[3:])
+
+    def test_real_crash_and_isolated_jump_are_kept(self):
+        crash = self.series([20.0, 20.1] + [4.6, 4.5, 4.7, 4.4, 4.6, 4.5])   # −77%: não é proporção inteira
+        self.assertEqual(market_data.adjust_splits(crash, [], "AMER3")[0], crash)
+        back = self.series([40.0, 40.2, 20.1, 40.3, 40.1, 40.0, 40.2, 40.4])   # metade num dia e volta
+        self.assertEqual(market_data.adjust_splits(back, [], "XXXX3")[0], back)
