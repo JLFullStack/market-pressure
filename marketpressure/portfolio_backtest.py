@@ -28,7 +28,7 @@ from . import database as db
 from . import market_data, runtime
 from . import screener as sc
 from . import strategy as st
-from .core import (EXIT, add_up, adjusted_candles, closed_candles, compute_indicators, day_of, evaluate_setup,
+from .core import (EXIT, entry_stats, entry_warnings, add_up, adjusted_candles, closed_candles, compute_indicators, day_of, evaluate_setup,
                    exit_signal, fmt_brl, fmt_date, fmt_num, fmt_sessions)
 
 log = logging.getLogger(__name__)
@@ -98,6 +98,11 @@ def parse_params(body):
         "cdi": body.get("cdi", True) is not False,
         "liquidity": _liquidity(body.get("liquidity")),
         "exit": _exit(body.get("saida")),
+        # Seguir a Indicação do Screener: pula as compras que seriam AGUARDAR (tendência fraca ou
+        # mais fraco que o BOVA11, fora dos internacionais) e compra uma fatia prioritySize × maior
+        # no Top priorityRank do tipo ou com Score ≥ priorityScore.
+        "advice": body.get("indicacao", True) is not False,
+        "classes": _classes(body),
     }
     if params["exit"] == "config":
         # Saída das Configurações: a regra de cada grupo (reversão = sem venda parcial).
@@ -105,6 +110,23 @@ def parse_params(body):
         params["rules"] = {group: (rule["target"], rule["fraction"] if rule["key"] == "parcial" else 0.0)
                            for group in st.GROUPS for rule in [st.for_group(settings, group)]}
     return params
+
+
+def _classes(body):
+    """Metas por classe (grupos de strategy.GROUPS, em % do patrimônio) quando a alocação é "classes";
+    None = limite de ativos (maxAssets)."""
+    if (body.get("alocacao") or "ativos") != "classes":
+        return None
+    raw = body.get("metas") or {}
+    if not isinstance(raw, dict):
+        raise ValueError("Informe a meta de cada classe.")
+    out = {}
+    for group, label in st.GROUPS.items():
+        out[group] = _number(raw, group, 0, 0, 100, f"A meta de {label} (%)") / 100
+    total = add_up(out.values())
+    if total <= 0 or total > 1.0001:
+        raise ValueError("As metas por classe devem somar entre 1% e 100%.")
+    return out
 
 
 def _exit(value):
@@ -196,6 +218,7 @@ def signals(asset, strict):
             r = sc.lot_return(lot, sc.CONFIG["partialFraction"])
             closed_at.setdefault(lot["exit"]["i"], []).append(r > 0)
     ok, score, wins, trades = [False] * n, [None] * n, 0, 0
+    entry = {}   # filtro de entrada da Indicação no dia do sinal: (entry_stats, média testada)
     for i in range(n):
         for won in closed_at.get(i, ()):
             wins += won
@@ -205,6 +228,7 @@ def signals(asset, strict):
         setup = evaluate_setup(ind, i)
         if setup["okStrict"] if strict else setup["ok"]:
             ok[i] = True
+            entry[i] = (entry_stats(ind["closes"], ind["mm200"], i), setup["ma"]["name"])
             win_rate = (wins + sc.CONFIG["priorWinRate"] * sc.CONFIG["priorWeight"]) / (trades + sc.CONFIG["priorWeight"]) * 100
             score[i] = sc.pressure(ind, i, setup, False, weights)["total"] * 0.6 + win_rate * 0.4
     divs = {}
@@ -212,7 +236,7 @@ def signals(asset, strict):
         divs[day_of(d["date"])] = divs.get(day_of(d["date"]), 0) + d["amount"]
     out = {"ticker": asset["ticker"], "kind": asset["kind"], "name": asset.get("name"), "candles": raw, "days": days,
            "idx": {d: i for i, d in enumerate(days)}, "ok": ok, "exit": [exit_signal(ind, i) for i in range(n)],
-           "score": score, "divs": divs, "traded": traded}
+           "score": score, "divs": divs, "traded": traded, "entry": entry}
     _signals_cache[key] = out
     return out
 
@@ -250,15 +274,20 @@ def simulate(data, cal, params, fraction, cdi):
     screener.rule_group); um número = a mesma parte para todos."""
     target, cost, reentry = params["target"], params["cost"], sc.CONFIG["reentryDistance"]
     rules = params.get("rules") if fraction is None else None
+    classes, bench6m = params.get("classes"), params.get("bench6m") or {}
+    params.setdefault("skipped", 0)
 
     groups = {}
+
+    def group_of(t):
+        if t not in groups:
+            groups[t] = sc.rule_group(data[t])
+        return groups[t]
 
     def rule_of(t):
         if not rules:
             return target, fraction
-        if t not in groups:
-            groups[t] = sc.rule_group(data[t])
-        return rules.get(groups[t], (target, 0.0))
+        return rules.get(group_of(t), (target, 0.0))
     months = _first_sessions(cal)
     cash = contributed = params["initial"]
     flows = [(cal[0], params["initial"])]
@@ -292,8 +321,9 @@ def simulate(data, cal, params, fraction, cdi):
                     trade.update(exit={"date": d, "price": price, "i": i}, proceeds=trade["proceeds"] + value)
         pending_sell.clear()
         equity = cash + add_up(lot["qty"] * last_px[t] for t, lots in hold.items() for lot in lots)
+        value = {t: add_up(lot["qty"] * last_px[t] for lot in lots) for t, lots in hold.items()}
         # Compras do ranking do dia anterior, na abertura, do maior Score para o menor.
-        for t, score, rank in pending_buy:
+        for t, score, rank, mult in pending_buy:
             a = data[t]
             if d not in a["idx"]:
                 continue
@@ -302,13 +332,18 @@ def simulate(data, cal, params, fraction, cdi):
             lots = hold.get(t)
             if lots and any(abs(price / lot["price"] - 1) < reentry for lot in lots):
                 continue
-            if not lots and len(hold) >= params["maxAssets"]:
+            if not classes and not lots and len(hold) >= params["maxAssets"]:
                 continue
-            slot = equity * params["position"]
+            slot = equity * params["position"] * mult
             amount = min(slot, cash)
+            if classes:
+                g = group_of(t)
+                room = classes.get(g, 0.0) * equity - add_up(v for x, v in value.items() if group_of(x) == g)
+                amount = min(amount, room)
             if amount < slot * MIN_ORDER or amount <= 0:
                 continue
             cash -= amount
+            value[t] = value.get(t, 0.0) + amount
             trades.append({"ticker": t, "entry": {"date": d, "price": price, "i": i}, "invested": amount,
                            "partial": None, "exit": None, "proceeds": 0.0, "dividends": 0.0, "score": score, "rank": rank,
                            "peakClose": price, "peakHigh": price})
@@ -341,7 +376,18 @@ def simulate(data, cal, params, fraction, cdi):
                 pending_sell.add(t)
             elif a["ok"][i] and a["traded"][i] >= sc.liquidity_floor(a["kind"], params["liquidity"]):
                 candidates.append((t, a["score"][i], a["kind"]))
-        pending_buy = daily_ranking(candidates, params["topN"])
+        pending_buy = []
+        for t, score, rank in daily_ranking(candidates, params["topN"]):
+            mult = 1.0
+            if params.get("advice"):
+                a = data[t]
+                i = a["idx"][d]
+                if group_of(t) not in sc.CONFIG["adviceIgnoreKinds"] and entry_warnings(*a["entry"][i], bench6m.get(d)):
+                    params["skipped"] += 1
+                    continue
+                if rank <= sc.CONFIG["priorityRank"] or (score or 0) >= sc.CONFIG["priorityScore"]:
+                    mult = sc.CONFIG["prioritySize"]
+            pending_buy.append((t, score, rank, mult))
         invested_now = add_up(lot["qty"] * last_px[t] for t, lots in hold.items() for lot in lots)
         curve.append({"date": d, "equity": cash + invested_now, "contributed": contributed, "cash": cash})
     for t, lots in hold.items():  # compras ainda abertas: pelo último fechamento
@@ -564,12 +610,15 @@ def run(params):
     if has_partial:
         runs.append(("onlyB", "Só a regra B", 0.0))
     strategies, trades_main, flows = [], [], None
+    params["bench6m"] = sc.benchmark_6m() if params.get("advice") else {}
+    skipped = 0
     for key, label, f in runs:
+        params["skipped"] = 0
         curve, flows, trades = simulate(data, cal, params, f, cdi)
         strategies.append({"key": key, "label": label, "metrics": _metrics(curve, flows, cal[-1], trades),
                            "curve": _profit_series(curve), "years": _yearly(curve, flows)})
         if key == "rule":
-            trades_main = trades
+            trades_main, skipped = trades, params["skipped"]
     adj = {day_of(c["date"]): c["adj"] for c in bench}
     bova = _benchmark(cal, flows, adj)
     strategies.append({"key": "bova", "label": "BOVA11 (mesmos aportes)", "metrics": _metrics(bova, flows, cal[-1]),
@@ -612,11 +661,13 @@ def run(params):
         "bounds": {"min": first_day, "max": last_day, "from": cal[0], "to": cal[-1]}, "note": note,
         "universe": {"label": UNIVERSES[params["universe"]], "candidates": len(assets), "ranked": len(data),
                      "illiquid": illiquid},
-        "params": {k: params[k] for k in ("initial", "monthly", "maxAssets", "topN", "strict", "cdi", "liquidity", "exit")}
+        "params": {k: params[k] for k in ("initial", "monthly", "maxAssets", "topN", "strict", "cdi", "liquidity", "exit", "advice")}
+                  | {"classes": {g: v * 100 for g, v in params["classes"].items()} if params.get("classes") else None}
                   | {"position": params["position"] * 100, "cost": params["cost"] * 100,
                      "target": params["target"] * 100, "fraction": params["fraction"] * 100,
                      "rules": {k: {"target": v[0] * 100, "fraction": v[1] * 100}
                                for k, v in (params.get("rules") or {}).items()}},
+        "adviceSkipped": skipped if params.get("advice") else None,
         "strategies": strategies, "compare": compare, "trades": rows, "markers": _markers(rows),
         "assets": sorted(traded.values(), key=lambda x: (-x["trades"], x["ticker"])), "warnings": warnings,
     }

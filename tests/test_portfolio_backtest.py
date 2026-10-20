@@ -104,3 +104,33 @@ class YearlyTest(DatabaseTestCase):
         result = pb.run(pb.parse_params({"universe": "lista", "tickers": "PETR4", "initial": "10000", "cdi": False}))
         for s in result["strategies"]:
             self.assertAlmostEqual(sum(y["profit"] for y in s["years"]), s["metrics"]["profit"], places=4, msg=s["key"])
+
+
+class AdviceAndClassesTest(DatabaseTestCase):
+    def setUp(self):
+        super().setUp()
+        pb._signals_cache.clear()
+
+    def test_follow_the_screener_indication(self):
+        on = pb.run(params())
+        off = pb.run(params(indicacao=False))
+        self.assertIsInstance(on["adviceSkipped"], int)
+        self.assertIsNone(off["adviceSkipped"])
+        self.assertTrue(on["params"]["advice"])
+        self.assertGreaterEqual(on["adviceSkipped"], 0)
+
+    def test_class_targets(self):
+        p = params(alocacao="classes", metas={"acoes": "60", "internacionais": "40"})
+        self.assertAlmostEqual(p["classes"]["acoes"], 0.6)
+        result = pb.run(p)
+        self.assertEqual(result["params"]["classes"]["acoes"], 60)
+        for body in ({"alocacao": "classes", "metas": {"acoes": "0"}}, {"alocacao": "classes", "metas": {"acoes": "80", "etfs": "40"}}):
+            with self.assertRaises(ValueError):
+                params(**body)
+
+    def test_single_asset_marks_the_buys_the_indication_would_skip(self):
+        from marketpressure import screener
+        view = screener.backtest_view("PETR4", "b3")
+        self.assertTrue(all(isinstance(lot["wait"], list) for lot in view["lots"]))
+        adv = view["stats"]["advice"]
+        self.assertEqual(adv["wait"] + adv["buy"], len(view["lots"]))

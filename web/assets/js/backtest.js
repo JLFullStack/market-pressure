@@ -60,6 +60,7 @@ function init() {
     $('btMode').addEventListener('click', (ev) => { const mode = ev.target.dataset?.mode; if (mode) setMode(mode); });
     $('pfUniverse').addEventListener('change', () => setMode(state.mode));
     $('btExit').addEventListener('change', syncExit);
+    $('pfAlloc').addEventListener('change', syncAlloc);
     syncExit();
     try { $('pfLiquidity').value = localStorage.getItem(LIQUIDITY_KEY) || 'padrao'; } catch (e) { /* sem preferência salva */ }
     if (!$('pfLiquidity').value) $('pfLiquidity').value = 'padrao';
@@ -98,6 +99,9 @@ function init() {
         for (const [key, id] of Object.entries(fields)) if (q.get(key) !== null) $(id).value = q.get(key);
         $('btStrict').checked = q.get('strict') === '1';
         $('pfCdi').checked = q.get('cdi') !== '0';
+        $('pfAdvice').checked = q.get('indicacao') !== '0';
+        if (q.get('alocacao')) $('pfAlloc').value = q.get('alocacao') === 'classes' ? 'classes' : 'ativos';
+        for (const g of META_GROUPS) if (q.get(`meta_${g}`) !== null) $(`pfMeta_${g}`).value = q.get(`meta_${g}`);
         syncExit();
         setMode('carteira');
         runPortfolio();
@@ -127,12 +131,21 @@ function syncExit() {
     $('btFraction').disabled = !manual;
 }
 
+// Alocação por classe: as metas aparecem no lugar do "Máx. de ativos".
+const META_GROUPS = ['acoes', 'fundos', 'etfs', 'internacionais'];
+function syncAlloc() {
+    for (const el of document.querySelectorAll('#btForm [data-alloc]')) {
+        el.hidden = state.mode !== 'carteira' || el.dataset.alloc !== $('pfAlloc').value;
+    }
+}
+
 // "Um ativo" ou "Carteira": mostra os campos e o resultado de cada modo.
 function setMode(mode) {
     state.mode = mode;
     for (const b of $('btMode').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
     for (const el of document.querySelectorAll('#btForm [data-mode]')) el.hidden = el.dataset.mode !== mode;
     if (mode === 'carteira') $('pfTickersField').hidden = $('pfUniverse').value !== 'lista';
+    syncAlloc();
     $('btHeaderText').innerText = mode === 'carteira'
         ? 'O setup em vários ativos com um único caixa: o que é vendido volta para o caixa e compra os próximos sinais'
         : 'Cada compra (lote) do setup no histórico do ativo, com a venda parcial e a saída pela regra B';
@@ -333,6 +346,9 @@ function renderKpis(d) {
             'Quanto o preço caiu, em média, do maior fechamento depois da compra até a venda pela regra B. Mostra quanto do ganho foi devolvido antes da saída.'),
         kpi('Alta máxima média', pct(s.avgMaxGain), 'maior máxima depois da compra', '',
             'Em média, quanto o preço chegou a subir depois de cada compra. Comparado ao resultado, mostra o potencial deixado na mesa.'),
+        kpi('Indicação do Screener', s.advice ? `${s.advice.wait} de ${s.lots} seriam AGUARDAR` : '—',
+            s.advice && s.advice.wait ? `retorno médio ${pct(s.advice.waitReturn)} nelas x ${pct(s.advice.buyReturn)} nas demais` : 'todas as compras seriam COMPRAR', '',
+            'Quantas compras do backtest a Indicação do Screener mandaria aguardar (tendência fraca ou mais fraca que o Ibovespa em 6 meses; internacionais não são filtrados) e como elas se saíram em comparação com as demais. Essas compras aparecem com o selo AGUARDAR na tabela.'),
         kpi('Comprar e manter', pct(s.buyHold), s.buyHoldFrom ? `da 1ª compra (${fmtDate(s.buyHoldFrom)}) até ${fmtDate(d.lastDate)}` : 'sem compras', signClass(s.buyHold),
             'Quanto teria rendido comprar uma vez, no preço da primeira compra do período, e manter até o fim, sem vender. Serve de comparação para a estratégia.')
     ].join('');
@@ -363,7 +379,8 @@ function renderLots(d) {
             <td class="r nowrap">${fmtNum(l.days, 0)}<div class="small muted">≈ ${escapeHTML(l.duration)}</div></td>
             <td class="r nowrap">${pct(l.maxGain)}</td>
             <td class="r nowrap">${l.giveback === null ? '—' : `${fmtNum(l.giveback, 1)}%`}</td>
-            <td><span class="badge ${l.open ? 'badge-fill' : 'badge-low'}">${escapeHTML(l.status)}</span></td>
+            <td><span class="badge ${l.open ? 'badge-fill' : 'badge-low'}">${escapeHTML(l.status)}</span>
+                ${l.wait && l.wait.length ? signalBadge('AGUARDAR', `A Indicação do Screener mandaria aguardar esta compra: ${l.wait.join('; ')}.`, 'badge-fill') : ''}</td>
         </tr>`).join('')
         : '<tr><td colspan="10" class="empty-row">Nenhum sinal do setup no período.</td></tr>';
 }
@@ -429,7 +446,8 @@ async function runPortfolio() {
         position: $('pfPosition').value, maxAssets: $('pfMaxAssets').value, topN: $('pfTopN').value, liquidity: $('pfLiquidity').value,
         cost: $('pfCost').value, target: $('btTarget').value,
         fraction: $('btFraction').value, from: $('btFrom').value, to: $('btTo').value, strict: $('btStrict').checked, cdi: $('pfCdi').checked,
-        saida: $('btExit').value
+        saida: $('btExit').value, indicacao: $('pfAdvice').checked, alocacao: $('pfAlloc').value,
+        metas: Object.fromEntries(META_GROUPS.map(g => [g, $(`pfMeta_${g}`).value]))
     };
     const seq = ++state.seq;
     setMsg('');
@@ -447,7 +465,10 @@ async function runPortfolio() {
     state.pf = d;
     for (const id of ['btFrom', 'btTo']) { $(id).min = d.bounds.min; $(id).max = d.bounds.max; }
     if (d.note) setMsg(d.note);
-    const url = new URLSearchParams({ mode: 'carteira', ...body, strict: body.strict ? '1' : '0', cdi: body.cdi ? '1' : '0' });
+    const { metas, ...plain } = body;
+    const url = new URLSearchParams({ mode: 'carteira', ...plain, strict: body.strict ? '1' : '0', cdi: body.cdi ? '1' : '0',
+                                      indicacao: body.indicacao ? '1' : '0',
+                                      ...Object.fromEntries(Object.entries(metas).map(([g, v]) => [`meta_${g}`, v])) });
     for (const [k, v] of [...url.entries()]) if (v === '') url.delete(k);
     history.replaceState(null, '', `?${url}`);
     $('pfResult').hidden = false;
@@ -466,7 +487,9 @@ function renderPortfolio(d) {
     $('pfWarnings').innerText = d.warnings.join(' ');
     $('pfWarnings').style.display = d.warnings.length ? 'block' : 'none';
     $('pfCompare').innerText = d.compare || '';
-    $('pfNote').innerText = 'Lucro = patrimônio − tudo o que foi aportado até o dia. Passe o mouse no gráfico para ver o lucro de cada linha em cada dia.';
+    $('pfNote').innerText = 'Lucro = patrimônio − tudo o que foi aportado até o dia. Passe o mouse no gráfico para ver o lucro de cada linha em cada dia.'
+        + (d.adviceSkipped !== null && d.adviceSkipped !== undefined
+            ? ` Seguindo a Indicação do Screener: ${fmtNum(d.adviceSkipped, 0)} sinal(is) do ranking em AGUARDAR não viraram compra (conta cada ativo em cada dia em que apareceu).` : '');
     $('pfLegend').innerHTML = d.strategies.map(st => `<span><i class="swatch-line" style="background:${PF_COLORS[st.key]}"></i>${escapeHTML(st.label)}</span>`).join('');
 
     state.pfChart?.remove();

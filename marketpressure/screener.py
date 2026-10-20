@@ -928,6 +928,37 @@ def _with_capital(stats, lots, fraction, first, last, amount):
             "returnOnMaxCapital": stats["profit"] / max_capital * 100 if max_capital else None}
 
 
+def _advice_split(rows):
+    """As compras que a Indicação mandaria AGUARDAR x as demais: quantidade e retorno médio (%)."""
+    wait = [r["return"] for r in rows if r["wait"]]
+    buy = [r["return"] for r in rows if not r["wait"]]
+    mean = lambda v: add_up(v) / len(v) if v else None
+    return {"wait": len(wait), "waitReturn": mean(wait), "buy": len(buy), "buyReturn": mean(buy)}
+
+
+def benchmark_6m():
+    """{dia: retorno de relativeWindow pregões do BOVA11} nos pregões fechados (força relativa da
+    Indicação nos backtests); {} se o histórico do BOVA11 não vier."""
+    try:
+        bench = closed_candles(market_data.history(RELATIVE_BENCHMARK)["candles"])
+    except Exception:
+        log.warning("BOVA11 indisponível para a força relativa do backtest", exc_info=True)
+        return {}
+    w = CONFIG["relativeWindow"]
+    return {day_of(c["date"]): c["c"] / bench[k - w]["c"] - 1 for k, c in enumerate(bench) if k >= w}
+
+
+def lot_wait_reasons(ind, signal_i, group, bench6m):
+    """Motivos pelos quais a Indicação mandaria AGUARDAR a compra cujo sinal foi no candle signal_i
+    (core.entry_warnings; vazio nos grupos de adviceIgnoreKinds)."""
+    if group in CONFIG["adviceIgnoreKinds"] or signal_i < 0:
+        return []
+    setup = evaluate_setup(ind, signal_i)
+    day = day_of(ind["candles"][signal_i]["date"])
+    return entry_warnings(entry_stats(ind["closes"], ind["mm200"], signal_i), (setup["ma"] or {}).get("name"),
+                          bench6m.get(day))
+
+
 def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False, start=None, end=None,
                   amount=BACKTEST_AMOUNT):
     """Tudo o que a aba Backtest mostra de um ativo: candles e médias (pregões fechados; fundos no
@@ -969,6 +1000,8 @@ def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False,
                 f"e as médias precisam de {CONFIG['backtestStart']} pregões antes da primeira compra.")
     lots = backtest_lots(ind, strict, target, fraction, first)
 
+    group = st.group_of(kind, market, name)
+    bench6m = benchmark_6m() if group not in CONFIG["adviceIgnoreKinds"] else {}
     rows, markers = [], {}
     for n, lot in enumerate(lots, 1):
         e, p, x = lot["entry"], lot["partial"], lot["exit"]
@@ -993,6 +1026,8 @@ def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False,
             "giveback": (1 - x["price"] / peak_close) * 100 if x else None,
             "status": status,
             "range": {"from": days[max(first, e["i"] - LOT_MARGIN)], "to": days[min(last, end + LOT_MARGIN)]},
+            # a Indicação do Screener mandaria AGUARDAR esta compra? (motivos; vazio = COMPRAR)
+            "wait": lot_wait_reasons(ind, e["i"] - 1, group, bench6m),
         })
         for key, point in (("buy", e), ("partial", p), ("exit", x)):
             if point:
@@ -1026,6 +1061,7 @@ def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False,
         "avgMaxGain": add_up(r["maxGain"] for r in rows) / len(rows) if rows else None,
         "exits": len({lot["exit"]["i"] for lot in lots if lot["exit"]}),
         "buyHold": (closes[last] / lots[0]["entry"]["price"] - 1) * 100 if lots else None,
+        "advice": _advice_split(rows),
         "buyHoldFrom": days[lots[0]["entry"]["i"]] if lots else None,
     })
     only_b, equity_b, compare = None, None, None

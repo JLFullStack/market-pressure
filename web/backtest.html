@@ -96,7 +96,25 @@
                 <label class="field" data-mode="carteira" hidden><span>Fatia por compra (%) <span class="tip" tabindex="0" data-tip="Quanto do patrimônio do dia vai em cada compra. 10 = cada compra usa 10% do patrimônio (o lucro passa a comprar mais: juros compostos). Só compra se houver caixa para pelo menos metade da fatia." aria-label="Ajuda: Quanto do patrimônio do dia vai em cada compra. 10 = cada compra usa 10% do patrimônio (o lucro passa a comprar mais: juros compostos). Só compra se houver caixa para pelo menos metade da fatia.">?</span></span>
                     <input type="number" id="pfPosition" class="select" min="1" max="100" step="1" value="10" inputmode="decimal">
                 </label>
-                <label class="field" data-mode="carteira" hidden><span>Máx. de ativos <span class="tip" tabindex="0" data-tip="Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam." aria-label="Ajuda: Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam.">?</span></span>
+                <label class="field" data-mode="carteira" hidden><span>Alocação <span class="tip" tabindex="0" data-tip="Máx. de ativos: compra enquanto houver caixa, com um limite de ativos diferentes. Metas por classe: cada classe (a mesma da Carteira) só compra até a sua meta em % do patrimônio, sem limite de ativos, como na carteira 60/40." aria-label="Ajuda: Máx. de ativos: compra enquanto houver caixa, com um limite de ativos diferentes. Metas por classe: cada classe (a mesma da Carteira) só compra até a sua meta em % do patrimônio, sem limite de ativos, como na carteira 60/40.">?</span></span>
+                    <select id="pfAlloc" class="select">
+                        <option value="ativos">Máx. de ativos</option>
+                        <option value="classes">Metas por classe</option>
+                    </select>
+                </label>
+                <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>Ações (%)</span>
+                    <input type="number" id="pfMeta_acoes" class="select" min="0" max="100" step="5" value="60" inputmode="decimal">
+                </label>
+                <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>Fundos imob. (%)</span>
+                    <input type="number" id="pfMeta_fundos" class="select" min="0" max="100" step="5" value="0" inputmode="decimal">
+                </label>
+                <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>ETFs Brasil (%)</span>
+                    <input type="number" id="pfMeta_etfs" class="select" min="0" max="100" step="5" value="0" inputmode="decimal">
+                </label>
+                <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>Internacionais (%)</span>
+                    <input type="number" id="pfMeta_internacionais" class="select" min="0" max="100" step="5" value="40" inputmode="decimal">
+                </label>
+                <label class="field" data-mode="carteira" data-alloc="ativos" hidden><span>Máx. de ativos <span class="tip" tabindex="0" data-tip="Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam." aria-label="Ajuda: Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam.">?</span></span>
                     <input type="number" id="pfMaxAssets" class="select" min="1" max="100" step="1" value="10" inputmode="numeric">
                 </label>
                 <label class="field" data-mode="carteira" hidden><span>Custo por operação (%) <span class="tip" tabindex="0" data-tip="Corretagem, emolumentos e diferença de preço na execução, em % de cada compra e de cada venda." aria-label="Ajuda: Corretagem, emolumentos e diferença de preço na execução, em % de cada compra e de cada venda.">?</span></span>
@@ -123,6 +141,7 @@
                 <label class="field"><span>Até <span class="tip" tabindex="0" data-tip="Fim do período: o que estiver aberto nesta data é avaliado pelo fechamento dela. Em branco = até o último pregão fechado." aria-label="Ajuda: Fim do período: o que estiver aberto nesta data é avaliado pelo fechamento dela. Em branco = até o último pregão fechado.">?</span></span>
                     <input type="date" id="btTo" class="select">
                 </label>
+                <label class="toggle bt-check" data-mode="carteira" hidden><input type="checkbox" id="pfAdvice" checked> Seguir a Indicação do Screener <span class="tip" tabindex="0" data-tip="Como na vida real: pula as compras que o Screener indicaria AGUARDAR (ações com tendência fraca ou mais fracas que o Ibovespa em 6 meses; os internacionais não são filtrados) e compra uma fatia 1,5x maior quando a compra tem prioridade (Top 5 do tipo ou Score 65 ou mais)." aria-label="Ajuda: Como na vida real: pula as compras que o Screener indicaria AGUARDAR (ações com tendência fraca ou mais fracas que o Ibovespa em 6 meses; os internacionais não são filtrados) e compra uma fatia 1,5x maior quando a compra tem prioridade (Top 5 do tipo ou Score 65 ou mais).">?</span></label>
                 <label class="toggle bt-check" data-mode="carteira" hidden><input type="checkbox" id="pfCdi" checked> Caixa rende CDI <span class="tip" tabindex="0" data-tip="O dinheiro parado (esperando sinal) rende o CDI do dia, como num Tesouro Selic ou CDB de liquidez diária." aria-label="Ajuda: O dinheiro parado (esperando sinal) rende o CDI do dia, como num Tesouro Selic ou CDB de liquidez diária.">?</span></label>
                 <label class="toggle bt-check"><input type="checkbox" id="btStrict"> Exigir candle de rejeição <span class="tip" tabindex="0" data-tip="Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener." aria-label="Ajuda: Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener.">?</span></label>
                 <div><button type="submit" class="btn">Rodar backtest</button></div>
