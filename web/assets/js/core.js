@@ -267,7 +267,32 @@ function setupTips() {
         if (el) { ev.preventDefault(); ev.stopPropagation(); show(el); } else if (current) hide();
     }, true);
 }
-document.addEventListener('DOMContentLoaded', () => { setupTips(); keepTipsWithText(); });
+// Botão "voltar ao topo" (canto inferior direito; no celular acima da barra de abas, pelo CSS):
+// aparece depois de rolar SCROLL_TOP_AFTER px.
+const SCROLL_TOP_AFTER = 400;
+function setupScrollTop() {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'scroll-top';
+    btn.setAttribute('aria-label', 'Voltar ao topo');
+    btn.title = 'Voltar ao topo';
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    btn.tabIndex = -1;
+    document.body.appendChild(btn);
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: reduced.matches ? 'auto' : 'smooth' }));
+    let shown = false;
+    const update = () => {
+        const show = window.scrollY > SCROLL_TOP_AFTER;
+        if (show === shown) return;
+        shown = show;
+        btn.classList.toggle('visible', show);
+        btn.tabIndex = show ? 0 : -1;
+    };
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+}
+document.addEventListener('DOMContentLoaded', () => { setupTips(); keepTipsWithText(); setupScrollTop(); });
 
 // ---------------------------------------------------------------- Copiar texto para IA
 

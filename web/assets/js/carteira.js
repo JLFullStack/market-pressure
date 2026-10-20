@@ -535,7 +535,7 @@ async function renderAporte() {
     const money = (v) => `<span class="${signClass(Math.round(v * 100))}">${fmtBRL(v)}</span>`;
     $('aporteClassBody').innerHTML = plan.classRows.map(c => `
         <tr>
-            <td class="nowrap"><strong>${escapeHTML(c.cls)}</strong></td>
+            <td><strong>${escapeHTML(c.cls)}</strong></td>
             <td class="r nowrap">${fmtBRL(c.value)}</td>
             <td class="r nowrap">${fmtNum(c.pct, 2)}%</td>
             <td class="r nowrap">${fmtNum(c.target, 2)}%</td>
@@ -581,10 +581,10 @@ async function renderAporte() {
         </tr>`;
     };
     const groups = plan.classRows.filter(c => c.members.length).map(c => `
-        <tr class="group-row"><td colspan="11"><strong>${escapeHTML(c.cls)}</strong> <span class="small muted">meta ${fmtNum(c.target, 2)}% · ${c.members.length} ativo(s)</span></td></tr>
+        <tr class="group-row"><td colspan="11"><span class="sticky-label"><strong>${escapeHTML(c.cls)}</strong> <span class="small muted">meta ${fmtNum(c.target, 2)}% · ${c.members.length} ativo(s)</span></span></td></tr>
         ${c.members.map(assetRow).join('')}
         <tr class="total-row">
-            <td class="pick"></td><td colspan="2"><strong>Total ${escapeHTML(c.cls)}</strong></td>
+            <td class="pick"></td><td><strong>Total ${escapeHTML(c.cls)}</strong></td><td></td>
             <td class="r nowrap"><strong>${fmtBRL(c.value)}</strong></td><td class="r nowrap">${fmtNum(c.pct, 2)}%</td>
             <td class="r nowrap">${fmtNum(c.target, 2)}%</td><td class="r nowrap">${fmtBRL(c.ideal)}</td>
             <td class="r nowrap">${money(c.diff)}</td><td class="r nowrap"><strong>${fmtBRL(c.suggestion)}</strong></td>
@@ -941,7 +941,7 @@ function renderChart() {
 function renderAllocation(a) {
     $('allocationViewBody').innerHTML = a.allocation.map(r => `
         <tr>
-            <td class="nowrap"><strong>${escapeHTML(r.cls)}</strong></td>
+            <td><strong>${escapeHTML(r.cls)}</strong></td>
             <td class="r nowrap">${fmtBRL(r.value)}</td>
             <td class="r nowrap">${fmtNum(r.pct)}%</td>
             <td class="r nowrap">${fmtNum(r.target)}%</td>
@@ -1303,7 +1303,7 @@ function goalCard(g, saved) {
     const scen = r.scenarios;
     const scenarios = `<table class="goal-scenarios"><thead><tr><th>Aporte mensal</th>${scen.rates.map(x => `<th class="r">${rate(x, 1)} a.a.</th>`).join('')}</tr></thead>
         <tbody>${scen.rows.map(row => `<tr><td class="nowrap">${fmtBRL(row.monthly)}</td>${row.cells.map(c => `<td class="r nowrap${c.current ? ' goal-current' : ''}">${escapeHTML(c.text)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-    const yearly = `<table><thead><tr><th class="r">Ano</th><th>Data</th><th class="r">Aportado (com a partida)</th><th class="r">Juros</th><th class="r">Patrimônio</th><th class="r">Renda possível/mês</th><th class="r">% da meta</th></tr></thead>
+    const yearly = `<table class="sticky-first"><thead><tr><th class="r">Ano</th><th>Data</th><th class="r">Aportado (com a partida)</th><th class="r">Juros</th><th class="r">Patrimônio</th><th class="r">Renda possível/mês</th><th class="r">% da meta</th></tr></thead>
         <tbody>${r.yearly.map(y => `<tr><td class="r">${y.year}</td><td class="nowrap">${monthYear(y.date)}</td><td class="r nowrap">${money0(y.contributed)}</td>
         <td class="r nowrap">${money0(y.interest)}</td><td class="r nowrap"><strong>${money0(y.value)}</strong></td><td class="r nowrap">${fmtBRL(y.income)}</td><td class="r nowrap">${fmtNum(y.progress, 1)}%</td></tr>`).join('')}</tbody></table>`;
     const actions = saved ? `<div class="batch-buttons"><button type="button" class="btn-secondary" data-goal-edit="${escapeHTML(g.id)}">Editar</button>

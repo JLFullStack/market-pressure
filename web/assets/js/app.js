@@ -186,7 +186,7 @@ function rankingPanel(scan, r, result, strict) {
                 ${few}
             </div>
             <div class="table-container">
-                <table>
+                <table class="sticky-two rank-merge">
                     <thead>
                         <tr>
                             <th class="c">Rank</th>
@@ -216,7 +216,10 @@ const BOTTLE_BADGE = {
 // Justificativa (screener.justification): uma linha por aspecto, título à esquerda e os sinais
 // separados por "·" (cada sinal inteiro numa linha, sem quebrar no meio).
 const justificationList = (parts) => `<dl class="facts">${parts.map(p => `<dt>${escapeHTML(p.label)}</dt>
-    <dd>${p.items.map(i => `<span class="fact">${escapeHTML(i)}</span>`).join('<span class="fact-sep" aria-hidden="true"> · </span>')}</dd>`).join('')}</dl>`;
+    <dd>${p.items.map(i => `<span class="fact">${escapeHTML(i)}</span>`).join('<span class="fact-sep" aria-hidden="true"> · </span>')}</dd>`).join('')}</dl>`
+    // No celular a lista some e fica este botão, que abre a mesma justificativa na caixa flutuante
+    // (um parágrafo por aspecto).
+    + signalBadge('Justificativa', parts.map(p => `${p.label}: ${p.items.join(' · ')}`).join('\n'), 'badge-low facts-btn');
 
 // Indicação do ranking (screener.advice): só compra ou espera; a venda fica na aba Carteira.
 const ADVICE_BADGE = { comprar: 'badge-ok', aguardar: 'badge-fill' };
@@ -238,7 +241,7 @@ function tableRows(top, kind) {
     return top.map((a, index) => `
         <tr>
             <td class="c nowrap" style="font-weight: bold;">${medals[index] || ''} ${index + 1}º</td>
-            <td><a href="https://br.tradingview.com/chart/?symbol=BMFBOVESPA:${a.ticker}" target="_blank" rel="noopener" class="ticker-link">${a.ticker}</a>
+            <td><div class="rank-inline">${medals[index] || ''} ${index + 1}º</div><a href="https://br.tradingview.com/chart/?symbol=BMFBOVESPA:${a.ticker}" target="_blank" rel="noopener" class="ticker-link">${a.ticker}</a>
                 <a href="backtest.html?ticker=${encodeURIComponent(a.ticker)}" class="inline-link small" aria-label="Backtest de ${a.ticker}">backtest</a>
                 <div class="small muted">${escapeHTML(a.sector || a.name || '')}</div></td>
             <td class="c" style="font-weight: bold; color: var(--accent);">${fmtNum(a.score)}</td>

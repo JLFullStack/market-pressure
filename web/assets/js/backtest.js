@@ -509,7 +509,7 @@ function renderPortfolio(d) {
         pct: (v) => `<span class="${signClass(v)}">${fmtPct(v, 1)}</span>`, pct0: (v) => `${fmtNum(v, 0)}%`, int: (v) => fmtNum(v, 0)
     };
     $('pfCompareHead').innerHTML = `<tr><th></th>${d.strategies.map(st => `<th class="r"><i class="swatch-line" style="background:${PF_COLORS[st.key]}"></i> ${escapeHTML(st.label)}</th>`).join('')}</tr>`;
-    $('pfCompareBody').innerHTML = PF_ROWS.map(([label, help, key, kind]) => `<tr><td class="nowrap">${label} ${tip(help)}</td>`
+    $('pfCompareBody').innerHTML = PF_ROWS.map(([label, help, key, kind]) => `<tr><td>${label} ${tip(help)}</td>`
         + d.strategies.map(st => {
             const v = st.metrics[key];
             return `<td class="r nowrap">${v === undefined || v === null ? '<span class="muted">—</span>' : fmt[kind](v)}${key === 'trades' && v ? `<div class="small muted">${st.metrics.closed} encerradas · ${st.metrics.open} abertas</div>` : ''}</td>`;
@@ -540,7 +540,7 @@ function renderPfTrades() {
     $('pfTradesBody').innerHTML = rows.length ? rows.map(t => `
         <tr class="lot-row${String(t.n) === state.selected.trades ? ' selected' : ''}" tabindex="0" data-n="${t.n}" aria-label="Ver a operação ${t.n} (${escapeHTML(t.ticker)}) no gráfico">
             <td class="c">${t.n}</td>
-            <td><a href="${single(t.ticker)}" class="ticker-link">${escapeHTML(t.ticker)}</a></td>
+            <td><div class="rank-inline">#${t.n}</div><a href="${single(t.ticker)}" class="ticker-link">${escapeHTML(t.ticker)}</a></td>
             <td class="c nowrap">${t.rank}º<div class="small muted">Score ${fmtNum(t.score, 0)}</div></td>
             <td class="nowrap">${point(t.entry)}</td>
             <td class="nowrap">${point(t.partial)}</td>
