@@ -275,7 +275,8 @@ class AnalysisPromptTest(DatabaseTestCase):
         row = payload["views"]["fechamento"]["rankings"][0]["loose"]["top"][0]
         for part in ("50 anos", "COMPRAR AGORA", "COMPRAR COM", "Dados do ativo: AAAA3", "Rank**: 1º", "Score Composto**",
                      "Média testada**: " + row["setup"]["ma"]["name"], "Estado da garrafa", "Indicação automática do app",
-                     "Justificativa quantitativa", "Últimos 10 pregões", "MM200:", "BOVA11", "Compra aberta de 01/05/2021"):
+                     "Justificativa quantitativa", "Últimos 10 pregões", "MM200:", "BOVA11", "Compra aberta de 01/05/2021",
+                     "# Eventos e fundamentos", "Busca vazia não é", "OPA"):
             self.assertIn(part, text)
         with self.assertRaises(ValueError):  # fora do ranking
             ai_prompt.build(scan, payload, "ZZZZ3", "fechamento", False, None, strategy.DEFAULT)

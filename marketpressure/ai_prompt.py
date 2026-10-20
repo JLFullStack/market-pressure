@@ -45,26 +45,29 @@ aceite os números abaixo cegamente — confronte-os entre si e com o que você 
 TASK = """# O que eu preciso de você
 
 1. **Resumo do ativo**: o que é a empresa/fundo, o setor e em que momento o preço está, em linguagem simples.
-2. **Leitura dos dados**: avalie as evidências abaixo (tendência, pullback, volume, momentum, \
+2. **Eventos e notícias**: o resultado da checagem de "Eventos e fundamentos" (o que encontrou, \
+com data e fonte, ou que não conseguiu confirmar).
+3. **Leitura dos dados**: avalie as evidências abaixo (tendência, pullback, volume, momentum, \
 histórico da estratégia, contexto de mercado). Aponte o que é forte e o que é fraco ou contraditório.
-3. **Veredito claro**, começando a resposta por uma destas opções: **COMPRAR AGORA**, **COMPRAR COM \
+4. **Veredito claro**, começando a resposta por uma destas opções: **COMPRAR AGORA**, **COMPRAR COM \
 POSIÇÃO MENOR** ou **EVITAR**, com o motivo principal em uma frase. Siga "Como decidir", abaixo.
-4. **Se for comprar**: faixa de preço de entrada para hoje (não um preço ideal que talvez não volte), \
+5. **Se for comprar**: faixa de preço de entrada para hoje (não um preço ideal que talvez não volte), \
 o preço em que a tese deixa de valer (onde eu deveria repensar), os alvos de saída pela minha \
 estratégia e o tamanho da posição em % do patrimônio (na posição menor, diga quanto menor e por quê).
-5. **Se for evitar**: o motivo concreto (da lista de "Como decidir" ou um fato que os números não \
+6. **Se for evitar**: o motivo concreto (da lista de "Como decidir" ou um fato que os números não \
 mostram) e o que faria o ativo voltar a ser uma compra.
-6. **Riscos**: os principais, incluindo o que os números não mostram (resultados, notícias, \
+7. **Riscos**: os principais, incluindo o que os números não mostram (resultados, notícias, \
 dívida, setor, juros, câmbio). Se tiver acesso a notícias e dados atualizados, consulte-os e diga a \
 data; se não tiver, deixe isso claro.
-7. **Nota de confiança** de 0 a 10 para o seu veredito, com uma linha de justificativa.
+8. **Nota de confiança** de 0 a 10 para o seu veredito, com uma linha de justificativa.
 
 Termine com um resumo de três linhas, para quem não quiser ler o resto."""
 
 DECIDE = """# Como decidir (leia antes do veredito)
 
 - O ativo já passou pelos filtros do app: tendência de alta de longo prazo e recuo até uma média. \
-**O ponto de partida é comprar**; para não comprar é preciso um motivo concreto.
+**O ponto de partida é comprar**; para não comprar é preciso um motivo concreto. A checagem de "Eventos e fundamentos" (abaixo) vem antes: um evento de veto vale \
+mais que qualquer número do app.
 - **Esperar uma entrada melhor tem custo.** Num backtest de carteira deste app (2017 a 2026, cerca de \
 2 mil decisões de um analista), esperar uma confirmação (candle de alta, rompimento, volume) antes de \
 comprar reduziu o retorno médio de cada compra em cerca de 3 pontos percentuais, e boa parte dos \
@@ -79,7 +82,8 @@ metades de 2017–2026; nos internacionais isso não valeu);
   - queda forte até a média ("faca caindo": 15% ou mais em poucos pregões, RSI perto de 30) em vez de um recuo ordenado;
   - choque de notícia: gap ou queda forte com volume muito acima da média;
   - volatilidade extrema para uma estratégia sem stop;
-  - um fato fundamentalista grave que os números do app não mostram (resultado, dívida, governança, evento).
+  - um evento ou fato grave que os números do app não mostram (veja "Eventos e fundamentos": OPA, \
+fechamento de capital, fusão, recuperação judicial, fraude, calote).
 - **Prioridade**: no Top 5 do ranking do tipo ou com Score ≥ 65, as compras renderam mais em média nas duas metades \
 de 2017–2026; nesses casos uma fatia maior (até 1,5x a normal) é razoável.
 - A pressão sozinha (garrafa cheia) não antecipou compras melhores nos testes: ela vale dentro do Score, junto com o \
@@ -104,6 +108,35 @@ internacional; o câmbio sozinho não é motivo.
 nenhum dos dois antecipou nada. Mesmo assim, deixar de comprar ações pelo histórico negativo (de 10 \
 ou de 3 anos) reduziu o lucro da carteira nos testes. Use o histórico como um dado entre outros, \
 para calibrar o tamanho da posição, nunca como veto sozinho."""
+
+EVENTS = """# Eventos e fundamentos (antes de qualquer veredito)
+
+O app só lê preço e volume: não sabe de OPA, fusão, recuperação judicial nem notícias. Essa \
+checagem é sua e tem peso **complementar**: ela não cria compras nem derruba um bom sinal por \
+opinião, mas barra os casos em que o gráfico engana.
+
+- **Pesquise antes de decidir**, para cada ativo que você for indicar para compra (e, na carteira, \
+para cada posição): notícias e fatos relevantes dos últimos 6 meses, pelo código e pelo nome da \
+empresa ou do fundo. Se a primeira busca não trouxer nada útil, tente de novo com outros termos (nome \
+do controlador, "OPA", "fato relevante"). **Busca vazia não é "sem notícias"**: diga que não \
+conseguiu confirmar e reduza a nota de confiança. Se não tiver acesso a notícias, diga isso.
+- **Veto (não comprar, mesmo com prioridade, Top 5 ou Score alto)**: eventos que travam ou distorcem \
+o preço, porque a alta que a estratégia busca não pode acontecer:
+  - OPA (oferta pública de aquisição) anunciada ou pedida, fechamento de capital, saída do Novo \
+Mercado ou cancelamento de registro;
+  - venda do controle, incorporação ou fusão com preço ou relação de troca já definidos;
+  - recuperação judicial ou extrajudicial, falência, suspensão de negociação, liquidação do fundo.
+- Sinal desses eventos nos dados: o preço quase parado, colado num valor (o da oferta), com ATR muito \
+baixo para o ativo e candles minúsculos. Um "recuo perfeito" até a média com a volatilidade sumindo \
+pede essa checagem. O veto dura até o evento ser cancelado ou concluído.
+- **Fato grave (posição menor, ou não comprar se a tese quebrou)**: fraude ou balanço refeito, calote \
+ou renegociação de dívida, investigação séria, perda do principal contrato ou cliente, corte brusco \
+de dividendos por falta de caixa, emissão de ações muito diluidora. Diga qual fato, a data e a fonte.
+- **Opinião fundamentalista não veta**: múltiplos caros, setor fora de moda, resultado fraco já \
+divulgado, juros ou política. O preço já reflete o que é público, e a tendência mostra o que o \
+mercado está fazendo com isso. No máximo, ajuste o tamanho da posição e cite o ponto nos riscos.
+- Seja coerente: um evento de veto vale do mesmo jeito em todas as análises; se ele deixou de \
+existir (oferta cancelada, recuperação encerrada), diga isso com a data."""
 
 METHOD = """# Como o app chegou a este ativo (setup "Garrafa de Gás")
 
@@ -256,7 +289,7 @@ def build(scan, payload, ticker, mode, strict, lots, settings):
     stamp = local_time(scan["timestamp"] / 1000).strftime("%d/%m/%Y %H:%M")
     pattern = setup["pattern"] or "nenhum (sem candle de rejeição)"
 
-    lines = [ROLE, "", TASK, "", DECIDE, "", METHOD.format(max_dist=fmt_pct_value(screener.CONFIG["maxDistance"]),
+    lines = [ROLE, "", TASK, "", DECIDE, "", EVENTS, "", METHOD.format(max_dist=fmt_pct_value(screener.CONFIG["maxDistance"]),
                                                max_below=fmt_pct_value(screener.CONFIG["maxBelowDistance"])), ""]
     lines += [
         f"# Dados do ativo: {ticker}",

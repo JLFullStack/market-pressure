@@ -14,7 +14,7 @@ from . import market_data, screener
 from . import portfolio as pf
 from . import portfolio_service as svc
 from . import strategy as st
-from .ai_prompt import ROLE, _bova, _pct, _ratio_pct
+from .ai_prompt import EVENTS, ROLE, _bova, _pct, _ratio_pct
 from .core import add_up, compute_indicators, fmt_brl, fmt_date, fmt_num, fmt_qty, local_time, today_iso
 
 log = logging.getLogger(__name__)
@@ -39,8 +39,8 @@ AUMENTAR, a faixa de preço de entrada para hoje.
 próximo aporte (classes e ativos, incluindo os candidatos do ranking do Screener abaixo, das \
 classes abaixo da meta) e se algo precisa mudar nas metas ou na estratégia.
 4. **Riscos** que os números não mostram (resultados, notícias, dívida, governança, setor, juros, \
-câmbio). Se tiver acesso a notícias e dados atualizados, consulte-os e diga a data; se não tiver, \
-deixe isso claro.
+câmbio), com o resultado da checagem de "Eventos e fundamentos" para as posições e para os ativos \
+do ranking que você indicar (o que encontrou, com data e fonte, ou que não conseguiu confirmar).
 5. **Nota de confiança** de 0 a 10 para a sua análise, com uma linha de justificativa.
 
 Termine com um resumo de três linhas, para quem não quiser ler o resto."""
@@ -54,6 +54,12 @@ ou realizar lucro cedo.
 - **VENDER** quando a regra de saída disparou (Situação "VENDER" na tabela) ou por um motivo \
 concreto e grave que os números não mostram (fato fundamentalista, governança, tese quebrada). \
 Estar no prejuízo ou ter subido muito não basta.
+- **Posição com evento de veto** (OPA, fechamento de capital, fusão ou venda do controle com preço \
+definido; veja "Eventos e fundamentos"): não aumente, mesmo com Situação "COMPRAR". Compare o preço \
+de tela com o valor da oferta (com a correção prevista, se houver) e o prazo até a liquidação: se o \
+mercado já paga perto do valor da oferta, vender agora e reaplicar costuma ser melhor que esperar; \
+se paga bem menos, aderir à oferta pode valer. Diga qual dos dois e por quê. Em recuperação judicial \
+ou falência, VENDER, salvo motivo forte.
 - **Por que não há stop loss**: nos backtests de carteira do app (2017 a 2026, as mesmas compras), \
 stops de −15%, −20% e −25% e stop móvel por ATR não aumentaram o lucro de forma consistente. O stop \
 móvel subiu o acerto de 53% para 69%, mas reduziu o lucro (R$ 242 mil contra R$ 292 mil); os stops \
@@ -86,8 +92,9 @@ vendida (vender gera imposto e custo); classe abaixo recebe mais.
 - **Ativo novo**: prefira os do ranking do Screener das classes abaixo da meta, com Indicação \
 COMPRAR, e entre eles os com prioridade (Top 5 do tipo ou Score ≥ 65, que nos testes \
 renderam mais por compra; uma fatia até 1,5x a normal é razoável); o ponto de partida é comprar, e para não comprar é preciso um motivo concreto (tendência \
-quebrando, queda forte, choque de notícia, fato fundamentalista grave). O histórico do ativo calibra \
-o tamanho da posição, nunca veta sozinho.
+quebrando, queda forte, choque de notícia, evento de veto ou fato grave de "Eventos e fundamentos"; \
+a prioridade não passa por cima de um veto). O histórico do ativo calibra o tamanho da posição, \
+nunca veta sozinho.
 - A **pressão** sozinha (garrafa cheia) não antecipou compras melhores nos testes do app: ela vale \
 dentro do Score, junto com o histórico do ativo, não como motivo isolado.
 - A **Situação** de cada ativo é uma regra fixa do app, só um dado: confronte-a com o resto."""
@@ -302,7 +309,7 @@ def build(portfolio, analysis, settings):
     txs = portfolio.get("transactions") or []
     stamp = local_time(analysis["loadedAt"] / 1000).strftime("%d/%m/%Y %H:%M")
 
-    lines = [ROLE, "", TASK, "", DECIDE, "", METHOD, ""]
+    lines = [ROLE, "", TASK, "", DECIDE, "", EVENTS, "", METHOD, ""]
     lines += [
         f"# Minha carteira: {portfolio['name']}",
         "",
