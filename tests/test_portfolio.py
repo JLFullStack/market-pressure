@@ -208,3 +208,51 @@ class StrengthTextTest(unittest.TestCase):
         self.assertIn("abaixo da MM20 (hoje R$ 52.81)", strong)
         faded = pf._strength_text({"strong": False, "rsi": 55.0, "atrAboveMm20": 0.4, "mm20": 52.81}, money)
         self.assertIn("já perdeu força", faded)
+
+
+class PatrimonyBarsTest(unittest.TestCase):
+    def test_monthly_bars_by_class(self):
+        from tests.support import candles
+        hist = {"candles": candles(400), "dividends": []}
+        portfolio = {
+            "classes": [{"name": "Ações", "target": 90}, {"name": "Renda fixa", "target": 10}],
+            "assets": {"PETR4": {"class": "Ações", "market": "b3"}},
+            "transactions": [tx("2021-03-01", "compra", 100, 90, fees=10), tx("2021-09-01", "venda", 40, 120)],
+            "fixedIncome": [{"id": "f", "name": "Selic", "class": "Renda fixa", "entries": [
+                {"id": "a", "date": "2021-02-01", "type": "aporte", "amount": 1000},
+                {"id": "b", "date": "2021-06-01", "type": "valor_atual", "amount": 1100}]}],
+        }
+        a = pf.analyze_portfolio(portfolio, {"PETR4": hist, "BOVA11": hist}, [], as_of="2022-02-04",
+                                 now=datetime(2022, 2, 4, 22, tzinfo=timezone.utc).timestamp())
+        bars = pf.patrimony_bars(a["series"])
+        self.assertEqual([g["key"] for g in bars["groups"]], ["", "Ações", "Renda fixa"])
+        self.assertEqual(bars["months"][0], "2021-02")
+        self.assertEqual(bars["periods"]["Tudo"], {"daily": False, "start": 0})
+        self.assertEqual(bars["periods"]["1A"]["start"], len(bars["months"]) - 12)
+        self.assertTrue(bars["periods"]["30D"]["daily"])
+        # Últimos 30 dias corridos: uma barra por pregão, a última igual à do mês corrente.
+        self.assertGreaterEqual(bars["days"][0], "2022-01-05")
+        self.assertEqual(len(bars["days"]), len(bars["groups"][0]["dayBars"]))
+        self.assertEqual(bars["groups"][0]["dayBars"][-1], bars["groups"][0]["bars"][-1])
+        last = bars["groups"][0]["bars"][-1]
+        self.assertAlmostEqual(last["value"], a["series"]["value"][-1])
+        # Custo médio: 60 ações a (9000 + 10) / 100 + 1000 aplicados na renda fixa.
+        self.assertAlmostEqual(last["invested"], 60 * 90.1 + 1000)
+        self.assertAlmostEqual(last["base"] + last["up"] - last["down"], last["value"])
+        # Aportes líquidos: 9010 da compra − 4800 da venda + 1000 da renda fixa.
+        total = bars["groups"][0]
+        self.assertAlmostEqual(sum(b["flow"] for b in total["bars"]), 5210)
+        self.assertAlmostEqual(last["gainPct"], last["gain"] / last["invested"] * 100)
+        everything = total["summary"]["Tudo"]
+        self.assertIsNone(everything["startDate"])
+        self.assertAlmostEqual(everything["flows"], 5210)
+        self.assertAlmostEqual(everything["gain"], last["value"] - 5210)
+        # A valorização do período se divide entre as classes.
+        for label in ("30D", "1A", "Tudo"):
+            self.assertAlmostEqual(sum(g["summary"][label]["gain"] for g in bars["groups"][1:]),
+                                   total["summary"][label]["gain"])
+        year = total["summary"]["1A"]
+        self.assertEqual(year["startDate"], total["bars"][bars["periods"]["1A"]["start"] - 1]["date"])
+        fi = bars["groups"][2]["bars"]
+        self.assertEqual((fi[0]["value"], fi[0]["invested"]), (1000, 1000))
+        self.assertEqual((fi[-1]["value"], fi[-1]["gain"]), (1100, 100))

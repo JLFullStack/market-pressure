@@ -36,6 +36,17 @@ const SERIES = [
     { key: 'bova', label: 'BOVA11', color: '#199e70' }
 ];
 const PERIODS = ['6M', '1A', '2A', 'Tudo']; // os mesmos do servidor (portfolio.PERIODS)
+const PATRIMONY_PERIODS = ['30D', '1A', '2A', '5A', '10A', 'Tudo']; // os mesmos do servidor (portfolio.PATRIMONY_PERIODS)
+// Barras da evolução do patrimônio: pedaços empilhados (portfolio.patrimony_bars), de baixo para cima.
+const PATRIMONY_SERIES = [
+    { key: 'base', label: 'Valor aplicado', color: '#3987e5' },
+    { key: 'up', label: 'Ganho de capital', color: '#199e70' },
+    { key: 'down', label: 'Perda de capital', color: '#d95926' }
+];
+// Modo "Por classe": uma cor fixa por classe (portfolio.CLASSES); outras usam EXTRA_COLORS.
+const CLASS_COLORS = { 'Ações': '#3987e5', 'Fundos imobiliários': '#199e70', 'ETFs Brasil': '#e3b341', 'Internacionais': '#a371f7', 'Renda fixa': '#8b949e' };
+const EXTRA_COLORS = ['#db61a2', '#d95926', '#56d4dd'];
+const PATRIMONY_MODES = { valor: 'Aplicado e ganho', classes: 'Por classe' };
 const APORTE_MODES = { todos: 'Todos os ativos da carteira', escolher: 'Escolher ativos', pullback: 'Pelas regras do pullback' };
 // Indicação da posição (COMPRAR, VENDER, MANTER; portfolio.position_signal: statusKey) → badge.
 const STATUS_BADGE = { sell: 'badge-hot', partial: 'badge-hot', buy: 'badge-ok', attention: 'badge-fill', hold: 'badge-info' };
@@ -54,6 +65,10 @@ const state = {
     analysis: null,      // resposta de /analise
     plan: null,          // último plano de aporte exibido
     period: '1A',
+    patrimonyPeriod: '1A',
+    patrimonyClass: '',  // classe do gráfico de patrimônio ('' = todas)
+    patrimonyMode: 'valor', // 'valor' (aplicado e ganho) ou 'classes' (por classe)
+    patrimonyChart: null,
     run: 0,
     aporteSeq: 0,        // descarta respostas de aporte fora de ordem
     txSeq: 0,            // idem para a consulta de ticker/preço do formulário
@@ -119,6 +134,26 @@ async function init() {
     try { $('aporteBase').value = localStorage.getItem(MODE_KEY) || 'fechamento'; } catch (e) { /* sem preferência salva */ }
     $('periodButtons').innerHTML = PERIODS.map(label =>
         `<button type="button" data-period="${label}" aria-pressed="${label === state.period}">${label}</button>`).join('');
+
+    $('patrimonyPeriods').innerHTML = PATRIMONY_PERIODS.map(label =>
+        `<button type="button" data-period="${label}" aria-pressed="${label === state.patrimonyPeriod}">${label}</button>`).join('');
+    $('patrimonyPeriods').addEventListener('click', (ev) => {
+        const period = ev.target.dataset?.period;
+        if (!period) return;
+        state.patrimonyPeriod = period;
+        for (const b of $('patrimonyPeriods').querySelectorAll('button')) b.setAttribute('aria-pressed', b.dataset.period === period);
+        renderPatrimony();
+    });
+    $('patrimonyClass').addEventListener('change', (ev) => { state.patrimonyClass = ev.target.value; renderPatrimony(); });
+    $('patrimonyModes').innerHTML = Object.entries(PATRIMONY_MODES).map(([k, label]) =>
+        `<button type="button" data-mode="${k}" aria-pressed="${k === state.patrimonyMode}">${label}</button>`).join('');
+    $('patrimonyModes').addEventListener('click', (ev) => {
+        const mode = ev.target.dataset?.mode;
+        if (!mode) return;
+        state.patrimonyMode = mode;
+        for (const b of $('patrimonyModes').querySelectorAll('button')) b.setAttribute('aria-pressed', b.dataset.mode === mode);
+        renderPatrimony();
+    });
 
     $('portfolioSelect').addEventListener('change', (ev) => selectPortfolio(ev.target.value));
     $('newPortfolioBtn').addEventListener('click', createPortfolio);
@@ -327,6 +362,7 @@ async function loadPortfolio(busy) {
     $('lastUpdate').innerText = `Cotações de ${fmtDate(a.lastDay)}${a.live ? ' (pregão em andamento)' : ''} · atualizado em ${new Date(a.loadedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
     renderKpis(a);
     renderAporte();
+    renderPatrimony();
     renderChart();
     renderAllocation(a);
     renderPositions(a);
@@ -364,7 +400,9 @@ function showTab(name) {
     }
     try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* preferência não salva */ }
     // Um canvas desenhado enquanto a seção estava escondida fica com tamanho zero.
-    if (has && name === 'visao' && state.chart) { state.chart.resize(); state.chart.update('none'); }
+    if (has && name === 'visao') {
+        for (const c of [state.chart, state.patrimonyChart]) if (c) { c.resize(); c.update('none'); }
+    }
     if (has && name === 'metas' && !state.goals) loadGoals();
 }
 
@@ -724,6 +762,121 @@ const crosshairPlugin = {
 };
 
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// Mês "2026-10" → "out/26".
+const fmtMonth = (m) => `${new Date(+m.slice(0, 4), +m.slice(5, 7) - 1, 1).toLocaleString('pt-BR', { month: 'short' }).replace('.', '')}/${m.slice(2, 4)}`;
+const fmtCompactBRL = (v) => `R$ ${v.toLocaleString('pt-BR', { notation: 'compact', maximumFractionDigits: 1 })}`;
+
+const signedBRL = (v) => `${v > 0.004 ? '+' : ''}${fmtBRL(v)}`;
+const fmtGainPct = (v) => v == null ? '' : ` (${v > 0 ? '+' : ''}${fmtNum(v)}%)`;
+
+// Evolução do patrimônio: barras (mensais, ou diárias em 30D) filtradas por período e classe, em
+// dois modos: "Aplicado e ganho" (valor aplicado + ganho ou perda de capital empilhados) e "Por
+// classe" (o patrimônio de cada classe empilhado). Tudo vem calculado do servidor (analise.patrimony).
+function renderPatrimony() {
+    const p = state.analysis?.patrimony;
+    const select = $('patrimonyClass');
+    state.patrimonyChart?.destroy(); state.patrimonyChart = null; // os modos têm séries diferentes
+    if (!p) {
+        select.innerHTML = '';
+        $('patrimonySummary').innerHTML = '';
+        return;
+    }
+    const byClass = state.patrimonyMode === 'classes';
+    if (!p.groups.some(g => g.key === state.patrimonyClass)) state.patrimonyClass = '';
+    select.innerHTML = p.groups.map(g => `<option value="${escapeHTML(g.key)}">${escapeHTML(g.label)}</option>`).join('');
+    select.value = byClass ? '' : state.patrimonyClass;
+    select.disabled = byClass; // no modo por classe, todas aparecem empilhadas
+    const group = p.groups.find(g => g.key === (byClass ? '' : state.patrimonyClass));
+    const classes = p.groups.filter(g => g.key);
+    // 30D: uma barra por pregão; os demais, uma por mês.
+    const period = p.periods[state.patrimonyPeriod] || { daily: false, start: 0 };
+    const barsOf = (g) => (period.daily ? g.dayBars : g.bars).slice(period.start);
+    const bars = barsOf(group);
+    const labels = period.daily ? p.days.slice(period.start).map(d => `${d.slice(8, 10)}/${d.slice(5, 7)}`)
+        : p.months.slice(period.start).map(fmtMonth);
+    renderPatrimonySummary(group.summary[state.patrimonyPeriod], byClass ? classes : []);
+    const last = bars.at(-1);
+    $('patrimonyChart').setAttribute('aria-label', `${group.label}, de ${labels[0]} a ${labels.at(-1)}: patrimônio ${fmtBRL(last.value)}, aplicado ${fmtBRL(last.invested)}, ganho de capital ${fmtBRL(last.gain)}`);
+    if (typeof Chart === 'undefined') return;
+
+    const flowLabel = period.daily ? 'Aportes líquidos no dia' : 'Aportes líquidos no mês';
+    const classColor = (g, k) => CLASS_COLORS[g.key] || EXTRA_COLORS[k % EXTRA_COLORS.length];
+    const series = byClass
+        ? classes.map((g, k) => ({ label: g.label, color: classColor(g, k), data: barsOf(g).map(b => b.value) }))
+        : PATRIMONY_SERIES.map(s => ({ ...s, data: bars.map(b => b[s.key]) }));
+    const classBars = classes.map(barsOf);
+    const tooltipLines = (i) => {
+        const b = bars[i];
+        const lines = [` Patrimônio: ${fmtBRL(b.value)}`];
+        if (byClass) {
+            classes.forEach((g, k) => {
+                const c = classBars[k][i];
+                if (c.value > 0.004 || Math.abs(c.flow) > 0.004)
+                    lines.push(` ${g.label}: ${fmtBRL(c.value)} · ganho ${signedBRL(c.gain)}${fmtGainPct(c.gainPct)}`);
+            });
+        } else {
+            lines.push(` Valor aplicado: ${fmtBRL(b.invested)}`, ` Ganho de capital: ${signedBRL(b.gain)}${fmtGainPct(b.gainPct)}`);
+        }
+        lines.push(` ${flowLabel}: ${signedBRL(b.flow)}`);
+        return lines;
+    };
+    const text = cssVar('--text-color'), muted = cssVar('--text-muted'), grid = 'rgba(139, 148, 158, 0.12)';
+    state.patrimonyChart = new Chart($('patrimonyChart'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: series.map(s => ({
+                label: s.label, data: s.data, backgroundColor: s.color, hoverBackgroundColor: s.color, borderRadius: 2,
+                maxBarThickness: 36, stack: 'patrimonio'
+            }))
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: text, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12,
+                        // Só as séries com valor no período (ex.: "Perda de capital" só quando há perda).
+                        filter: (item, d) => d.datasets[item.datasetIndex].data.some(v => v > 0)
+                    }
+                },
+                tooltip: {
+                    backgroundColor: cssVar('--panel-bg'), borderColor: cssVar('--border-color'), borderWidth: 1,
+                    titleColor: text, bodyColor: text, padding: 10, displayColors: false,
+                    filter: (item) => item.datasetIndex === 0, // um bloco por barra, montado abaixo
+                    callbacks: { label: (ctx) => tooltipLines(ctx.dataIndex) }
+                }
+            },
+            scales: {
+                x: { stacked: true, ticks: { color: muted, maxRotation: 0, autoSkip: true }, grid: { display: false }, border: { color: grid } },
+                y: { stacked: true, beginAtZero: true, ticks: { color: muted, callback: (v) => fmtCompactBRL(v) }, grid: { color: grid }, border: { display: false } }
+            }
+        }
+    });
+}
+
+// Resumo do período acima do gráfico: de onde veio a variação do patrimônio (aportes ou
+// valorização). No modo por classe, também a valorização de cada classe no período.
+function renderPatrimonySummary(s, classes) {
+    const kpi = (label, value, note = '', cls = '') => `<div class="kpi"><div class="kpi-label">${label}</div><div class="kpi-value ${cls}">${value}</div><div class="kpi-note">${note}</div></div>`;
+    const change = s.endValue - s.startValue;
+    let html = `<div class="kpis patrimony-kpis">${[
+        kpi('Patrimônio no fim do período', fmtBRL(s.endValue),
+            s.startDate ? `era ${fmtBRL(s.startValue)} em ${fmtDate(s.startDate)} · ${signedBRL(change)}` : 'desde o primeiro lançamento'),
+        kpi('Aportes líquidos', signedBRL(s.flows), 'compras e aportes − vendas e resgates'),
+        kpi('Valorização', signedBRL(s.gain), 'variação − aportes (sem proventos)', signClass(s.gain))
+    ].join('')}</div>`;
+    const shown = classes.map((g, k) => ({ g, k, s: g.summary[state.patrimonyPeriod] }))
+        .filter(c => c.s.endValue > 0.004 || Math.abs(c.s.gain) > 0.004);
+    if (shown.length) {
+        html += `<p class="patrimony-classes"><span class="muted">Valorização por classe no período:</span> ${shown.map(({ g, k, s: cs }) =>
+            `<span class="nowrap"><span class="swatch-box" style="background:${CLASS_COLORS[g.key] || EXTRA_COLORS[k % EXTRA_COLORS.length]}"></span>${escapeHTML(g.label)} <strong class="${signClass(cs.gain)}">${signedBRL(cs.gain)}</strong></span>`
+        ).join(' · ')}</p>`;
+    }
+    $('patrimonySummary').innerHTML = html;
+}
 
 function renderChart() {
     const chart = state.analysis?.chart;

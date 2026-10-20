@@ -267,6 +267,13 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 .chart-wrap { position: relative; height: 340px; margin-top: 12px; }
 .panel-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 4px; }
 .panel-head h2 { margin: 0; }
+.chart-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chart-filters .select { padding: 6px 10px; font-size: 13px; max-width: 100%; }
+.chart-filters .select:disabled { opacity: 0.5; cursor: not-allowed; }
+.patrimony-kpis { margin-top: 12px; }
+.patrimony-kpis .kpi-value { font-size: 20px; }
+.patrimony-classes { font-size: 13px; margin: 10px 0 0; line-height: 1.8; }
+.swatch-box { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 
 .alloc-bar { position: relative; height: 8px; background: var(--border-color); border-radius: 4px; min-width: 120px; }
 .alloc-bar .now { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 4px; }

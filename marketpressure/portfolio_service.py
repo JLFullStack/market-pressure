@@ -17,7 +17,8 @@ from .core import add_up, day_of, fmt_date, session_in_progress, today_iso
 from .portfolio import (APORTE_MODES, BENCHMARK, CLASS_GROUP, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
                         analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_items,
                         contribution_plan, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
-                        market_of, net_flows, normalize_ticker, open_lots, parse_number, period_start, rebase_series,
+                        market_of, net_flows, normalize_ticker, open_lots, parse_number, patrimony_bars, period_start,
+                        rebase_series,
                         suggest_class, targets_off, tx_flow)
 
 log = logging.getLogger(__name__)
@@ -212,7 +213,7 @@ def analysis_payload(portfolio):
         "dividendTotals": sorted(a["divByTicker"].items(), key=lambda kv: -kv[1]),
         "allocation": a["allocation"], "targetSum": a["targetSum"], "targetsOff": targets_off(a["targetSum"]),
         "kpis": a["kpis"], "hasForeign": a["hasForeign"],
-        "chart": _chart(series), "lastDay": series["dates"][-1] if series else None,
+        "chart": _chart(series), "patrimony": patrimony_bars(series), "lastDay": series["dates"][-1] if series else None,
         "live": a["live"], "failed": a["failed"], "loadedAt": a["loadedAt"],
         "assetTargets": _asset_target_groups(portfolio, a),
     }

@@ -126,6 +126,28 @@
 
             <div class="panel">
                 <div class="panel-head">
+                    <h2>Evolução do patrimônio</h2>
+                    <div class="chart-filters">
+                        <div class="seg" role="group" aria-label="Modo do gráfico de patrimônio" id="patrimonyModes"></div>
+                        <select class="select" id="patrimonyClass" aria-label="Classe de ativos"></select>
+                        <div class="seg" role="group" aria-label="Período do gráfico de patrimônio" id="patrimonyPeriods"></div>
+                    </div>
+                </div>
+                <div id="patrimonySummary"></div>
+                <div class="chart-wrap">
+                    <canvas id="patrimonyChart" role="img" aria-label="Patrimônio mês a mês: valor aplicado e ganho de capital"></canvas>
+                </div>
+                <ul class="notes">
+                    <li><strong>Valor aplicado</strong>: custo médio das posições abertas e líquido aportado na renda fixa.</li>
+                    <li><strong>Ganho de capital</strong>: patrimônio − valor aplicado; proventos e lucro já realizado em vendas não entram.</li>
+                    <li><strong>Valorização</strong> no período: variação do patrimônio − aportes líquidos; inclui o lucro das vendas do período, sem proventos.</li>
+                    <li><strong>Por classe</strong>: o patrimônio de cada classe empilhado; o tooltip mostra o ganho de capital de cada uma.</li>
+                    <li>Em <strong>30D</strong>, uma barra por pregão dos últimos 30 dias; nos demais períodos, cada barra é o último pregão do mês (a do mês corrente usa a cotação mais recente).</li>
+                </ul>
+            </div>
+
+            <div class="panel">
+                <div class="panel-head">
                     <h2>Rentabilidade acumulada</h2>
                     <div class="seg" role="group" aria-label="Período do gráfico" id="periodButtons"></div>
                 </div>

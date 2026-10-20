@@ -51,6 +51,11 @@ MARKETS = {
 FX = "USDBRL"  # câmbio do dia (Yahoo USDBRL=X), chave própria em histories
 BENCHMARK = "BOVA11"
 PERIODS = [("6M", 6), ("1A", 12), ("2A", 24), ("Tudo", None)]
+# Períodos do gráfico de evolução do patrimônio: (rótulo, meses de barras mensais; None = tudo).
+# "30D" mostra uma barra por pregão dos últimos PATRIMONY_DAYS dias corridos.
+PATRIMONY_PERIODS = [("30D", None), ("1A", 12), ("2A", 24), ("5A", 60), ("10A", 120), ("Tudo", None)]
+PATRIMONY_DAILY = "30D"
+PATRIMONY_DAYS = 30
 FI_LABELS = {"aporte": "Aporte", "resgate": "Resgate", "valor_atual": "Valor atual"}
 # Tipos de provento da lista da B3; "JRS CAP PROPRIO" (JCP) tem 15% de IR retido na fonte.
 PROVENTO_TYPES = {"DIVIDENDO": "Dividendo", "JRS CAP PROPRIO": "JCP", "RENDIMENTO": "Rendimento"}
@@ -632,6 +637,13 @@ def fixed_income_value_at(entries, iso):
     return value
 
 
+def fixed_income_invested_at(entries, iso):
+    """Líquido aplicado num título até o dia iso (aportes − resgates, nunca negativo)."""
+    net = add_up(e["amount"] if e["type"] == "aporte" else -e["amount"]
+                 for e in entries if e["date"] <= iso and e["type"] != "valor_atual")
+    return max(0, net)
+
+
 def fixed_income_summary(item, iso):
     entries = by_date(item.get("entries") or [])
 
@@ -701,40 +713,75 @@ def build_series(portfolio, histories, cdi_rates, dividend_events):
     closes = {t: align_to_calendar((histories.get(t) or {}).get("candles") or [], cal, "c") for t in tickers}
     bench_adj = align_to_calendar(bench["candles"], cal, "adj")
 
+    # Classe de cada ativo e título, para o patrimônio por classe (gráfico de evolução).
+    classes = portfolio.get("classes") or []
+    cls_of = {t: ((portfolio.get("assets") or {}).get(t) or {}).get("class")
+                 or suggest_class(t, market_of(portfolio, t), classes) for t in tickers}
+    fi_cls = [f.get("class") or FIXED_INCOME_CLASS for f in fixed_items]
+    class_names = list(dict.fromkeys([c["name"] for c in classes] + list(cls_of.values()) + fi_cls))
+    class_flow = {c: [0.0] * n for c in class_names}
+
     # Eventos (operações, aportes, proventos) entram no primeiro pregão >= a data deles.
     flow, div = [0.0] * n, [0.0] * n
     for tx in txs:
         k = lower_bound(cal, tx["date"])
         if k < n:
             flow[k] += tx_flow(tx)
+            class_flow[cls_of[tx["ticker"]]][k] += tx_flow(tx)
     for e in fi_entries:
         if e["type"] == "valor_atual":
             continue
         k = lower_bound(cal, e["date"])
         if k < n:
             flow[k] += e["amount"] if e["type"] == "aporte" else -e["amount"]
+    for f, c in zip(fixed_items, fi_cls):
+        for e in f["entries"]:
+            k = lower_bound(cal, e["date"])
+            if e["type"] != "valor_atual" and k < n:
+                class_flow[c][k] += e["amount"] if e["type"] == "aporte" else -e["amount"]
     for d in dividend_events:
         k = lower_bound(cal, d["exDate"])
         if k < n:
             div[k] += d["total"]
+    # Por classe, os aportes do início truncado contam (o ganho é medido desde o que foi pago).
+    by_class = {c: {"value": [], "cost": [], "flow": class_flow[c][base:]} for c in class_names}
 
     value = [0.0] * n
-    qty, last_price = {}, {}
+    qty, cost, last_price = {}, {}, {}
     p = 0
     for k in range(base, n):
         while p < len(txs) and txs[p]["date"] <= cal[k]:
             tx = txs[p]
             p += 1
-            qty[tx["ticker"]] = qty.get(tx["ticker"], 0) + signed_qty(tx)
-            last_price[tx["ticker"]] = tx["price"] * (tx.get("fx") or 1)  # só antes da 1ª cotação
+            t = tx["ticker"]
+            # Custo ao preço médio, como em build_positions: a venda tira o custo médio da quantidade.
+            if tx["type"] == "compra":
+                cost[t] = cost.get(t, 0) + tx_flow(tx)
+            elif qty.get(t):
+                cost[t] = cost.get(t, 0) - cost.get(t, 0) / qty[t] * tx["quantity"]
+            qty[t] = qty.get(t, 0) + signed_qty(tx)
+            if qty[t] < EPS:
+                qty[t] = cost[t] = 0
+            last_price[t] = tx["price"] * (tx.get("fx") or 1)  # só antes da 1ª cotação
         v = 0.0
+        day_value = {c: 0.0 for c in class_names}
+        day_cost = {c: 0.0 for c in class_names}
         for t in tickers:
             if qty.get(t):
                 close = closes[t][k]
-                v += qty[t] * (close if close is not None else last_price[t])
-        for f in fixed_items:
-            v += fixed_income_value_at(f["entries"], cal[k])
+                held = qty[t] * (close if close is not None else last_price[t])
+                v += held
+                day_value[cls_of[t]] += held
+                day_cost[cls_of[t]] += cost[t]
+        for f, c in zip(fixed_items, fi_cls):
+            held = fixed_income_value_at(f["entries"], cal[k])
+            v += held
+            day_value[c] += held
+            day_cost[c] += fixed_income_invested_at(f["entries"], cal[k])
         value[k] = v
+        for c in class_names:
+            by_class[c]["value"].append(day_value[c])
+            by_class[c]["cost"].append(day_cost[c])
 
     # TWR: r_t = (V_t + D_t − F_t) / V_{t−1} − 1. Sem patrimônio na véspera (primeiro dia ou
     # recomeço após zerar), mede do valor aportado até o fechamento: (V_t + D_t) / F_t − 1.
@@ -766,6 +813,7 @@ def build_series(portfolio, histories, cdi_rates, dividend_events):
         out["bova"].append((bench_adj[k] / bench_adj[base] - 1) * 100 if bench_adj[k] and bench_adj[base] else 0)
     out["truncated"] = truncated
     out["firstDate"] = first_date
+    out["classes"] = by_class
     return out
 
 
@@ -789,6 +837,84 @@ def period_start(series, months):
         return 0
     dates = series["dates"]
     return min(lower_bound(dates, add_months(dates[-1], -months)), len(dates) - 1)
+
+
+def month_ends(dates):
+    """Índice do último pregão de cada mês (o mês corrente termina no último dia da série)."""
+    idx = []
+    for k, d in enumerate(dates):
+        if idx and dates[idx[-1]][:7] == d[:7]:
+            idx[-1] = k
+        else:
+            idx.append(k)
+    return idx
+
+
+def patrimony_bars(series):
+    """Evolução do patrimônio mês a mês (último pregão de cada mês), no total e por classe:
+    valor aplicado (custo médio das posições abertas + líquido aportado na renda fixa) e ganho de
+    capital = patrimônio − aplicado (proventos e lucro já realizado não entram). Cada barra traz os
+    pedaços empilhados: base = o menor entre patrimônio e aplicado, up = o ganho (≥ 0) acima dela,
+    down = a parte do aplicado perdida (≥ 0); gainPct = ganho ÷ aplicado; flow = aportes líquidos
+    (compras e aportes − vendas e resgates) desde a barra anterior. Além das barras mensais (bars,
+    months), cada grupo traz uma barra por pregão dos últimos PATRIMONY_DAYS dias (days, dayBars).
+    periods: {rótulo: {daily, start}}: daily = usa as barras diárias; start = índice da primeira barra.
+    summary: {rótulo: resumo do período} (period_summary)."""
+    if not series or not series["dates"]:
+        return None
+    dates = series["dates"]
+    n = len(dates)
+    ends = month_ends(dates)
+    first_day = lower_bound(dates, (date.fromisoformat(dates[-1]) - timedelta(days=PATRIMONY_DAYS)).isoformat())
+    day_idx = list(range(min(first_day, n - 1), n))
+    classes = series["classes"]
+    months = [dates[k][:7] for k in ends]
+    periods = {label: {"daily": label == PATRIMONY_DAILY, "start": max(0, len(months) - m) if m else 0}
+               for label, m in PATRIMONY_PERIODS}
+
+    def group(key, label, value, cost, flow):
+        cum, acc = [], 0.0  # cum[k] = aportes líquidos do 1º dia até k
+        for f in flow:
+            acc += f
+            cum.append(acc)
+
+        def flows(prev, k):  # aportes de prev (exclusive; −1 = desde o início) até k
+            return cum[k] - (cum[prev] if prev >= 0 else 0)
+
+        def bars(idx, prev):
+            out = []
+            for k in idx:
+                v, c = value[k], cost[k]
+                if abs(v - c) < 0.005:  # diferença de arredondamento: sem ganho nem perda
+                    c = v
+                out.append({"date": dates[k], "value": v, "invested": c, "gain": v - c,
+                            "gainPct": (v - c) / c * 100 if c > EPS else None, "flow": flows(prev, k),
+                            "base": min(v, c), "up": max(v - c, 0), "down": max(c - v, 0)})
+                prev = k
+            return out
+
+        def summary(period):
+            # Do fechamento anterior à primeira barra (ou do início da carteira) até a última.
+            idx = day_idx if period["daily"] else ends
+            first = idx[period["start"]]
+            prev = first - 1 if period["daily"] else (ends[period["start"] - 1] if period["start"] else -1)
+            start_value = value[prev] if prev >= 0 else 0
+            moved = flows(prev, n - 1)
+            return {"startDate": dates[prev] if prev >= 0 else None, "endDate": dates[-1],
+                    "startValue": start_value, "endValue": value[-1], "flows": moved,
+                    "gain": value[-1] - start_value - moved}
+
+        return {"key": key, "label": label, "bars": bars(ends, -1), "dayBars": bars(day_idx, day_idx[0] - 1),
+                "summary": {label: summary(p) for label, p in periods.items()}}
+
+    def total(field):
+        return [add_up(classes[c][field][k] for c in classes) for k in range(n)]
+
+    groups = [group("", "Todas as classes", total("value"), total("cost"), total("flow"))]
+    for name, s in classes.items():
+        if any(v > EPS for v in s["value"]):
+            groups.append(group(name, name, s["value"], s["cost"], s["flow"]))
+    return {"months": months, "days": [dates[k] for k in day_idx], "periods": periods, "groups": groups}
 
 
 def class_allocation(classes, holdings, total):
