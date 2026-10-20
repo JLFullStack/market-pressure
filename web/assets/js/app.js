@@ -194,9 +194,8 @@ function rankingPanel(scan, r, result, strict) {
                             <th class="c">Score Composto</th>
                             <th class="c">Preço Atual</th>
                             <th class="c">Média Testada</th>
-                            <th class="c">Pressão %</th>
+                            <th class="c">Pressão % ${tip('O "gás" acumulado no pullback (volume, momentum, tendência e estrutura, de 0 a 100). Descreve o padrão; não é probabilidade de acerto.\nO selo abaixo é a mesma pressão em faixas: Cheia a partir de 75%, Quase cheia de 60% a 75%, Enchendo abaixo de 60%.')}</th>
                             <th class="c">Histórico (backtest) ${tip('A estratégia aplicada aos ~10 anos de histórico do ativo, com a regra de venda configurada para o tipo dele.\nPrimeira linha: taxa de acerto das compras encerradas (suavizada para 50% com poucas), acertos/compras e o retorno médio por compra.\n3 anos: as compras encerradas nos últimos 3 anos. Nas ações, foi o histórico que melhor separou compras boas de ruins.\nAbertas: compras ainda abertas, pelo preço de hoje (num ativo em alta costumam ser as melhores).')}</th>
-                            <th class="c">Estado da Garrafa</th>
                             <th class="c">Indicação</th>
                             <th>Justificativa Quantitativa (Volume &amp; Momentum)</th>
                             <th class="c">Análise IA ${tip('Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente que fala de forma simples e entrega todos os dados do ativo (ranking, pressão, backtest, médias, últimos pregões, mercado, sua estratégia e suas compras abertas) para dizer se compra agora, compra com posição menor ou evita, e por quê. O texto explica que esperar uma entrada melhor tem custo, para a IA não ser conservadora demais.')}</th>
@@ -233,7 +232,7 @@ function btCell(bt) {
 
 function tableRows(top, kind) {
     if (top.length === 0) {
-        return `<tr><td colspan="11" class="empty-row">Nenhum ${kind === 'acoes' ? 'ativo' : 'ativo deste tipo'} atende a todos os critérios hoje.</td></tr>`;
+        return `<tr><td colspan="10" class="empty-row">Nenhum ${kind === 'acoes' ? 'ativo' : 'ativo deste tipo'} atende a todos os critérios hoje.</td></tr>`;
     }
     const medals = ['🥇', '🥈', '🥉'];
     return top.map((a, index) => `
@@ -245,9 +244,8 @@ function tableRows(top, kind) {
             <td class="c" style="font-weight: bold; color: var(--accent);">${fmtNum(a.score)}</td>
             <td class="c nowrap">${fmtBRL(a.price)}<div class="small" style="color: ${a.change >= 0 ? 'var(--success)' : 'var(--danger)'};">${a.change >= 0 ? '+' : ''}${fmtNum(a.change, 2)}%</div></td>
             <td class="c muted">${a.setup.ma.name}</td>
-            <td class="c" style="font-weight: 600;">${fmtNum(a.pressure, 0)}%</td>
+            <td class="c nowrap"><div style="font-weight: 600;">${fmtNum(a.pressure, 0)}%</div><div class="small" style="margin-top: 4px;">${BOTTLE_BADGE[a.bottle]}</div></td>
             <td class="c nowrap">${btCell(a.bt)}</td>
-            <td class="c">${BOTTLE_BADGE[a.bottle]}</td>
             <td class="c">${a.advice ? signalBadge(a.advice.label, a.advice.reason, ADVICE_BADGE[a.advice.action] || 'badge-low') : '—'}</td>
             <td>${justificationList(a.justification)}</td>
             <td class="c"><button type="button" class="btn-secondary copy-analysis" data-ticker="${escapeHTML(a.ticker)}">COPIAR ANÁLISE</button></td>
