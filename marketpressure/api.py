@@ -12,6 +12,7 @@ import re
 from datetime import date
 
 from . import ai_prompt
+from . import backtest_prompt as bp
 from . import goals as gl
 from . import market_data, screener
 from . import portfolio as pf
@@ -129,7 +130,7 @@ def scan_with_advice(payload, portfolio_id, settings=None):
 
 @route("GET", "/api/scan/prompt")
 def get_scan_prompt(req):
-    """Botão "COPIAR ANÁLISE": o texto para uma IA sobre um ativo do ranking, na mesma visão da
+    """Botão "ANALISAR ATIVO": o texto para uma IA sobre um ativo do ranking, na mesma visão da
     página (mode, strict=1, liquidez) e com as compras abertas da carteira (carteira=)."""
     liquidity, mode = req.arg("liquidez", "padrao"), req.arg("mode", "fechamento")
     if liquidity not in screener.LIQUIDITY:
@@ -163,11 +164,10 @@ def percent_arg(req, name, default, low, high):
     return value / 100
 
 
-@route("GET", "/api/backtest")
-def get_backtest(req):
-    """Aba Backtest: a estratégia lote a lote num ativo (ticker, market b3|us, target e fraction
-    em %, strict=1 exige o candle de rejeição, from/to = período, AAAA-MM-DD, opcionais; amount =
-    valor de cada compra, para os resultados em dinheiro)."""
+def backtest_args(req):
+    """Parâmetros do backtest de um ativo (ticker, market b3|us, saida config|manual, target e
+    fraction em %, strict=1 exige o candle de rejeição, from/to = período, AAAA-MM-DD, opcionais;
+    amount = valor de cada compra) → os argumentos de screener.backtest_view."""
     market = req.arg("market", "b3")
     if market not in screener.BACKTEST_MARKETS:
         raise HTTPError(400, "market deve ser b3 ou us")
@@ -189,10 +189,32 @@ def get_backtest(req):
             raise HTTPError(400, "informe as datas do período como AAAA-MM-DD")
     if start and end and start >= end:
         raise HTTPError(400, "O início do período deve ser antes do fim.")
-    try:
-        return screener.backtest_view(ticker, market, target, fraction, req.arg("strict") == "1", start, end, amount)
-    except ValueError as err:
-        raise HTTPError(400, str(err)) from None
+    return ticker, market, target, fraction, req.arg("strict") == "1", start, end, amount
+
+
+def single_backtest(args):
+    """screener.backtest_view, guardado para o prompt de análise (ValueError → 400)."""
+    key = bp.cache_key("ativo", args)
+    view = bp.recall(key)
+    if view is None:
+        try:
+            view = screener.backtest_view(*args)
+        except ValueError as err:
+            raise HTTPError(400, str(err)) from None
+        bp.remember(key, view)
+    return view
+
+
+@route("GET", "/api/backtest")
+def get_backtest(req):
+    """Aba Backtest: a estratégia lote a lote num ativo."""
+    return single_backtest(backtest_args(req))
+
+
+@route("GET", "/api/backtest/prompt")
+def get_backtest_prompt(req):
+    """Botão "ANALISAR BACKTEST" do modo Um ativo: {title, text}, com os mesmos parâmetros."""
+    return bp.single(single_backtest(backtest_args(req)), req.arg("saida", "config"))
 
 # Configurações
 
@@ -273,8 +295,31 @@ def post_contribution(req):
 @route("POST", "/api/backtest/carteira")
 def post_portfolio_backtest(req):
     """Aba Backtest, modo Carteira: o setup em vários ativos com um único caixa (portfolio_backtest)."""
+    return portfolio_backtest(req, pb.run)
+
+
+@route("POST", "/api/backtest/carteira/robustez")
+def post_portfolio_robustness(req):
+    """Modo Carteira, "Testar robustez": a mesma simulação em vários períodos."""
+    return portfolio_backtest(req, pb.robustness)
+
+
+@route("POST", "/api/backtest/carteira/prompt")
+def post_portfolio_backtest_prompt(req):
+    """Botão "ANALISAR BACKTEST" do modo Carteira: {title, text}, com o mesmo corpo."""
+    return bp.portfolio(portfolio_backtest(req, pb.run))
+
+
+@route("POST", "/api/backtest/carteira/robustez/prompt")
+def post_portfolio_robustness_prompt(req):
+    """Botão "ANALISAR BACKTEST" do teste de robustez: {title, text}, com o mesmo corpo."""
+    return bp.robustness(portfolio_backtest(req, pb.robustness))
+
+
+def portfolio_backtest(req, fn):
+    """pb.run ou pb.robustness pelo corpo do formulário, do cache quando já calculado (ValueError → 400)."""
     try:
-        return pb.run(pb.parse_params(req.json_object()))
+        return bp.run_portfolio(pb.parse_params(req.json_object()), fn)
     except ValueError as err:
         raise HTTPError(400, str(err)) from None
 

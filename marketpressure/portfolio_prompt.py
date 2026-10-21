@@ -1,6 +1,6 @@
 """Botão "ANALISAR CARTEIRA" da aba Carteira: o texto (prompt) que o usuário cola numa IA.
 
-Mesmo padrão do "COPIAR ANÁLISE" do Screener (ai_prompt.py): o papel (o mesmo analista), a tarefa
+Mesmo padrão do "ANALISAR ATIVO" do Screener (ai_prompt.py): o papel (o mesmo analista), a tarefa
 (diagnóstico da saúde da carteira e um veredito para cada ativo), como decidir pela estratégia do
 app e todos os dados que o app tem: patrimônio e rentabilidade contra CDI e BOVA11, alocação por
 classe contra as metas, cada posição (situação do app, compras abertas, indicadores do histórico,
@@ -50,7 +50,8 @@ DECIDE = """# Como decidir (leia antes dos vereditos)
 - **Eu sigo uma estratégia de saída por classe**, descrita em "Minha estratégia de venda": venda \
 parcial no alvo e o resto na reversão de tendência, ou tudo na reversão. Não uso stop loss. Nos \
 backtests de carteira deste app (2017 a 2026), essa disciplina rendeu mais do que vender por medo \
-ou realizar lucro cedo.
+ou realizar lucro cedo. A venda parcial e a venda só na reversão empataram nos testes de vários \
+períodos: as duas são válidas, e não vale trocar uma pela outra por causa de um resultado recente.
 - **VENDER** quando a regra de saída disparou (Situação "VENDER" na tabela) ou por um motivo \
 concreto e grave que os números não mostram (fato fundamentalista, governança, tese quebrada). \
 Estar no prejuízo ou ter subido muito não basta.
@@ -95,6 +96,14 @@ renderam mais por compra; uma fatia até 1,5x a normal é razoável); o ponto de
 quebrando, queda forte, choque de notícia, evento de veto ou fato grave de "Eventos e fundamentos"; \
 a prioridade não passa por cima de um veto). O histórico do ativo calibra o tamanho da posição, \
 nunca veta sozinho.
+- **Tamanho da posição**: a compra normal é de 7,5% a 10% do patrimônio; com prioridade, até 1,5x \
+(cerca de 15%), nunca mais que isso. Nos testes de robustez do app (2017 a 2026, vários anos de início), fatias \
+de 12,5% ou mais renderam bem menos: poucas posições grandes passam a decidir o resultado.
+- **Períodos fracos fazem parte**: nos mesmos testes, a estratégia ficou abaixo até do CDI num trecho \
+de 3 anos sem tendência (2021–23), ficou atrás do Ibovespa numa alta forte da bolsa brasileira e caiu \
+quase 40% na Covid, e voltou a render depois. Não recomende abandonar a estratégia por um período fraco. \
+A mistura de classes protege: 60% ações e 40% internacionais ganhou de 100% ações em todos os anos de \
+início testados.
 - A **pressão** sozinha (garrafa cheia) não antecipou compras melhores nos testes do app: ela vale \
 dentro do Score, junto com o histórico do ativo, não como motivo isolado.
 - A **Situação** de cada ativo é uma regra fixa do app, só um dado: confronte-a com o resto."""

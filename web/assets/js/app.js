@@ -251,14 +251,14 @@ function tableRows(top, kind) {
             <td class="c nowrap">${btCell(a.bt)}</td>
             <td class="c">${a.advice ? signalBadge(a.advice.label, a.advice.reason, ADVICE_BADGE[a.advice.action] || 'badge-low') : '—'}</td>
             <td>${justificationList(a.justification)}</td>
-            <td class="c"><button type="button" class="btn-secondary copy-analysis" data-ticker="${escapeHTML(a.ticker)}">COPIAR ANÁLISE</button></td>
+            <td class="c"><button type="button" class="btn-analyze copy-analysis" data-ticker="${escapeHTML(a.ticker)}">ANALISAR ATIVO</button></td>
         </tr>
     `).join('');
 }
 
 // ---------------------------------------------------------------- Copiar análise
 
-// "COPIAR ANÁLISE": o texto vem pronto do servidor (ai_prompt.py), na visão que a página mostra
+// "ANALISAR ATIVO": o texto vem pronto do servidor (ai_prompt.py), na visão que a página mostra
 // (copyServerText, em core.js).
 async function copyAnalysis(btn) {
     const ticker = btn.dataset.ticker;

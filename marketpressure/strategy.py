@@ -14,7 +14,7 @@ a regra de uma posição é a da classe do ativo; no Screener e no Backtest, a d
 
 Tabelas: settings (uma linha: alvo, parte vendida e a regra antiga, única, que vale para os
 grupos sem escolha salva) e settings_kinds (grupo, regra). A Carteira (situação das posições), o
-Screener (Taxa de acerto, Score e Indicação), o "COPIAR ANÁLISE" e a aba Backtest seguem a regra
+Screener (Taxa de acerto, Score e Indicação), o "ANALISAR ATIVO" e a aba Backtest seguem a regra
 de cada grupo. No navegador as tabelas são do usuário (como as carteiras), então cada conta tem a sua.
 """
 

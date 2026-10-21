@@ -6,6 +6,10 @@
 //        -> um ativo: candles, médias, lotes, marcadores, lucro acumulado e resumo
 //   POST /api/backtest/carteira  (portfolio_backtest.run)
 //        -> carteira com um único caixa: lucro de cada estratégia, BOVA11 e CDI, comparação e operações
+//   POST /api/backtest/carteira/robustez  (portfolio_backtest.robustness)
+//        -> a mesma carteira a partir de cada ano de início: uma linha por início e o resumo
+//   GET  /api/backtest/prompt, POST /api/backtest/carteira/prompt, POST /api/backtest/carteira/robustez/prompt
+//        -> botão "ANALISAR BACKTEST": o texto para a IA, com os parâmetros do resultado mostrado
 // Aqui só se desenham os gráficos e as tabelas.
 
 // Cores (validadas sobre o fundo #161b22 do painel). Médias como no TradingView do usuário:
@@ -27,7 +31,7 @@ const MARKER = {
 const CHART_KEY = 'marketpressure_backtest_grafico'; // "candles" | "line"
 const PAGE_SIZE_KEY = 'marketpressure_backtest_por_pagina'; // linhas por página das tabelas de lotes e de operações
 // Linhas do gráfico do modo Carteira, por estratégia (chave do servidor).
-const PF_COLORS = { rule: '#58a6ff', onlyB: '#e3a33b', bova: '#3fb950', cdi: '#8b949e' };
+const PF_COLORS = { rule: '#58a6ff', onlyB: '#e3a33b', bova: '#3fb950', ivvb: '#a371f7', mix: '#39c5cf', cdi: '#8b949e' };
 // Linhas da tabela de comparação do modo Carteira: [rótulo, ajuda, campo, formato].
 const PF_ROWS = [
     ['Patrimônio final', 'Valor da carteira no último dia: caixa + ativos pelo fechamento.', 'final', 'brl'],
@@ -35,6 +39,10 @@ const PF_ROWS = [
     ['Lucro', 'Patrimônio final − total aportado: quanto você ganhou de fato no período.', 'profit', 'brlSigned'],
     ['Lucro sobre o aportado', 'Lucro ÷ total aportado.', 'profitPct', 'pct'],
     ['Retorno ao ano', 'Taxa interna de retorno: o rendimento anual equivalente, levando em conta quando cada aporte entrou.', 'irr', 'pct'],
+    ['Imposto de renda pago', 'Imposto sobre as vendas, pago no mês seguinte a cada mês com ganho (só com a opção de imposto).', 'taxPaid', 'brl'],
+    ['Imposto vendendo tudo no fim', 'Imposto que ainda seria pago se a carteira (ou o índice) fosse vendida no último dia.', 'taxDue', 'brl'],
+    ['Lucro líquido (vendendo tudo no fim)', 'Lucro − imposto que seria pago vendendo tudo no último dia: a comparação justa com os índices, que só pagam quando vendem.', 'profitNet', 'brlSigned'],
+    ['Retorno ao ano líquido', 'Retorno ao ano depois do imposto, vendendo tudo no último dia.', 'irrNet', 'pct'],
     ['Maior queda', 'Maior queda do patrimônio de um topo até um fundo, descontados os aportes.', 'maxDrawdown', 'pct'],
     ['Compras', 'Quantas compras a estratégia fez (encerradas + ainda abertas no fim do período).', 'trades', 'int'],
     ['Taxa de acerto', 'Compras encerradas com lucro (vendas + proventos − valor investido).', 'winRate', 'pct0'],
@@ -48,7 +56,7 @@ const PF_ROWS = [
 const $ = (id) => document.getElementById(id);
 const signClass = (v) => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
 const state = { data: null, type: 'candles', price: null, equity: null, series: {}, seq: 0, mode: 'ativo', pfChart: null,
-                pf: null, pfPrice: null, pfSeq: 0, pageSize: 25,
+                pf: null, robust: null, robustChart: null, pfPrice: null, query: null, pfBody: null, robustBody: null, pfSeq: 0, pageSize: 25,
                 pages: { lots: 0, trades: 0 }, selected: { lots: null, trades: null } };
 
 document.addEventListener('DOMContentLoaded', init);
@@ -75,6 +83,11 @@ function init() {
         setTypeButtons();
         applyChartType();
     });
+    $('pfRobustBtn').addEventListener('click', runRobustness);
+    // "ANALISAR BACKTEST": o prompt do resultado na tela (parâmetros do último cálculo, não do formulário).
+    $('btAnalyzeBtn').addEventListener('click', () => analyzeResult($('btAnalyzeBtn'), apiGet(`/backtest/prompt?${state.query}`)));
+    $('pfAnalyzeBtn').addEventListener('click', () => analyzeResult($('pfAnalyzeBtn'), apiPost('/backtest/carteira/prompt', state.pfBody)));
+    $('pfRobustAnalyzeBtn').addEventListener('click', () => analyzeResult($('pfRobustAnalyzeBtn'), apiPost('/backtest/carteira/robustez/prompt', state.robustBody)));
     $('pfAsset').addEventListener('change', () => showPfAsset($('pfAsset').value));
     $('pfTradesBody').addEventListener('click', onPfTradeClick);
     $('pfTradesBody').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onPfTradeClick(ev); } });
@@ -99,6 +112,7 @@ function init() {
         for (const [key, id] of Object.entries(fields)) if (q.get(key) !== null) $(id).value = q.get(key);
         $('btStrict').checked = q.get('strict') === '1';
         $('pfCdi').checked = q.get('cdi') !== '0';
+        $('pfTax').checked = q.get('ir') === '1';
         $('pfAdvice').checked = q.get('indicacao') !== '0';
         if (q.get('alocacao')) $('pfAlloc').value = q.get('alocacao') === 'classes' ? 'classes' : 'ativos';
         for (const g of META_GROUPS) if (q.get(`meta_${g}`) !== null) $(`pfMeta_${g}`).value = q.get(`meta_${g}`);
@@ -151,6 +165,7 @@ function setMode(mode) {
         : 'Cada compra (lote) do setup no histórico do ativo, com a venda parcial e a saída pela regra B';
     $('btResult').hidden = mode !== 'ativo' || !state.data;
     $('pfResult').hidden = mode !== 'carteira' || !state.pf;
+    $('pfRobust').hidden = mode !== 'carteira' || !state.robust;
     setMsg('');
 }
 
@@ -187,6 +202,7 @@ async function run() {
     }
     if (seq !== state.seq) return;
     state.data = data;
+    state.query = params;
     $('btTicker').value = data.ticker;
     // Datas possíveis para este ativo (do primeiro pregão com MM200 ao último fechado).
     for (const id of ['btFrom', 'btTo']) { $(id).min = data.bounds.min; $(id).max = data.bounds.max; }
@@ -440,15 +456,20 @@ function pageRows(name, items) {
 
 // ---------------------------------------------------------------- Modo Carteira
 
-async function runPortfolio() {
-    const body = {
+function portfolioBody() {
+    return {
         universe: $('pfUniverse').value, tickers: $('pfTickers').value, initial: $('pfInitial').value, monthly: $('pfMonthly').value,
         position: $('pfPosition').value, maxAssets: $('pfMaxAssets').value, topN: $('pfTopN').value, liquidity: $('pfLiquidity').value,
         cost: $('pfCost').value, target: $('btTarget').value,
-        fraction: $('btFraction').value, from: $('btFrom').value, to: $('btTo').value, strict: $('btStrict').checked, cdi: $('pfCdi').checked,
+        fraction: $('btFraction').value, from: $('btFrom').value, to: $('btTo').value, strict: $('btStrict').checked, cdi: $('pfCdi').checked, ir: $('pfTax').checked,
         saida: $('btExit').value, indicacao: $('pfAdvice').checked, alocacao: $('pfAlloc').value,
-        metas: Object.fromEntries(META_GROUPS.map(g => [g, $(`pfMeta_${g}`).value]))
+        metas: Object.fromEntries(META_GROUPS.map(g => [g, $(`pfMeta_${g}`).value])),
+        janela: $('pfRobustWindow').value
     };
+}
+
+async function runPortfolio() {
+    const body = portfolioBody();
     const seq = ++state.seq;
     setMsg('');
     const busy = busyStart('Simulando a carteira pelo ranking de cada dia (a primeira vez pode levar um minuto)...');
@@ -463,10 +484,11 @@ async function runPortfolio() {
     }
     if (seq !== state.seq) return;
     state.pf = d;
+    state.pfBody = body;
     for (const id of ['btFrom', 'btTo']) { $(id).min = d.bounds.min; $(id).max = d.bounds.max; }
     if (d.note) setMsg(d.note);
     const { metas, ...plain } = body;
-    const url = new URLSearchParams({ mode: 'carteira', ...plain, strict: body.strict ? '1' : '0', cdi: body.cdi ? '1' : '0',
+    const url = new URLSearchParams({ mode: 'carteira', ...plain, strict: body.strict ? '1' : '0', cdi: body.cdi ? '1' : '0', ir: body.ir ? '1' : '0',
                                       indicacao: body.indicacao ? '1' : '0',
                                       ...Object.fromEntries(Object.entries(metas).map(([g, v]) => [`meta_${g}`, v])) });
     for (const [k, v] of [...url.entries()]) if (v === '') url.delete(k);
@@ -476,6 +498,122 @@ async function runPortfolio() {
     renderPortfolio(d);
 }
 
+// Copia o prompt de análise de um resultado (montado no servidor) para colar numa IA.
+async function analyzeResult(btn, request) {
+    try {
+        await copyServerText(btn, request.then(r => r.text), 'Análise do backtest');
+    } catch (e) {
+        setMsg(`Não foi possível montar a análise do resultado (${e.message}).`, 'error');
+    }
+}
+
+// "Testar robustez": a mesma carteira começando em cada ano, até o mesmo fim.
+async function runRobustness() {
+    const body = portfolioBody();
+    const seq = ++state.seq;
+    setMsg('');
+    const busy = busyStart('Simulando a carteira em cada período (pode levar alguns minutos)...');
+    let d;
+    try {
+        d = await apiPost('/backtest/carteira/robustez', body);
+    } catch (e) {
+        if (seq === state.seq) setMsg(e.message, 'error');
+        return;
+    } finally {
+        busy();
+    }
+    if (seq !== state.seq) return;
+    state.robust = d;
+    state.robustBody = body;
+    $('pfRobust').hidden = false;
+    $('btResult').hidden = true;
+    renderRobustness(d);
+    $('pfRobust').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderRobustness(d) {
+    setTimeout(() => keepTipsWithText($('pfRobust')));
+    const unit = d.window ? 'janelas' : 'inícios';
+    $('pfRobustTitle').innerText = d.window ? `Robustez — janelas de ${d.window} anos` : 'Robustez — cada ano de início até o fim';
+    $('pfRobustSubtitle').innerText = `${d.rule} · ${d.periods} ${unit}` + (d.window ? '' : `, todos até ${fmtDate(d.end)}`)
+        + ` · régua: ${d.ref.label}` + (d.tax ? ' · com imposto de renda (valores líquidos, vendendo tudo no fim de cada período)' : '')
+        + (d.warnings.length ? ` · ${d.warnings.join(' ')}` : '');
+    $('pfRobustVerdict').innerText = d.verdict;
+    $('pfRobustSummary').innerHTML = d.summary.map(t => `<li>${escapeHTML(t)}</li>`).join('');
+
+    const c = d.cards;
+    const pct = (v, dec = 1) => v === null || v === undefined ? '—' : fmtPct(v, dec);
+    const pp = (v) => v === null || v === undefined ? '—' : `${v >= 0 ? '+' : ''}${fmtNum(v, 1)} p.p.`;
+    const score = (w) => `<div class="robust-score"><span>${escapeHTML(ROBUST_SHORT[w.key] || w.key)}</span>`
+        + `<span class="robust-bar"><i style="width:${w.wins / d.periods * 100}%"></i></span><strong>${w.wins}/${d.periods}</strong></div>`;
+    $('pfRobustKpis').innerHTML = [
+        kpi('Retorno ao ano', pct(c.irr.median), `mediana · de ${pct(c.irr.min)} a ${pct(c.irr.max)}`, signClass(c.irr.median),
+            'Taxa interna de retorno da estratégia em cada período: a mediana e a faixa do pior ao melhor.'),
+        kpi(`Contra: ${escapeHTML(c.excess.label)}`, pp(c.excess.median), `mediana ao ano · pior ${pp(c.excess.worst)} (${escapeHTML(c.excess.worstLabel || '—')}) · à frente em ${c.excess.positive}/${d.periods}`,
+            signClass(c.excess.median), `Retorno ao ano da estratégia menos o da régua (${d.ref.label}) com os mesmos aportes, em pontos percentuais. Com metas por classe, a régua são os índices na mesma proporção das metas.`),
+        kpi('Placar', c.wins.map(score).join(''), `${unit} em que a estratégia lucrou mais`, '',
+            'Em quantos períodos a estratégia terminou com mais lucro que cada comparação.'),
+        kpi('Maior queda', pct(c.drawdown.worst), `${escapeHTML(c.drawdown.worstLabel)} · mediana ${pct(c.drawdown.median)}`, 'neg',
+            'Maior queda do patrimônio de um topo até um fundo, descontados os aportes: a pior entre os períodos e a mediana.'),
+        kpi('Lucro sobre o aportado', pct(c.profitPct.median, 0), 'mediana entre os períodos', signClass(c.profitPct.median),
+            'Lucro ÷ total aportado em cada período. Cresce com a duração; compare períodos de mesmo tamanho.')
+    ].join('');
+
+    const cols = d.columns.map(col => [col.key, col.label, PF_COLORS[col.key]]);
+    renderRobustChart(d, cols);
+
+    const mark = (beat) => beat === undefined ? '' : beat ? ' <span class="pos" title="A estratégia ganhou desta comparação">✓</span>' : ' <span class="neg" title="A estratégia perdeu desta comparação">✗</span>';
+    $('pfRobustHead').innerHTML = `<tr><th>${d.window ? 'Janela' : 'Início'}</th><th class="r">Aportado</th>`
+        + cols.map(([, label, color]) => `<th class="r"><i class="swatch-line" style="background:${color}"></i> ${escapeHTML(label)}</th>`).join('')
+        + `<th class="r">Compras</th><th class="r">Caixa médio</th>${d.hasPartial ? '<th class="r">Parcial − regra B</th>' : ''}`
+        + `<th class="r">Retorno ao ano</th><th class="r">${escapeHTML(d.ref.short)} ao ano</th><th class="r">Diferença</th><th class="r">Maior queda</th></tr>`;
+    $('pfRobustBody').innerHTML = d.rows.map(r => `<tr>
+            <td class="nowrap"><strong>${fmtDate(r.from)}</strong>${d.window ? ` a ${fmtDate(r.to)}` : ''}<div class="small muted">${escapeHTML(r.duration)}</div></td>
+            <td class="r nowrap">${fmtBRL(r.rule.contributed)}</td>
+            ${cols.map(([key]) => `<td class="r nowrap"><span class="${signClass(r[key].profit)}">${fmtBRL(r[key].profit)}</span>${key === 'rule' ? '' : mark(r.beats[key])}</td>`).join('')}
+            <td class="r">${fmtNum(r.rule.trades, 0)}</td>
+            <td class="r">${fmtNum(r.rule.avgCash, 0)}%</td>
+            ${d.hasPartial ? `<td class="r nowrap ${signClass(r.diffOnlyB)}">${r.diffOnlyB >= 0 ? '+' : ''}${fmtBRL(r.diffOnlyB)}</td>` : ''}
+            <td class="r nowrap ${signClass(r.rule.irr)}">${pct(r.rule.irr)}</td>
+            <td class="r nowrap ${signClass(r[d.ref.key].irr)}">${pct(r[d.ref.key].irr)}</td>
+            <td class="r nowrap ${signClass(r.excess)}">${pp(r.excess)}</td>
+            <td class="r nowrap neg">${pct(r.rule.maxDrawdown)}</td>
+        </tr>`).join('');
+}
+
+// Rótulos curtos do placar (chaves do servidor).
+const ROBUST_SHORT = { mix: 'Índices metas', bova: 'BOVA11', ivvb: 'IVVB11', cdi: 'CDI', onlyB: 'Só regra B' };
+
+// Barras agrupadas: o retorno ao ano de cada linha (estratégia, regra B, BOVA11, CDI) em cada período.
+function renderRobustChart(d, cols) {
+    state.robustChart?.destroy();
+    state.robustChart = new Chart($('pfRobustChart'), {
+        type: 'bar',
+        data: {
+            labels: d.rows.map(r => r.label),
+            datasets: cols.map(([key, label, color]) => ({
+                label, data: d.rows.map(r => r[key].irr), backgroundColor: color, hoverBackgroundColor: color,
+                borderRadius: 2, maxBarThickness: 28
+            }))
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { labels: { color: COLORS.text, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12 } },
+                tooltip: {
+                    backgroundColor: COLORS.panel, borderColor: COLORS.border, borderWidth: 1, titleColor: COLORS.text, bodyColor: COLORS.text, padding: 10,
+                    callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw === null ? '—' : `${fmtPct(ctx.raw, 1)} ao ano`}` }
+                }
+            },
+            scales: {
+                x: { ticks: { color: COLORS.zero, maxRotation: 0 }, grid: { display: false }, border: { color: COLORS.border } },
+                y: { ticks: { color: COLORS.zero, callback: (v) => `${fmtNum(v, 0)}%` }, grid: { color: COLORS.grid }, border: { display: false } }
+            }
+        }
+    });
+}
+
 function renderPortfolio(d) {
     setTimeout(() => keepTipsWithText($('pfResult')));  // "?" dos cartões e da comparação, já desenhados
     const p = d.params;
@@ -483,7 +621,7 @@ function renderPortfolio(d) {
     $('pfSubtitle').innerText = `${d.period} (${fmtNum(d.sessions, 0)} pregões, ≈ ${d.duration}) · Top ${p.topN} do ranking · capital inicial ${fmtBRL(p.initial)}`
         + (p.monthly > 0 ? ` + ${fmtBRL(p.monthly)} por mês` : '') + ` · ${fmtNum(p.position, 0)}% do patrimônio por compra · até ${p.maxAssets} ativos`
         + ` · liquidez mínima ${$('pfLiquidity').querySelector(`option[value="${p.liquidity}"]`)?.textContent || p.liquidity}`
-        + ` · custo ${fmtNum(p.cost, 2)}% por operação${p.cdi ? ' · caixa no CDI' : ''}${p.strict ? ' · com candle de rejeição' : ''}`;
+        + ` · custo ${fmtNum(p.cost, 2)}% por operação${p.cdi ? ' · caixa no CDI' : ''}${p.tax ? ' · com imposto de renda' : ''}${p.strict ? ' · com candle de rejeição' : ''}`;
     $('pfWarnings').innerText = d.warnings.join(' ');
     $('pfWarnings').style.display = d.warnings.length ? 'block' : 'none';
     $('pfCompare').innerText = d.compare || '';
@@ -509,7 +647,9 @@ function renderPortfolio(d) {
         pct: (v) => `<span class="${signClass(v)}">${fmtPct(v, 1)}</span>`, pct0: (v) => `${fmtNum(v, 0)}%`, int: (v) => fmtNum(v, 0)
     };
     $('pfCompareHead').innerHTML = `<tr><th></th>${d.strategies.map(st => `<th class="r"><i class="swatch-line" style="background:${PF_COLORS[st.key]}"></i> ${escapeHTML(st.label)}</th>`).join('')}</tr>`;
-    $('pfCompareBody').innerHTML = PF_ROWS.map(([label, help, key, kind]) => `<tr><td>${label} ${tip(help)}</td>`
+    // Só as linhas com algum valor (as de imposto aparecem só com a opção ligada).
+    const rows = PF_ROWS.filter(([, , key]) => d.strategies.some(st => st.metrics[key] !== undefined && st.metrics[key] !== null));
+    $('pfCompareBody').innerHTML = rows.map(([label, help, key, kind]) => `<tr><td>${label} ${tip(help)}</td>`
         + d.strategies.map(st => {
             const v = st.metrics[key];
             return `<td class="r nowrap">${v === undefined || v === null ? '<span class="muted">—</span>' : fmt[kind](v)}${key === 'trades' && v ? `<div class="small muted">${st.metrics.closed} encerradas · ${st.metrics.open} abertas</div>` : ''}</td>`;
@@ -574,7 +714,8 @@ function renderPfYears(d) {
 // Cards de resumo da estratégia escolhida (como no modo de um ativo) e a linha "Só a regra B".
 function renderPfKpis(d) {
     const s = d.strategies[0].metrics;
-    const bova = d.strategies.find(x => x.key === 'bova')?.metrics;
+    // Comparações com os mesmos aportes: os índices nas metas (a régua justa com metas por classe), BOVA11 e IVVB11.
+    const comps = ['mix', 'bova', 'ivvb'].map(k => d.strategies.find(x => x.key === k)).filter(Boolean);
     const brl = (v) => v === null || v === undefined ? '—' : fmtBRL(v);
     $('pfSummaryTitle').innerText = `Resumo — ${d.strategies[0].label}`;
     $('pfKpis').innerHTML = [
@@ -605,8 +746,17 @@ function renderPfKpis(d) {
         kpi('Proventos recebidos', brl(s.dividends), 'já incluídos no lucro', '', 'Dividendos e JCP recebidos pela carteira na data-ex.'),
         kpi('Caixa médio parado', `${fmtNum(s.avgCash, 0)}%`, d.params.cdi ? 'rendendo CDI' : 'sem render juros', '',
             'Parte do patrimônio que ficou em caixa, em média, esperando ativos no ranking.'),
-        bova ? kpi('BOVA11 com os mesmos aportes', brl(bova.profit), `retorno ao ano ${pct(bova.irr, 1)} · maior queda ${pct(bova.maxDrawdown, 1)}`, signClass(bova.profit),
-            'Lucro de comprar BOVA11 com o mesmo capital inicial e os mesmos aportes, nas mesmas datas, sem vender: a referência para saber se a estratégia vale a pena.') : ''
+        s.taxPaid !== undefined ? kpi('Imposto de renda', brl(s.taxPaid), `pago no período · vendendo tudo no fim: mais ${brl(s.taxDue)} · lucro líquido ${brl(s.profitNet)} (${pct(s.irrNet, 1)} ao ano)`,
+            '', 'Imposto sobre as vendas, pago no mês seguinte a cada mês com ganho. O lucro líquido desconta também o imposto que seria pago vendendo tudo no último dia: é o número a comparar com os índices, que só pagam quando vendem.') : '',
+        ...comps.map(st => {
+            const m = st.metrics;
+            const net = m.profitNet !== undefined ? ` · líquido ${brl(m.profitNet)}` : '';
+            return kpi(`${escapeHTML(st.label.replace(' (mesmos aportes)', ''))} com os mesmos aportes`, brl(m.profit),
+                `retorno ao ano ${pct(m.irr, 1)} · maior queda ${pct(m.maxDrawdown, 1)}${net}`, signClass(m.profit),
+                st.key === 'mix'
+                    ? 'Os mesmos aportes divididos entre os índices na proporção das metas por classe (ações, fundos e ETFs Brasil no BOVA11; internacionais no IVVB11), sem vender: a régua justa para uma carteira com internacionais.'
+                    : 'Lucro de comprar o índice com o mesmo capital inicial e os mesmos aportes, nas mesmas datas, sem vender: a referência para saber se a estratégia vale a pena.');
+        })
     ].join('');
     const b = d.strategies.find(x => x.key === 'onlyB')?.metrics;
     $('pfOnlyB').innerHTML = b ? `<strong>Só a regra B</strong> (sem venda parcial), mesma carteira e mesmo período: lucro <strong class="${signClass(b.profit)}">${brl(b.profit)}</strong>`

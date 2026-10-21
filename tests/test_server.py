@@ -98,6 +98,14 @@ class ServerTest(DatabaseTestCase):
         self.assertTrue(0 < s["maxCapital"] <= s["invested"])
         b = data["onlyB"]
         self.assertTrue(0 < b["maxCapital"] <= b["invested"])
+        # "ANALISAR BACKTEST" do modo Um ativo: a mesma consulta → o texto com os lotes.
+        status, prompt, _ = self.request("GET", "/api/backtest/prompt?ticker=petr4&target=10&fraction=50&saida=manual")
+        self.assertEqual(status, 200)
+        self.assertIn("PETR4", prompt["title"])
+        self.assertIn("# Compras (lotes)", prompt["text"])
+        self.assertIn("alvo e parte escolhidos à mão", prompt["text"])
+        self.assertEqual(prompt["text"].count("\n| "), len(data["lots"]) + 1)   # cabeçalho + um lote por linha
+        self.assertEqual(self.request("GET", "/api/backtest/prompt?ticker=")[0], 400)
         self.assertGreaterEqual(b["maxCapital"], s["maxCapital"])  # sem parcial, nada volta antes da regra B
         self.assertAlmostEqual(b["returnOnMaxCapital"], b["profit"] / b["maxCapital"] * 100)
         self.assertEqual(len(data["equityB"]), len(data["equity"]))
@@ -132,6 +140,18 @@ class ServerTest(DatabaseTestCase):
         self.assertEqual(data["strategies"][0]["metrics"]["contributed"], 5000)
         self.assertEqual(self.request("POST", "/api/backtest/carteira", {**body, "tickers": ""})[0], 400)
         self.assertEqual(self.request("POST", "/api/backtest/carteira", {**body, "position": "150"})[0], 400)
+        # "ANALISAR BACKTEST": o mesmo corpo → o texto para a IA, com os números do resultado.
+        status, prompt, _ = self.request("POST", "/api/backtest/carteira/prompt", body)
+        self.assertEqual(status, 200)
+        self.assertIn("# Seu papel", prompt["text"])
+        self.assertIn("# O que o app já testou", prompt["text"])
+        self.assertIn(data["period"], prompt["text"])
+        self.assertIn("PETR4", prompt["text"])
+        self.assertEqual(self.request("POST", "/api/backtest/carteira/prompt", {**body, "tickers": ""})[0], 400)
+        # Robustez: com o histórico curto do teste não há 2 anos depois do início possível → 400 com o motivo.
+        status, data, _ = self.request("POST", "/api/backtest/carteira/robustez", body)
+        self.assertEqual(status, 400)
+        self.assertIn("2 anos", data["message"])
 
     def test_goal_routes(self):
         pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "Metas"})[1]["id"]

@@ -36,6 +36,16 @@ log = logging.getLogger(__name__)
 UNIVERSES = {"acoes": "Ranking de ações", "fundos": "Ranking de fundos listados", "etfs": "Ranking de ETFs",
              "bdrs": "Ranking de BDRs", "todos": "Rankings de todos os tipos", "lista": "Lista de ativos"}
 BENCHMARK = "BOVA11"
+# Comparações: cada índice recebe os mesmos aportes, nas mesmas datas, sem vender.
+INDEXES = {"bova": ("BOVA11", "BOVA11 (mesmos aportes)"), "ivvb": ("IVVB11", "IVVB11 (mesmos aportes)")}
+# Com metas por classe, os índices na mesma proporção: a régua justa para uma carteira com internacionais.
+MIX_INDEX = {"acoes": "BOVA11", "fundos": "BOVA11", "etfs": "BOVA11", "internacionais": "IVVB11"}
+# Imposto de renda (opcional): 15% sobre o ganho líquido do mês em ações, ETFs e BDRs (ações isentas
+# quando as vendas de ações do mês somam até R$ 20 mil), 20% em fundos imobiliários; prejuízos
+# compensados nos meses seguintes (fundos à parte); pago no primeiro pregão do mês seguinte. O CDI
+# do caixa rende líquido de cashRate (renda fixa de mais de 2 anos).
+TAX = {"rate": 0.15, "fiiRate": 0.20, "stockExemption": 20_000, "cashRate": 0.15}
+MAX_POSITION = 0.10    # nos testes de robustez, fatias acima de 10% renderam bem menos
 MAX_TICKERS = 400
 MIN_ORDER = 0.5        # compra só se houver caixa para pelo menos metade da fatia
 LOT_MARGIN = 40        # pregões mostrados antes e depois de uma operação ao focá-la no gráfico
@@ -103,6 +113,8 @@ def parse_params(body):
         # no Top priorityRank do tipo ou com Score ≥ priorityScore.
         "advice": body.get("indicacao", True) is not False,
         "classes": _classes(body),
+        "window": _window(body.get("janela")),   # só o teste de robustez usa
+        "tax": body.get("ir") is True,
     }
     if params["exit"] == "config":
         # Saída das Configurações: a regra de cada grupo (reversão = sem venda parcial).
@@ -267,6 +279,16 @@ def _first_sessions(cal):
     return out
 
 
+def _cash_yield(rate, params):
+    """Rendimento do caixa no dia: o CDI, líquido do imposto de renda quando ele é descontado."""
+    return rate * (1 - TAX["cashRate"]) if params.get("tax") else rate
+
+
+def _avg_cash(curve):
+    """Parte média do patrimônio parada em caixa (%)."""
+    return add_up(p["cash"] / p["equity"] for p in curve if p["equity"] > 0) / len(curve) * 100
+
+
 def simulate(data, cal, params, fraction, cdi):
     """Uma carteira do primeiro ao último dia de cal. Devolve a curva diária (patrimônio, aportado,
     caixa), os aportes e as operações (uma por compra). fraction None = a regra de cada tipo
@@ -289,6 +311,39 @@ def simulate(data, cal, params, fraction, cdi):
             return target, fraction
         return rules.get(group_of(t), (target, 0.0))
     months = _first_sessions(cal)
+    # Imposto de renda: ganho de cada venda (valor líquido − custo da parte vendida) no mês, por grupo.
+    carry = {"comum": 0.0, "fii": 0.0}           # prejuízo a compensar
+    month = {"comum": 0.0, "acoes": 0.0, "fii": 0.0, "stockSales": 0.0}
+    tax_paid = 0.0
+
+    def book(t, value, basis):
+        if not params.get("tax"):
+            return
+        kind = data[t]["kind"]
+        if kind == "fundos":
+            month["fii"] += value - basis
+        elif kind == "acoes":
+            month["acoes"] += value - basis
+            month["stockSales"] += value
+        else:
+            month["comum"] += value - basis
+
+    def settle():
+        """Imposto do mês fechado (e zera o mês): ações isentas com vendas até o limite."""
+        stock = month["acoes"]
+        if stock > 0 and month["stockSales"] <= TAX["stockExemption"]:
+            stock = 0.0
+        tax = 0.0
+        for bucket, net, rate in (("comum", month["comum"] + stock, TAX["rate"]), ("fii", month["fii"], TAX["fiiRate"])):
+            net -= carry[bucket]
+            if net > 0:
+                tax += net * rate
+                carry[bucket] = 0.0
+            else:
+                carry[bucket] = -net
+        month.update(comum=0.0, acoes=0.0, fii=0.0, stockSales=0.0)
+        return tax
+
     cash = contributed = params["initial"]
     flows = [(cal[0], params["initial"])]
     hold, trades, last_px = {}, [], {}
@@ -296,7 +351,7 @@ def simulate(data, cal, params, fraction, cdi):
     curve = []
     last_day, previous = cal[-1], None
     for d in cal:
-        cash *= 1 + cdi.get(previous, 0.0)  # a taxa de um dia rende no pregão seguinte
+        cash *= 1 + _cash_yield(cdi.get(previous, 0.0), params)  # a taxa de um dia rende no pregão seguinte
         previous = d
         today = [(t, a["idx"][d]) for t, a in data.items() if d in a["idx"]]
         for t, i in today:
@@ -306,6 +361,10 @@ def simulate(data, cal, params, fraction, cdi):
                     value = lot["qty"] * a["divs"][d]
                     cash += value
                     trades[lot["trade"]]["dividends"] += value
+        if params.get("tax") and d in months and d != cal[0]:
+            tax = settle()   # DARF do mês anterior
+            cash -= tax
+            tax_paid += tax
         if d in months and d != cal[0] and params["monthly"] > 0:
             cash += params["monthly"]
             contributed += params["monthly"]
@@ -317,6 +376,7 @@ def simulate(data, cal, params, fraction, cdi):
                 for lot in hold.pop(t):
                     value = lot["qty"] * price * (1 - cost)
                     cash += value
+                    book(t, value, lot["basis"])
                     trade = trades[lot["trade"]]
                     trade.update(exit={"date": d, "price": price, "i": i}, proceeds=trade["proceeds"] + value)
         pending_sell.clear()
@@ -348,7 +408,7 @@ def simulate(data, cal, params, fraction, cdi):
                            "partial": None, "exit": None, "proceeds": 0.0, "dividends": 0.0, "score": score, "rank": rank,
                            "peakClose": price, "peakHigh": price})
             hold.setdefault(t, []).append({"qty": amount * (1 - cost) / price, "price": price, "i": i, "hit": False,
-                                           "trade": len(trades) - 1})
+                                           "trade": len(trades) - 1, "basis": amount})
         pending_buy = []
         # Venda parcial no alvo (máxima de um pregão depois do da compra) e sinais no fechamento.
         candidates = []
@@ -367,6 +427,8 @@ def simulate(data, cal, params, fraction, cdi):
                     qty = lot["qty"] * fr
                     value = qty * price * (1 - cost)
                     cash += value
+                    book(t, value, lot["basis"] * fr)
+                    lot["basis"] -= lot["basis"] * fr
                     lot["qty"] -= qty
                     lot["hit"] = True
                     trade.update(partial={"date": d, "price": price, "i": i}, proceeds=trade["proceeds"] + value)
@@ -394,6 +456,10 @@ def simulate(data, cal, params, fraction, cdi):
         for lot in lots:
             trade = trades[lot["trade"]]
             trade["openValue"] = trade.get("openValue", 0.0) + lot["qty"] * last_px[t]
+            book(t, lot["qty"] * last_px[t] * (1 - cost), lot["basis"])   # como se vendesse no fim
+    # Imposto pago no período e o que ainda seria devido vendendo tudo no último dia (o mês em
+    # aberto + as compras abertas), para comparar com os índices, que só pagam quando vendem.
+    params["taxPaid"], params["taxDue"] = (tax_paid, settle()) if params.get("tax") else (None, None)
     for trade in trades:
         a = data[trade["ticker"]]
         end = trade["exit"]["i"] if trade["exit"] else a["idx"].get(last_day, len(a["candles"]) - 1)
@@ -465,11 +531,16 @@ def _yearly(curve, flows):
     return out
 
 
-def _metrics(curve, flows, end, trades=None):
+def _metrics(curve, flows, end, trades=None, tax=None):
+    """tax: None (sem imposto) ou (pago no período, devido vendendo tudo no fim); com ele, também o
+    lucro e o retorno ao ano líquidos (profitNet, irrNet)."""
     final, contributed = curve[-1]["equity"], curve[-1]["contributed"]
     out = {"final": final, "contributed": contributed, "profit": final - contributed,
            "profitPct": (final - contributed) / contributed * 100, "irr": _irr(flows, final, end),
            "maxDrawdown": _max_drawdown(curve, flows)}
+    if tax is not None:
+        paid, due = tax
+        out.update(taxPaid=paid, taxDue=due, profitNet=final - due - contributed, irrNet=_irr(flows, final - due, end))
     if trades is not None:
         closed = [t for t in trades if not t["open"]]
         returns = sorted(t["return"] for t in closed)
@@ -484,7 +555,7 @@ def _metrics(curve, flows, end, trades=None):
             "closedProfit": add_up(t["profit"] for t in closed),
             "openProfit": add_up(t["profit"] for t in trades if t["open"]),
             "assets": len({t["ticker"] for t in trades}),
-            "avgCash": add_up(p["cash"] / p["equity"] for p in curve if p["equity"] > 0) / len(curve) * 100,
+            "avgCash": _avg_cash(curve),
             "partials": sum(1 for t in trades if t["partial"]),
             "exits": len({(t["ticker"], t["exit"]["date"]) for t in closed}),
             "dividends": add_up(t["dividends"] for t in trades),
@@ -507,6 +578,79 @@ def _benchmark(cal, flows, prices):
             units += f / price
         curve.append({"date": d, "equity": units * (price or 0), "contributed": contributed, "cash": 0.0})
     return curve
+
+
+def _mix_curve(cal, flows, weights, prices):
+    """Mesmos aportes divididos entre índices (weights: {ticker: fração}, prices: {ticker: {dia: preço}}),
+    sem rebalancear: cada aporte compra cada índice na sua proporção."""
+    flow = dict(flows)
+    units = {t: 0.0 for t in weights}
+    last = {t: None for t in weights}
+    curve, contributed = [], 0.0
+    for d in cal:
+        for t in weights:
+            last[t] = prices[t].get(d, last[t])
+        f = flow.get(d, 0.0)
+        contributed += f
+        for t, w in weights.items():
+            if f and last[t]:
+                units[t] += f * w / last[t]
+        curve.append({"date": d, "equity": add_up(units[t] * (last[t] or 0) for t in weights), "contributed": contributed, "cash": 0.0})
+    return curve
+
+
+def _index_prices(bench, warnings):
+    """Preço ajustado por proventos dos índices de comparação ({ticker: {dia: preço}}); um índice
+    sem histórico fica de fora com um aviso."""
+    out = {BENCHMARK: {day_of(c["date"]): c["adj"] for c in bench}}
+    for ticker, _label in INDEXES.values():
+        if ticker in out:
+            continue
+        try:
+            out[ticker] = {day_of(c["date"]): c["adj"] for c in closed_candles(market_data.history(ticker)["candles"])}
+        except Exception as err:
+            log.warning("histórico de %s indisponível para o backtest de carteira", ticker, exc_info=True)
+            warnings.append(f"{ticker} indisponível ({err}): a comparação com ele ficou de fora.")
+    return out
+
+
+def _mix_weights(classes):
+    """Metas por classe → {índice: fração} (fundos e ETFs Brasil no BOVA11, internacionais no IVVB11)."""
+    total = add_up(classes.values())
+    weights = {}
+    for group, w in classes.items():
+        if w > 0:
+            weights[MIX_INDEX.get(group, BENCHMARK)] = weights.get(MIX_INDEX.get(group, BENCHMARK), 0.0) + w / total
+    return weights
+
+
+def _comparisons(cal, flows, params, prices, cdi):
+    """As linhas de comparação com os mesmos aportes: BOVA11, IVVB11, os índices na proporção das
+    metas (com metas por classe) e o CDI. → [(chave, rótulo, curva)]."""
+    out = [(key, label, _benchmark(cal, flows, prices[ticker])) for key, (ticker, label) in INDEXES.items() if ticker in prices]
+    weights = _mix_weights(params["classes"]) if params.get("classes") else {}
+    if weights and all(t in prices for t in weights):
+        label = " + ".join(f"{fmt_num(w * 100, 0)}% {t}" for t, w in sorted(weights.items(), key=lambda x: -x[1]))
+        out.append(("mix", f"Índices nas metas ({label})", _mix_curve(cal, flows, weights, prices)))
+    if cdi:
+        out.append(("cdi", "CDI (mesmos aportes)", _cdi_curve(cal, flows, cdi)))
+    return out
+
+
+def _comparison_tax(params, curve):
+    """Imposto dos índices e do CDI, só quando vendidos no fim: 15% sobre o ganho (sem nada pago antes)."""
+    if not params.get("tax"):
+        return None
+    return 0.0, max(0.0, curve[-1]["equity"] - curve[-1]["contributed"]) * TAX["rate"]
+
+
+def _position_warning(params):
+    if params["position"] > MAX_POSITION:
+        pct = round(params["position"] * 100, 4)
+        return (f"Fatia de {fmt_num(pct, 0 if float(pct).is_integer() else 1)}% por compra: nos testes de robustez, fatias acima de "
+                f"{fmt_num(MAX_POSITION * 100, 0)}% renderam bem menos (com poucas posições, e 1,5x nas compras com prioridade, "
+                "um ou dois ativos passam a decidir o resultado).")
+    return None
 
 
 def _cdi_curve(cal, flows, cdi):
@@ -547,8 +691,8 @@ def _markers(rows):
             for t, groups in by_ticker.items()}
 
 
-def run(params):
-    """Tudo o que o modo Carteira da aba Backtest mostra. ValueError com a mensagem para a página."""
+def _load(params):
+    """Sinais dos candidatos e o calendário do BOVA11: o que run e robustness compartilham."""
     assets = universe_assets(params)
     if not assets:
         raise ValueError("Nenhum ativo para simular. Rode o screener ou informe uma lista de ativos.")
@@ -574,28 +718,28 @@ def run(params):
         warnings.append(f"{len(failed)} ativo(s) ficaram de fora por falta de histórico (listados há pouco tempo ou sem dados no Yahoo): "
                         f"{', '.join(failed[:10])}{'...' if len(failed) > 10 else ''}.")
 
+    if (msg := _position_warning(params)):
+        warnings.append(msg)
     bench = closed_candles(market_data.history(BENCHMARK)["candles"])
     bench_days = [day_of(c["date"]) for c in bench]
-    first_day, last_day = bench_days[sc.CONFIG["backtestStart"]], bench_days[-1]
-    start = max(params["start"] or first_day, first_day)
-    end = min(params["end"] or last_day, last_day)
-    cal = [d for d in bench_days if start <= d <= end]
-    if len(cal) < 2:
-        raise ValueError("O período não tem pregões suficientes; escolha um início anterior ao fim.")
-    note = None
-    if params["start"] and params["start"] < first_day:
-        note = (f"Início ajustado para {fmt_date(cal[0])}: o histórico do Yahoo tem 10 anos e as médias precisam de "
-                f"{sc.CONFIG['backtestStart']} pregões antes da primeira compra.")
+    return {"assets": assets, "data": data, "illiquid": illiquid, "warnings": warnings, "bench": bench,
+            "prices": _index_prices(bench, warnings),
+            "bench_days": bench_days, "first_day": bench_days[sc.CONFIG["backtestStart"]], "last_day": bench_days[-1]}
 
-    cdi = {}
-    if params["cdi"]:
-        try:
-            rates = market_data.cdi(date.fromisoformat(cal[0]))["rates"]
-            cdi = {r["date"]: r["rate"] / 100 for r in rates}
-        except Exception as err:
-            log.warning("CDI indisponível para o backtest de carteira", exc_info=True)
-            warnings.append(f"CDI indisponível ({err}): o caixa parado não rendeu juros e a linha do CDI ficou de fora.")
 
+def _cdi_rates(start, warnings):
+    """CDI diário (fração) desde start; vazio com um aviso quando o Banco Central falha."""
+    try:
+        return {r["date"]: r["rate"] / 100 for r in market_data.cdi(date.fromisoformat(start))["rates"]}
+    except Exception as err:
+        log.warning("CDI indisponível para o backtest de carteira", exc_info=True)
+        warnings.append(f"CDI indisponível ({err}): o caixa parado não rendeu juros e a linha do CDI ficou de fora.")
+        return {}
+
+
+def _rule_runs(params, data):
+    """Simulações a rodar: a regra escolhida e, quando ela tem venda parcial, só a regra B.
+    → (runs [(chave, rótulo, parte vendida ou None = a de cada grupo)], rótulo da regra, tem parcial)."""
     pct = lambda v: fmt_num(v * 100, 0 if float(round(v * 100, 4)).is_integer() else 1)
     if params.get("rules"):
         fraction = None
@@ -609,28 +753,56 @@ def run(params):
     runs = [("rule", rule_label, fraction)]
     if has_partial:
         runs.append(("onlyB", "Só a regra B", 0.0))
+    return runs, rule_label, has_partial
+
+
+def _params_out(params):
+    """Os parâmetros como a página e o prompt de análise os mostram (percentuais em %)."""
+    return ({k: params[k] for k in ("universe", "tickers", "initial", "monthly", "maxAssets", "topN", "strict", "cdi", "liquidity", "exit",
+                                    "advice", "tax")}
+            | {"classes": {g: v * 100 for g, v in params["classes"].items()} if params.get("classes") else None}
+            | {"position": params["position"] * 100, "cost": params["cost"] * 100,
+               "target": params["target"] * 100, "fraction": params["fraction"] * 100,
+               "rules": {k: {"target": v[0] * 100, "fraction": v[1] * 100}
+                         for k, v in (params.get("rules") or {}).items()}})
+
+
+def run(params):
+    """Tudo o que o modo Carteira da aba Backtest mostra. ValueError com a mensagem para a página."""
+    loaded = _load(params)
+    assets, data, illiquid, warnings = (loaded[k] for k in ("assets", "data", "illiquid", "warnings"))
+    first_day, last_day = loaded["first_day"], loaded["last_day"]
+    start = max(params["start"] or first_day, first_day)
+    end = min(params["end"] or last_day, last_day)
+    cal = [d for d in loaded["bench_days"] if start <= d <= end]
+    if len(cal) < 2:
+        raise ValueError("O período não tem pregões suficientes; escolha um início anterior ao fim.")
+    note = None
+    if params["start"] and params["start"] < first_day:
+        note = (f"Início ajustado para {fmt_date(cal[0])}: o histórico do Yahoo tem 10 anos e as médias precisam de "
+                f"{sc.CONFIG['backtestStart']} pregões antes da primeira compra.")
+
+    cdi = _cdi_rates(cal[0], warnings) if params["cdi"] else {}
+    runs, rule_label, has_partial = _rule_runs(params, data)
     strategies, trades_main, flows = [], [], None
     params["bench6m"] = sc.benchmark_6m() if params.get("advice") else {}
     skipped = 0
     for key, label, f in runs:
         params["skipped"] = 0
         curve, flows, trades = simulate(data, cal, params, f, cdi)
-        strategies.append({"key": key, "label": label, "metrics": _metrics(curve, flows, cal[-1], trades),
+        tax = (params["taxPaid"], params["taxDue"]) if params.get("tax") else None
+        strategies.append({"key": key, "label": label, "metrics": _metrics(curve, flows, cal[-1], trades, tax),
                            "curve": _profit_series(curve), "years": _yearly(curve, flows)})
         if key == "rule":
             trades_main, skipped = trades, params["skipped"]
-    adj = {day_of(c["date"]): c["adj"] for c in bench}
-    bova = _benchmark(cal, flows, adj)
-    strategies.append({"key": "bova", "label": "BOVA11 (mesmos aportes)", "metrics": _metrics(bova, flows, cal[-1]),
-                       "curve": _profit_series(bova), "years": _yearly(bova, flows)})
-    if cdi:
-        cdi_curve = _cdi_curve(cal, flows, cdi)
-        strategies.append({"key": "cdi", "label": "CDI (mesmos aportes)", "metrics": _metrics(cdi_curve, flows, cal[-1]),
-                           "curve": _profit_series(cdi_curve), "years": _yearly(cdi_curve, flows)})
+    for key, label, curve in _comparisons(cal, flows, params, loaded["prices"], cdi):
+        strategies.append({"key": key, "label": label, "metrics": _metrics(curve, flows, cal[-1], tax=_comparison_tax(params, curve)),
+                           "curve": _profit_series(curve), "years": _yearly(curve, flows)})
 
     compare = None
     if has_partial:
-        a, b = strategies[0]["metrics"]["profit"], strategies[1]["metrics"]["profit"]
+        net = "profitNet" if params.get("tax") else "profit"   # com imposto, o lucro vendendo tudo no fim
+        a, b = strategies[0]["metrics"][net], strategies[1]["metrics"][net]
         partial, only_b = f"a estratégia com venda parcial ({rule_label})", "só a regra B"
         if abs(a - b) < 0.005:
             compare = "Com o dinheiro girando entre os ativos do ranking, as duas estratégias deram o mesmo lucro."
@@ -661,13 +833,166 @@ def run(params):
         "bounds": {"min": first_day, "max": last_day, "from": cal[0], "to": cal[-1]}, "note": note,
         "universe": {"label": UNIVERSES[params["universe"]], "candidates": len(assets), "ranked": len(data),
                      "illiquid": illiquid},
-        "params": {k: params[k] for k in ("initial", "monthly", "maxAssets", "topN", "strict", "cdi", "liquidity", "exit", "advice")}
-                  | {"classes": {g: v * 100 for g, v in params["classes"].items()} if params.get("classes") else None}
-                  | {"position": params["position"] * 100, "cost": params["cost"] * 100,
-                     "target": params["target"] * 100, "fraction": params["fraction"] * 100,
-                     "rules": {k: {"target": v[0] * 100, "fraction": v[1] * 100}
-                               for k, v in (params.get("rules") or {}).items()}},
+        "params": _params_out(params),
         "adviceSkipped": skipped if params.get("advice") else None,
         "strategies": strategies, "compare": compare, "trades": rows, "markers": _markers(rows),
         "assets": sorted(traded.values(), key=lambda x: (-x["trades"], x["ticker"])), "warnings": warnings,
+    }
+
+
+# ---------------------------------------------------------------- Robustez
+
+ROBUST_MIN_SESSIONS = 504     # até o fim: cada início precisa de ~2 anos até o fim do período
+ROBUST_WINDOWS = (2, 3, 5)    # janelas de tamanho fixo, em anos
+ROBUST_NAMES = {"onlyB": "da regra B sozinha", "bova": "do BOVA11", "ivvb": "do IVVB11", "mix": "dos índices nas metas", "cdi": "do CDI"}
+ROBUST_ORDER = ("mix", "bova", "ivvb", "cdi", "onlyB")     # ordem do placar e do resumo
+ROBUST_REF = {"mix": "os índices na proporção das metas", "bova": "o BOVA11"}
+ROBUST_REF_SHORT = {"mix": "Índices nas metas", "bova": "BOVA11"}
+
+
+def _window(value):
+    """Campo "janela": "fim" (ou vazio) = cada início até o fim do período → 0; senão anos da janela."""
+    if value in (None, "", "fim"):
+        return 0
+    try:
+        years = int(value)
+    except (TypeError, ValueError):
+        years = None
+    if years not in ROBUST_WINDOWS:
+        raise ValueError("Escolha a janela do teste de robustez.")
+    return years
+
+
+def _robust_periods(days, end, window):
+    """Períodos testados. Inícios: o primeiro pregão possível e o primeiro pregão de cada ano seguinte.
+    window 0: cada início vai até o fim, enquanto sobrarem ROBUST_MIN_SESSIONS pregões. window N: cada
+    início vai até o último pregão antes de completar N anos, e só entram as janelas inteiras."""
+    cal = [d for d in days if d <= end]
+    starts = [0] + [i for i in range(1, len(cal)) if cal[i][:4] != cal[i - 1][:4]]
+    if not window:
+        return [cal[i:] for i in starts if len(cal) - 1 - i >= ROBUST_MIN_SESSIONS]
+    out = []
+    for i in starts:
+        first = date.fromisoformat(cal[i])
+        limit = first.replace(year=first.year + window, day=min(first.day, 28)).isoformat()
+        if cal[-1] < limit:
+            break
+        out.append([d for d in cal[i:] if d < limit])
+    return out
+
+
+def _period_label(cal, first, window):
+    """Rótulo curto do período: o ano de início (MM/AAAA quando não começa em janeiro) e, nas
+    janelas, o último ano coberto inteiro ou em parte (2018–20 = 2018, 2019 e 2020)."""
+    start = cal[0][:4] if not first or cal[0][5:7] == "01" else f"{cal[0][5:7]}/{cal[0][:4]}"
+    if not window:
+        return start
+    last = date.fromisoformat(cal[0]).year + window - (1 if cal[0][5:7] == "01" else 0)
+    return f"{start}–{str(last)[2:]}"
+
+
+def _median(values):
+    values = sorted(v for v in values if v is not None)
+    if not values:
+        return None
+    mid = len(values) // 2
+    return values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+
+
+def robustness(params):
+    """A mesma carteira em vários períodos (o "De" do formulário é ignorado): a partir de cada ano de
+    início até o mesmo fim, ou em janelas de params["window"] anos. Como poucos ganhos grandes decidem
+    o lucro, uma regra só é confiável se ganhar na maioria dos períodos, não só no período inteiro.
+    ValueError com a mensagem para a página."""
+    window = params.get("window", 0)
+    loaded = _load(params)
+    data, warnings = loaded["data"], loaded["warnings"]
+    end = min(params["end"] or loaded["last_day"], loaded["last_day"])
+    periods = _robust_periods(loaded["bench_days"][sc.CONFIG["backtestStart"]:], end, window)
+    if window and len(periods) < 2:
+        raise ValueError(f"O período é curto demais para comparar janelas de {window} anos; escolha janelas menores.")
+    if not periods:
+        raise ValueError("O período é curto demais: o teste de robustez precisa de pelo menos 2 anos entre o início possível e o fim.")
+    cdi = _cdi_rates(periods[0][0], warnings) if params["cdi"] else {}
+    runs, rule_label, has_partial = _rule_runs(params, data)
+    params["bench6m"] = sc.benchmark_6m() if params.get("advice") else {}
+    tax_on = params.get("tax")
+
+    def keep(m):
+        """O que a tabela mostra de cada linha; com imposto, o lucro e o retorno vendendo tudo no fim."""
+        out = {k: m[k] for k in ("profit", "profitPct", "irr", "maxDrawdown", "contributed")}
+        if tax_on:
+            out.update(profit=m["profitNet"], irr=m["irrNet"], profitPct=m["profitNet"] / m["contributed"] * 100,
+                       taxPaid=m["taxPaid"], taxDue=m["taxDue"])
+        return out
+
+    rows, labels = [], {key: label for key, label, _f in runs}
+    for k, cal in enumerate(periods):
+        row = {"from": cal[0], "to": cal[-1], "duration": fmt_sessions(len(cal) - 1),
+               "label": _period_label(cal, k == 0, window)}
+        flows = None
+        for key, _label, f in runs:
+            params["skipped"] = 0
+            curve, flows, trades = simulate(data, cal, params, f, cdi)
+            tax = (params["taxPaid"], params["taxDue"]) if tax_on else None
+            row[key] = keep(_metrics(curve, flows, cal[-1], tax=tax)) | {"trades": len(trades), "avgCash": _avg_cash(curve)}
+        for key, label, curve in _comparisons(cal, flows, params, loaded["prices"], cdi):
+            row[key] = keep(_metrics(curve, flows, cal[-1], tax=_comparison_tax(params, curve)))
+            labels[key] = label
+        rows.append(row)
+
+    # Régua principal: os índices na proporção das metas (com metas por classe), senão o BOVA11.
+    ref = "mix" if all("mix" in r for r in rows) else "bova"
+    for row in rows:
+        rule = row["rule"]
+        row["beats"] = {key: rule["profit"] > row[key]["profit"] for key in ROBUST_NAMES if row.get(key)}
+        # Diferença do retorno ao ano para a régua (pontos percentuais) e do lucro para só a regra B (R$).
+        row["excess"] = rule["irr"] - row[ref]["irr"] if rule["irr"] is not None and row[ref]["irr"] is not None else None
+        row["diffOnlyB"] = rule["profit"] - row["onlyB"]["profit"] if row.get("onlyB") else None
+
+    n = len(rows)
+    unit = "janelas" if window else "inícios"
+    the_unit, all_unit = ("das janelas", "todas as janelas testadas") if window else ("dos inícios", "todos os inícios testados")
+    wins = {key: sum(1 for r in rows if r["beats"].get(key)) for key in ROBUST_NAMES}
+    compared = [key for key in ROBUST_ORDER if all(key in r["beats"] for r in rows)]
+    irrs = [r["rule"]["irr"] for r in rows if r["rule"]["irr"] is not None]
+    excess = [r for r in rows if r["excess"] is not None]
+    worst_dd = min(rows, key=lambda r: r["rule"]["maxDrawdown"])
+    worst_ex = min(excess, key=lambda r: r["excess"]) if excess else None
+    ref_name = ROBUST_REF[ref]
+    cards = {
+        "irr": {"median": _median(irrs), "min": min(irrs) if irrs else None, "max": max(irrs) if irrs else None},
+        "excess": {"label": ROBUST_REF_SHORT[ref], "median": _median(r["excess"] for r in excess),
+                   "worst": worst_ex and worst_ex["excess"], "worstLabel": worst_ex and worst_ex["label"],
+                   "positive": sum(1 for r in excess if r["excess"] > 0)},
+        "drawdown": {"worst": worst_dd["rule"]["maxDrawdown"], "worstLabel": worst_dd["label"],
+                     "median": _median(r["rule"]["maxDrawdown"] for r in rows)},
+        "profitPct": {"median": _median(r["rule"]["profitPct"] for r in rows)},
+        "wins": [{"key": key, "label": ROBUST_NAMES[key], "wins": wins[key]} for key in compared],
+    }
+    lines = [f"Ganhou {ROBUST_NAMES[key]} em {wins[key]} de {n} {unit}." for key in compared]
+    if irrs:
+        lines.append(f"Retorno ao ano: mediana de {fmt_num(cards['irr']['median'], 1)}%, "
+                     f"pior {fmt_num(cards['irr']['min'], 1)}% e melhor {fmt_num(cards['irr']['max'], 1)}%.")
+    if worst_ex:
+        lines.append(f"Contra {ref_name}: mediana de {fmt_num(cards['excess']['median'], 1)} p.p. ao ano a mais; "
+                     f"o pior período ({worst_ex['label']}) ficou {fmt_num(worst_ex['excess'], 1)} p.p.")
+    lines.append(f"Maior queda: {fmt_num(worst_dd['rule']['maxDrawdown'], 1)}% ({worst_dd['label']}).")
+    if tax_on:
+        lines.append("Com imposto de renda: o lucro e o retorno de cada linha são os líquidos, vendendo tudo no último dia "
+                     "(os índices e o CDI pagam 15% sobre o ganho só nessa venda).")
+    if wins[ref] == n:
+        verdict = f"Consistente: ganhou {ROBUST_NAMES[ref]} em {all_unit}."
+    elif wins[ref] * 3 >= n * 2:
+        verdict = f"Razoavelmente consistente: ganhou {ROBUST_NAMES[ref]} na maioria {the_unit}, mas não em todos os períodos."
+    else:
+        verdict = f"Pouco consistente contra {ref_name}: o resultado depende muito do período; não confie no período inteiro sozinho."
+    columns = [{"key": key, "label": labels[key]} for key in ("rule", "onlyB", "bova", "ivvb", "mix", "cdi")
+               if all(key in r for r in rows) and all(r[key] for r in rows)]
+    return {
+        "rule": rule_label, "hasPartial": has_partial, "hasCdi": bool(cdi), "end": end, "window": window, "tax": bool(tax_on),
+        "ref": {"key": ref, "label": labels[ref], "short": ROBUST_REF_SHORT[ref]}, "columns": columns,
+        "params": _params_out(params), "universe": {"label": UNIVERSES[params["universe"]], "candidates": len(loaded["assets"]),
+                                                    "ranked": len(data), "illiquid": loaded["illiquid"]},
+        "rows": rows, "wins": wins, "periods": n, "cards": cards, "summary": lines, "verdict": verdict, "warnings": warnings,
     }

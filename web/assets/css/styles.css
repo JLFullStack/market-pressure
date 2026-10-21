@@ -332,6 +332,19 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 .copy-analysis:disabled { opacity: 0.7; cursor: wait; }
 .copy-wrap { display: inline-flex; align-items: center; gap: 4px; }
 .copy-wrap > .tip { margin-left: 0; }
+/* "ANALISAR RESULTADO" da aba Backtest: no canto superior direito do resultado, em destaque. */
+.bt-result-head, #btResult .panel-head { align-items: flex-start; flex-wrap: nowrap; }
+.bt-result-head > div:first-child, #btResult .panel-head > div:first-child { flex: 1; min-width: 0; }
+.bt-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.bt-analyze { flex: 0 0 auto; }
+.btn-analyze {
+    background-color: rgba(56, 139, 253, 0.15); color: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
+    font-weight: 700; letter-spacing: 0.3px; cursor: pointer;
+}
+.bt-analyze .btn-analyze.copy-analysis { padding: 8px 14px; font-size: 13px; }   /* maior no canto dos resultados do Backtest */
+.btn-analyze::before { content: "✦ "; }
+.btn-analyze:hover { background-color: var(--blue-gas); border-color: var(--blue-gas); color: #fff; }
+.btn-analyze:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .copy-dialog {
     width: min(720px, calc(100vw - 32px));
     background: var(--panel-bg);
@@ -406,14 +419,33 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 /* ------------------------------------------------------------ Aba Backtest */
 /* Formulário do Backtest: cada campo tem a largura do seu rótulo (que não quebra linha, com o "?"
    ao lado) e os campos passam para a linha de baixo quando não cabem. */
-.bt-form { display: flex; flex-wrap: wrap; align-items: flex-end; }
-.bt-form > .field { flex: 1 1 auto; min-width: 140px; }
-.bt-form > .bt-wide { flex-basis: 300px; }
-.bt-form > .bt-check { flex: 0 0 auto; align-self: center; padding-bottom: 8px; }
-.bt-form > div { flex: 0 0 auto; }
+/* Formulário da aba Backtest: grupos (Ativos, Dinheiro, Alocação, Saída, Período e filtros) e a barra de ações. */
+.bt-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 14px; }
+.bt-group { border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px 12px; margin: 0; min-width: 0; background: rgba(255, 255, 255, 0.015); }
+.bt-group > legend { padding: 0 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--accent); }
+.bt-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; align-items: end; }
+.bt-fields > .bt-wide { grid-column: 1 / -1; }
+.bt-checks { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.bt-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px;
+              padding-top: 14px; border-top: 1px solid var(--border-color); }
+.bt-robust { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bt-robust-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.bt-robust .select { width: auto; padding: 8px 10px; font-size: 14px; }
+.btn-accent {
+    background-color: rgba(56, 139, 253, 0.15); color: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
+    padding: 9px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.btn-accent:hover { background-color: var(--blue-gas); border-color: var(--blue-gas); color: #fff; }
+.btn-accent:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-accent:disabled { opacity: 0.5; cursor: wait; }
 .field .tip-label, .toggle .tip-label { white-space: nowrap; }
 .pf-years th, .pf-years td { padding: 10px 12px; }
 .bt-chart { position: relative; height: 460px; margin-top: 10px; }
+.robust-chart { position: relative; height: 320px; margin-top: 10px; }
+.robust-score { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 400; }
+.robust-score span:first-child { min-width: 78px; }
+.robust-bar { flex: 1; height: 6px; min-width: 40px; border-radius: 3px; background: var(--border-color, #30363d); overflow: hidden; }
+.robust-bar i { display: block; height: 100%; background: #3fb950; }
 .bt-chart-small { height: 200px; }
 .bt-subhead { margin: 18px 0 0; }
 .bt-compare { font-size: 14px; font-weight: 600; margin: 10px 0 4px; }
@@ -453,6 +485,9 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
     .num-input { width: 90px; }
     th, td { padding: 10px; }
     .bt-chart { height: 340px; }
+    .robust-chart { height: 260px; }
+    .bt-result-head, #btResult .panel-head { flex-wrap: wrap; }
+    .bt-head-actions { justify-content: flex-start; }
     .goal-chart { height: 220px; }
     .bt-chart-small { height: 160px; }
 }

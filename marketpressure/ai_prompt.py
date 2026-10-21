@@ -1,4 +1,4 @@
-"""Botão "COPIAR ANÁLISE" do ranking do Screener: o texto (prompt) que o usuário cola numa IA.
+"""Botão "ANALISAR ATIVO" do ranking do Screener: o texto (prompt) que o usuário cola numa IA.
 
 Monta, para um ativo do ranking, as instruções do papel (analista experiente que fala de forma
 simples), a tarefa (comprar agora ou esperar, e por quê) e todos os dados que o app tem dele: a
@@ -77,7 +77,7 @@ rendeu cerca de 25% a mais no período do que esperar as confirmações.
 Use **EVITAR** só com um motivo concreto, como:
   - tendência fraca nas ações: MM200 subindo menos de 1% em 20 pregões, retorno de 12 meses negativo, recuo até a \
 MM200 ou ação rendendo menos que o Ibovespa em 6 meses (nos testes do app, essas compras renderam menos nas duas \
-metades de 2017–2026; nos internacionais isso não valeu);
+metades de 2017–2026, e seguir essa regra deu mais lucro à carteira em 6 de 8 anos de início; nos internacionais isso não valeu);
   - tendência quebrando: MM20 bem abaixo da MM50 com MACD afundando;
   - queda forte até a média ("faca caindo": 15% ou mais em poucos pregões, RSI perto de 30) em vez de um recuo ordenado;
   - choque de notícia: gap ou queda forte com volume muito acima da média;
@@ -86,6 +86,10 @@ metades de 2017–2026; nos internacionais isso não valeu);
 fechamento de capital, fusão, recuperação judicial, fraude, calote).
 - **Prioridade**: no Top 5 do ranking do tipo ou com Score ≥ 65, as compras renderam mais em média nas duas metades \
 de 2017–2026; nesses casos uma fatia maior (até 1,5x a normal) é razoável.
+- **Tamanho da posição**: a compra normal é de 7,5% a 10% do patrimônio; com prioridade, até 1,5x \
+(cerca de 15%), nunca mais que isso. Nos testes de robustez do app (2017 a 2026, vários anos de início), fatias \
+de 12,5% ou mais renderam bem menos: poucas posições grandes passam a decidir o resultado. Na posição menor, use \
+metade da normal ou menos.
 - A pressão sozinha (garrafa cheia) não antecipou compras melhores nos testes: ela vale dentro do Score, junto com o \
 histórico do ativo, e não como motivo isolado para comprar mais ou evitar.
 - Candle vermelho no dia do sinal, RSI ainda caindo, mercado misto ou dólar oscilando são normais num \

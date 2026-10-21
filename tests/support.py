@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from marketpressure import database, market_data
+from marketpressure import backtest_prompt, database, market_data
 
 DAY = 86400
 START = 1609502400  # 2021-01-01 12:00 UTC (09:00 em Brasília)
@@ -39,6 +39,7 @@ class DatabaseTestCase(unittest.TestCase):
         database.DATA_DIR, database.BACKUP_DIR = self.data_dir, self.data_dir / "backup"
         self._raw_history = market_data.raw_history
         market_data.raw_history = lambda ticker, market="b3": raw_history(ticker)
+        backtest_prompt._cache.clear()   # resultados de backtest guardados para o prompt de análise
 
     def tearDown(self):
         market_data.raw_history = self._raw_history

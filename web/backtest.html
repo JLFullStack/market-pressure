@@ -51,100 +51,141 @@
             </div>
         </div>
         <form id="btForm" novalidate>
-            <div class="form-grid bt-form">
-                <label class="field" data-mode="ativo"><span>Ativo <span class="tip" tabindex="0" data-tip="Código do ativo. B3: ações, units, FIIs, ETFs e BDRs (ex.: PETR4, BOVA11, AAPL34). EUA: ações e ETFs (ex.: VOO, AAPL)." aria-label="Ajuda: Código do ativo. B3: ações, units, FIIs, ETFs e BDRs (ex.: PETR4, BOVA11, AAPL34). EUA: ações e ETFs (ex.: VOO, AAPL).">?</span></span>
-                    <input type="text" id="btTicker" class="select" placeholder="Ex.: PETR4" autocomplete="off" spellcheck="false" required>
-                </label>
-                <label class="field" data-mode="ativo"><span>Mercado <span class="tip" tabindex="0" data-tip="Onde o ativo é negociado. Nos EUA os preços ficam em US$; o resultado em reais não considera a variação do dólar." aria-label="Ajuda: Onde o ativo é negociado. Nos EUA os preços ficam em US$; o resultado em reais não considera a variação do dólar.">?</span></span>
-                    <select id="btMarket" class="select">
-                        <option value="b3">B3</option>
-                        <option value="us">EUA</option>
+            <div class="bt-groups">
+                <fieldset class="bt-group">
+                    <legend>Ativos</legend>
+                    <div class="bt-fields">
+                        <label class="field" data-mode="ativo"><span>Ativo <span class="tip" tabindex="0" data-tip="Código do ativo. B3: ações, units, FIIs, ETFs e BDRs (ex.: PETR4, BOVA11, AAPL34). EUA: ações e ETFs (ex.: VOO, AAPL)." aria-label="Ajuda: Código do ativo. B3: ações, units, FIIs, ETFs e BDRs (ex.: PETR4, BOVA11, AAPL34). EUA: ações e ETFs (ex.: VOO, AAPL).">?</span></span>
+                        <input type="text" id="btTicker" class="select" placeholder="Ex.: PETR4" autocomplete="off" spellcheck="false" required>
+                    </label>
+                        <label class="field" data-mode="ativo"><span>Mercado <span class="tip" tabindex="0" data-tip="Onde o ativo é negociado. Nos EUA os preços ficam em US$; o resultado em reais não considera a variação do dólar." aria-label="Ajuda: Onde o ativo é negociado. Nos EUA os preços ficam em US$; o resultado em reais não considera a variação do dólar.">?</span></span>
+                        <select id="btMarket" class="select">
+                            <option value="b3">B3</option>
+                            <option value="us">EUA</option>
+                        </select>
+                    </label>
+                        <label class="field" data-mode="carteira" hidden><span>Ranking <span class="tip" tabindex="0" data-tip="De qual ranking do screener a carteira compra. Em cada dia do período, o ranking é refeito como o screener faria naquele dia: só ativos com liquidez naquela época, no setup, ordenados pelo Score do dia. Lista de ativos = só os códigos que você informar." aria-label="Ajuda: De qual ranking do screener a carteira compra. Em cada dia do período, o ranking é refeito como o screener faria naquele dia: só ativos com liquidez naquela época, no setup, ordenados pelo Score do dia. Lista de ativos = só os códigos que você informar.">?</span></span>
+                        <select id="pfUniverse" class="select">
+                            <option value="acoes">Ações</option>
+                            <option value="fundos">Fundos listados</option>
+                            <option value="etfs">ETFs</option>
+                            <option value="bdrs">BDRs</option>
+                            <option value="todos">Todos os tipos</option>
+                            <option value="lista">Lista de ativos</option>
+                        </select>
+                    </label>
+                        <label class="field" data-mode="carteira" hidden><span>Top do ranking <span class="tip" tabindex="0" data-tip="Quantas posições do ranking de cada dia podem ser compradas (o screener mostra 20 por tipo). Com mais sinais do que caixa, compram primeiro os de maior Score." aria-label="Ajuda: Quantas posições do ranking de cada dia podem ser compradas (o screener mostra 20 por tipo). Com mais sinais do que caixa, compram primeiro os de maior Score.">?</span></span>
+                        <input type="number" id="pfTopN" class="select" min="1" max="100" step="1" value="20" inputmode="numeric">
+                    </label>
+                        <label class="field bt-wide" data-mode="carteira" id="pfTickersField" hidden><span>Lista de ativos <span class="tip" tabindex="0" data-tip="Códigos da B3 separados por vírgula. Ex.: PETR4, VALE3, ITUB4, BOVA11." aria-label="Ajuda: Códigos da B3 separados por vírgula. Ex.: PETR4, VALE3, ITUB4, BOVA11.">?</span></span>
+                        <input type="text" id="pfTickers" class="select" placeholder="Ex.: PETR4, VALE3, ITUB4" autocomplete="off" spellcheck="false">
+                    </label>
+                        <label class="field bt-wide" data-mode="carteira" hidden><span>Liquidez mínima <span class="tip" tabindex="0" data-tip="Volume financeiro médio por pregão (últimos 20 pregões) que o ativo precisa ter para entrar no ranking. Regra prática: cada compra sua deve ser no máximo ~1% desse volume. Para aportes de R$ 2 mil e carteiras de até ~R$ 200 mil, R$ 2 mi por dia é o recomendado; Padrão = R$ 5 mi (fundos R$ 3 mi), mais conservador. No backtest, o piso vale para a liquidez de cada dia do período." aria-label="Ajuda: liquidez mínima">?</span></span>
+                        <select id="pfLiquidity" class="select">
+                            <option value="padrao">Padrão (R$ 5 mi; fundos R$ 3 mi)</option>
+                            <option value="10">R$ 10 mi por dia</option>
+                            <option value="5">R$ 5 mi por dia</option>
+                            <option value="3">R$ 3 mi por dia</option>
+                            <option value="2">R$ 2 mi por dia (recomendado até ~R$ 200 mil)</option>
+                            <option value="1">R$ 1 mi por dia</option>
+                        </select>
+                    </label>
+                    </div>
+                </fieldset>
+                <fieldset class="bt-group">
+                    <legend>Dinheiro</legend>
+                    <div class="bt-fields">
+                        <label class="field" data-mode="ativo"><span>Valor por compra (R$) <span class="tip" tabindex="0" data-tip="Quanto você investiria em cada compra do setup. Serve para mostrar os resultados em reais; os percentuais não mudam." aria-label="Ajuda: Quanto você investiria em cada compra do setup. Serve para mostrar os resultados em reais; os percentuais não mudam.">?</span></span>
+                        <input type="number" id="btAmount" class="select" min="1" step="100" value="1000" inputmode="decimal">
+                    </label>
+                        <label class="field" data-mode="carteira" hidden><span>Capital inicial (R$) <span class="tip" tabindex="0" data-tip="Dinheiro da carteira no primeiro dia do período." aria-label="Ajuda: Dinheiro da carteira no primeiro dia do período.">?</span></span>
+                        <input type="number" id="pfInitial" class="select" min="100" step="1000" value="10000" inputmode="decimal">
+                    </label>
+                        <label class="field" data-mode="carteira" hidden><span>Aporte mensal (R$) <span class="tip" tabindex="0" data-tip="Dinheiro novo no primeiro pregão de cada mês (0 = sem aportes). O BOVA11 e o CDI de comparação recebem os mesmos aportes." aria-label="Ajuda: Dinheiro novo no primeiro pregão de cada mês (0 = sem aportes). O BOVA11 e o CDI de comparação recebem os mesmos aportes.">?</span></span>
+                        <input type="number" id="pfMonthly" class="select" min="0" step="100" value="0" inputmode="decimal">
+                    </label>
+                        <label class="field" data-mode="carteira" hidden><span>Fatia por compra (%) <span class="tip" tabindex="0" data-tip="Quanto do patrimônio do dia vai em cada compra. 10 = cada compra usa 10% do patrimônio (o lucro passa a comprar mais: juros compostos). Só compra se houver caixa para pelo menos metade da fatia." aria-label="Ajuda: Quanto do patrimônio do dia vai em cada compra. 10 = cada compra usa 10% do patrimônio (o lucro passa a comprar mais: juros compostos). Só compra se houver caixa para pelo menos metade da fatia.">?</span></span>
+                        <input type="number" id="pfPosition" class="select" min="1" max="100" step="1" value="10" inputmode="decimal">
+                    </label>
+                        <label class="field" data-mode="carteira" hidden><span>Custo por operação (%) <span class="tip" tabindex="0" data-tip="Corretagem, emolumentos e diferença de preço na execução, em % de cada compra e de cada venda." aria-label="Ajuda: Corretagem, emolumentos e diferença de preço na execução, em % de cada compra e de cada venda.">?</span></span>
+                        <input type="number" id="pfCost" class="select" min="0" max="5" step="0.05" value="0.1" inputmode="decimal">
+                    </label>
+                    </div>
+                </fieldset>
+                <fieldset class="bt-group" data-mode="carteira" hidden>
+                    <legend>Alocação</legend>
+                    <div class="bt-fields">
+                        <label class="field" data-mode="carteira" hidden><span>Alocação <span class="tip" tabindex="0" data-tip="Máx. de ativos: compra enquanto houver caixa, com um limite de ativos diferentes. Metas por classe: cada classe (a mesma da Carteira) só compra até a sua meta em % do patrimônio, sem limite de ativos, como na carteira 60/40." aria-label="Ajuda: Máx. de ativos: compra enquanto houver caixa, com um limite de ativos diferentes. Metas por classe: cada classe (a mesma da Carteira) só compra até a sua meta em % do patrimônio, sem limite de ativos, como na carteira 60/40.">?</span></span>
+                        <select id="pfAlloc" class="select">
+                            <option value="ativos">Máx. de ativos</option>
+                            <option value="classes">Metas por classe</option>
+                        </select>
+                    </label>
+                        <label class="field" data-mode="carteira" data-alloc="ativos" hidden><span>Máx. de ativos <span class="tip" tabindex="0" data-tip="Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam." aria-label="Ajuda: Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam.">?</span></span>
+                        <input type="number" id="pfMaxAssets" class="select" min="1" max="100" step="1" value="10" inputmode="numeric">
+                    </label>
+                        <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>Ações (%)</span>
+                        <input type="number" id="pfMeta_acoes" class="select" min="0" max="100" step="5" value="60" inputmode="decimal">
+                    </label>
+                        <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>Fundos imob. (%)</span>
+                        <input type="number" id="pfMeta_fundos" class="select" min="0" max="100" step="5" value="0" inputmode="decimal">
+                    </label>
+                        <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>ETFs Brasil (%)</span>
+                        <input type="number" id="pfMeta_etfs" class="select" min="0" max="100" step="5" value="0" inputmode="decimal">
+                    </label>
+                        <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>Internacionais (%)</span>
+                        <input type="number" id="pfMeta_internacionais" class="select" min="0" max="100" step="5" value="40" inputmode="decimal">
+                    </label>
+                    </div>
+                </fieldset>
+                <fieldset class="bt-group">
+                    <legend>Saída</legend>
+                    <div class="bt-fields">
+                        <label class="field"><span>Saída <span class="tip" tabindex="0" data-tip="Conforme as Configurações: cada tipo de ativo sai pela regra escolhida na aba Configurações (venda parcial no alvo + reversão, ou só a reversão). Informada aqui: o alvo e a parte vendida abaixo valem para todos os ativos." aria-label="Ajuda: Conforme as Configurações: cada tipo de ativo sai pela regra escolhida na aba Configurações (venda parcial no alvo + reversão, ou só a reversão). Informada aqui: o alvo e a parte vendida abaixo valem para todos os ativos.">?</span></span>
+                        <select id="btExit" class="select">
+                            <option value="config">Conforme as Configurações</option>
+                            <option value="manual">Informada aqui</option>
+                        </select>
+                    </label>
+                        <label class="field"><span>Alvo da venda parcial (%) <span class="tip" tabindex="0" data-tip="Alta sobre o preço de cada compra em que parte dela é vendida. Ex.: 10 = vende quando o preço sobe 10% acima do que você pagou naquela compra." aria-label="Ajuda: Alta sobre o preço de cada compra em que parte dela é vendida. Ex.: 10 = vende quando o preço sobe 10% acima do que você pagou naquela compra.">?</span></span>
+                        <input type="number" id="btTarget" class="select" min="0.5" max="500" step="0.5" value="10" inputmode="decimal">
+                    </label>
+                        <label class="field"><span>Parte vendida no alvo (%) <span class="tip" tabindex="0" data-tip="Quanto de cada compra é vendido ao atingir o alvo. 50 = metade; 0 = nunca vende parcial, só pela regra B; 100 = vende tudo no alvo." aria-label="Ajuda: Quanto de cada compra é vendido ao atingir o alvo. 50 = metade; 0 = nunca vende parcial, só pela regra B; 100 = vende tudo no alvo.">?</span></span>
+                        <input type="number" id="btFraction" class="select" min="0" max="100" step="5" value="50" inputmode="decimal">
+                    </label>
+                    </div>
+                </fieldset>
+                <fieldset class="bt-group">
+                    <legend>Período e filtros</legend>
+                    <div class="bt-fields">
+                        <label class="field"><span>De <span class="tip" tabindex="0" data-tip="Início do período: compras só a partir desta data. Em branco = desde o primeiro dia possível." aria-label="Ajuda: Início do período: compras só a partir desta data. Em branco = desde o primeiro dia possível.">?</span></span>
+                        <input type="date" id="btFrom" class="select">
+                    </label>
+                        <label class="field"><span>Até <span class="tip" tabindex="0" data-tip="Fim do período: o que estiver aberto nesta data é avaliado pelo fechamento dela. Em branco = até o último pregão fechado." aria-label="Ajuda: Fim do período: o que estiver aberto nesta data é avaliado pelo fechamento dela. Em branco = até o último pregão fechado.">?</span></span>
+                        <input type="date" id="btTo" class="select">
+                    </label>
+                    </div>
+                    <div class="bt-checks">
+                        <label class="toggle" data-mode="carteira" hidden><input type="checkbox" id="pfAdvice" checked> Seguir a Indicação do Screener <span class="tip" tabindex="0" data-tip="Como na vida real: pula as compras que o Screener indicaria AGUARDAR (ações com tendência fraca ou mais fracas que o Ibovespa em 6 meses; os internacionais não são filtrados) e compra uma fatia 1,5x maior quando a compra tem prioridade (Top 5 do tipo ou Score 65 ou mais)." aria-label="Ajuda: Como na vida real: pula as compras que o Screener indicaria AGUARDAR (ações com tendência fraca ou mais fracas que o Ibovespa em 6 meses; os internacionais não são filtrados) e compra uma fatia 1,5x maior quando a compra tem prioridade (Top 5 do tipo ou Score 65 ou mais).">?</span></label>
+                        <label class="toggle" data-mode="carteira" hidden><input type="checkbox" id="pfCdi" checked> Caixa rende CDI <span class="tip" tabindex="0" data-tip="O dinheiro parado (esperando sinal) rende o CDI do dia, como num Tesouro Selic ou CDB de liquidez diária." aria-label="Ajuda: O dinheiro parado (esperando sinal) rende o CDI do dia, como num Tesouro Selic ou CDB de liquidez diária.">?</span></label>
+                        <label class="toggle" data-mode="carteira" hidden><input type="checkbox" id="pfTax"> Descontar imposto de renda <span class="tip" tabindex="0" data-tip="Desconta o imposto de renda das vendas: 15% sobre o ganho líquido do mês em ações, ETFs e BDRs (ações isentas quando as vendas de ações do mês somam até R$ 20 mil), 20% em fundos imobiliários, prejuízo compensado nos meses seguintes, pago no mês seguinte. O resultado também mostra o lucro líquido vendendo tudo no último dia; os índices e o CDI pagam 15% sobre o ganho só nessa venda. O CDI do caixa rende 15% a menos (imposto da renda fixa). Não inclui o imposto de JCP e de proventos de BDRs." aria-label="Ajuda: Desconta o imposto de renda das vendas: 15% sobre o ganho líquido do mês em ações, ETFs e BDRs (ações isentas quando as vendas de ações do mês somam até R$ 20 mil), 20% em fundos imobiliários, prejuízo compensado nos meses seguintes, pago no mês seguinte. O resultado também mostra o lucro líquido vendendo tudo no último dia; os índices e o CDI pagam 15% sobre o ganho só nessa venda. O CDI do caixa rende 15% a menos (imposto da renda fixa). Não inclui o imposto de JCP e de proventos de BDRs.">?</span></label>
+                        <label class="toggle"><input type="checkbox" id="btStrict"> Exigir candle de rejeição <span class="tip" tabindex="0" data-tip="Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener." aria-label="Ajuda: Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener.">?</span></label>
+                    </div>
+                </fieldset>
+            </div>
+            <div class="bt-actions">
+                <button type="submit" class="btn">Rodar backtest</button>
+                <div class="bt-robust" data-mode="carteira" hidden>
+                    <span class="bt-robust-label">Teste de robustez</span>
+                    <select id="pfRobustWindow" class="select" aria-label="Períodos do teste de robustez">
+                        <option value="fim">Cada ano até o fim</option>
+                        <option value="2">Janelas de 2 anos</option>
+                        <option value="3">Janelas de 3 anos</option>
+                        <option value="5">Janelas de 5 anos</option>
                     </select>
-                </label>
-                <label class="field" data-mode="carteira" hidden><span>Ranking <span class="tip" tabindex="0" data-tip="De qual ranking do screener a carteira compra. Em cada dia do período, o ranking é refeito como o screener faria naquele dia: só ativos com liquidez naquela época, no setup, ordenados pelo Score do dia. Lista de ativos = só os códigos que você informar." aria-label="Ajuda: De qual ranking do screener a carteira compra. Em cada dia do período, o ranking é refeito como o screener faria naquele dia: só ativos com liquidez naquela época, no setup, ordenados pelo Score do dia. Lista de ativos = só os códigos que você informar.">?</span></span>
-                    <select id="pfUniverse" class="select">
-                        <option value="acoes">Ações</option>
-                        <option value="fundos">Fundos listados</option>
-                        <option value="etfs">ETFs</option>
-                        <option value="bdrs">BDRs</option>
-                        <option value="todos">Todos os tipos</option>
-                        <option value="lista">Lista de ativos</option>
-                    </select>
-                </label>
-                <label class="field" data-mode="carteira" hidden><span>Top do ranking <span class="tip" tabindex="0" data-tip="Quantas posições do ranking de cada dia podem ser compradas (o screener mostra 20 por tipo). Com mais sinais do que caixa, compram primeiro os de maior Score." aria-label="Ajuda: Quantas posições do ranking de cada dia podem ser compradas (o screener mostra 20 por tipo). Com mais sinais do que caixa, compram primeiro os de maior Score.">?</span></span>
-                    <input type="number" id="pfTopN" class="select" min="1" max="100" step="1" value="20" inputmode="numeric">
-                </label>
-                <label class="field bt-wide" data-mode="carteira" id="pfTickersField" hidden><span>Lista de ativos <span class="tip" tabindex="0" data-tip="Códigos da B3 separados por vírgula. Ex.: PETR4, VALE3, ITUB4, BOVA11." aria-label="Ajuda: Códigos da B3 separados por vírgula. Ex.: PETR4, VALE3, ITUB4, BOVA11.">?</span></span>
-                    <input type="text" id="pfTickers" class="select" placeholder="Ex.: PETR4, VALE3, ITUB4" autocomplete="off" spellcheck="false">
-                </label>
-                <label class="field" data-mode="carteira" hidden><span>Liquidez mínima <span class="tip" tabindex="0" data-tip="Volume financeiro médio por pregão (últimos 20 pregões) que o ativo precisa ter para entrar no ranking. Regra prática: cada compra sua deve ser no máximo ~1% desse volume. Para aportes de R$ 2 mil e carteiras de até ~R$ 200 mil, R$ 2 mi por dia é o recomendado; Padrão = R$ 5 mi (fundos R$ 3 mi), mais conservador. No backtest, o piso vale para a liquidez de cada dia do período." aria-label="Ajuda: liquidez mínima">?</span></span>
-                    <select id="pfLiquidity" class="select">
-                        <option value="padrao">Padrão (R$ 5 mi; fundos R$ 3 mi)</option>
-                        <option value="10">R$ 10 mi por dia</option>
-                        <option value="5">R$ 5 mi por dia</option>
-                        <option value="3">R$ 3 mi por dia</option>
-                        <option value="2">R$ 2 mi por dia (recomendado até ~R$ 200 mil)</option>
-                        <option value="1">R$ 1 mi por dia</option>
-                    </select>
-                </label>
-                <label class="field" data-mode="carteira" hidden><span>Capital inicial (R$) <span class="tip" tabindex="0" data-tip="Dinheiro da carteira no primeiro dia do período." aria-label="Ajuda: Dinheiro da carteira no primeiro dia do período.">?</span></span>
-                    <input type="number" id="pfInitial" class="select" min="100" step="1000" value="10000" inputmode="decimal">
-                </label>
-                <label class="field" data-mode="carteira" hidden><span>Aporte mensal (R$) <span class="tip" tabindex="0" data-tip="Dinheiro novo no primeiro pregão de cada mês (0 = sem aportes). O BOVA11 e o CDI de comparação recebem os mesmos aportes." aria-label="Ajuda: Dinheiro novo no primeiro pregão de cada mês (0 = sem aportes). O BOVA11 e o CDI de comparação recebem os mesmos aportes.">?</span></span>
-                    <input type="number" id="pfMonthly" class="select" min="0" step="100" value="0" inputmode="decimal">
-                </label>
-                <label class="field" data-mode="carteira" hidden><span>Fatia por compra (%) <span class="tip" tabindex="0" data-tip="Quanto do patrimônio do dia vai em cada compra. 10 = cada compra usa 10% do patrimônio (o lucro passa a comprar mais: juros compostos). Só compra se houver caixa para pelo menos metade da fatia." aria-label="Ajuda: Quanto do patrimônio do dia vai em cada compra. 10 = cada compra usa 10% do patrimônio (o lucro passa a comprar mais: juros compostos). Só compra se houver caixa para pelo menos metade da fatia.">?</span></span>
-                    <input type="number" id="pfPosition" class="select" min="1" max="100" step="1" value="10" inputmode="decimal">
-                </label>
-                <label class="field" data-mode="carteira" hidden><span>Alocação <span class="tip" tabindex="0" data-tip="Máx. de ativos: compra enquanto houver caixa, com um limite de ativos diferentes. Metas por classe: cada classe (a mesma da Carteira) só compra até a sua meta em % do patrimônio, sem limite de ativos, como na carteira 60/40." aria-label="Ajuda: Máx. de ativos: compra enquanto houver caixa, com um limite de ativos diferentes. Metas por classe: cada classe (a mesma da Carteira) só compra até a sua meta em % do patrimônio, sem limite de ativos, como na carteira 60/40.">?</span></span>
-                    <select id="pfAlloc" class="select">
-                        <option value="ativos">Máx. de ativos</option>
-                        <option value="classes">Metas por classe</option>
-                    </select>
-                </label>
-                <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>Ações (%)</span>
-                    <input type="number" id="pfMeta_acoes" class="select" min="0" max="100" step="5" value="60" inputmode="decimal">
-                </label>
-                <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>Fundos imob. (%)</span>
-                    <input type="number" id="pfMeta_fundos" class="select" min="0" max="100" step="5" value="0" inputmode="decimal">
-                </label>
-                <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>ETFs Brasil (%)</span>
-                    <input type="number" id="pfMeta_etfs" class="select" min="0" max="100" step="5" value="0" inputmode="decimal">
-                </label>
-                <label class="field" data-mode="carteira" data-alloc="classes" hidden><span>Internacionais (%)</span>
-                    <input type="number" id="pfMeta_internacionais" class="select" min="0" max="100" step="5" value="40" inputmode="decimal">
-                </label>
-                <label class="field" data-mode="carteira" data-alloc="ativos" hidden><span>Máx. de ativos <span class="tip" tabindex="0" data-tip="Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam." aria-label="Ajuda: Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam.">?</span></span>
-                    <input type="number" id="pfMaxAssets" class="select" min="1" max="100" step="1" value="10" inputmode="numeric">
-                </label>
-                <label class="field" data-mode="carteira" hidden><span>Custo por operação (%) <span class="tip" tabindex="0" data-tip="Corretagem, emolumentos e diferença de preço na execução, em % de cada compra e de cada venda." aria-label="Ajuda: Corretagem, emolumentos e diferença de preço na execução, em % de cada compra e de cada venda.">?</span></span>
-                    <input type="number" id="pfCost" class="select" min="0" max="5" step="0.05" value="0.1" inputmode="decimal">
-                </label>
-                <label class="field"><span>Saída <span class="tip" tabindex="0" data-tip="Conforme as Configurações: cada tipo de ativo sai pela regra escolhida na aba Configurações (venda parcial no alvo + reversão, ou só a reversão). Informada aqui: o alvo e a parte vendida abaixo valem para todos os ativos." aria-label="Ajuda: Conforme as Configurações: cada tipo de ativo sai pela regra escolhida na aba Configurações (venda parcial no alvo + reversão, ou só a reversão). Informada aqui: o alvo e a parte vendida abaixo valem para todos os ativos.">?</span></span>
-                    <select id="btExit" class="select">
-                        <option value="config">Conforme as Configurações</option>
-                        <option value="manual">Informada aqui</option>
-                    </select>
-                </label>
-                <label class="field"><span>Alvo da venda parcial (%) <span class="tip" tabindex="0" data-tip="Alta sobre o preço de cada compra em que parte dela é vendida. Ex.: 10 = vende quando o preço sobe 10% acima do que você pagou naquela compra." aria-label="Ajuda: Alta sobre o preço de cada compra em que parte dela é vendida. Ex.: 10 = vende quando o preço sobe 10% acima do que você pagou naquela compra.">?</span></span>
-                    <input type="number" id="btTarget" class="select" min="0.5" max="500" step="0.5" value="10" inputmode="decimal">
-                </label>
-                <label class="field"><span>Parte vendida no alvo (%) <span class="tip" tabindex="0" data-tip="Quanto de cada compra é vendido ao atingir o alvo. 50 = metade; 0 = nunca vende parcial, só pela regra B; 100 = vende tudo no alvo." aria-label="Ajuda: Quanto de cada compra é vendido ao atingir o alvo. 50 = metade; 0 = nunca vende parcial, só pela regra B; 100 = vende tudo no alvo.">?</span></span>
-                    <input type="number" id="btFraction" class="select" min="0" max="100" step="5" value="50" inputmode="decimal">
-                </label>
-                <label class="field" data-mode="ativo"><span>Valor por compra (R$) <span class="tip" tabindex="0" data-tip="Quanto você investiria em cada compra do setup. Serve para mostrar os resultados em reais; os percentuais não mudam." aria-label="Ajuda: Quanto você investiria em cada compra do setup. Serve para mostrar os resultados em reais; os percentuais não mudam.">?</span></span>
-                    <input type="number" id="btAmount" class="select" min="1" step="100" value="1000" inputmode="decimal">
-                </label>
-                <label class="field"><span>De <span class="tip" tabindex="0" data-tip="Início do período: compras só a partir desta data. Em branco = desde o primeiro dia possível." aria-label="Ajuda: Início do período: compras só a partir desta data. Em branco = desde o primeiro dia possível.">?</span></span>
-                    <input type="date" id="btFrom" class="select">
-                </label>
-                <label class="field"><span>Até <span class="tip" tabindex="0" data-tip="Fim do período: o que estiver aberto nesta data é avaliado pelo fechamento dela. Em branco = até o último pregão fechado." aria-label="Ajuda: Fim do período: o que estiver aberto nesta data é avaliado pelo fechamento dela. Em branco = até o último pregão fechado.">?</span></span>
-                    <input type="date" id="btTo" class="select">
-                </label>
-                <label class="toggle bt-check" data-mode="carteira" hidden><input type="checkbox" id="pfAdvice" checked> Seguir a Indicação do Screener <span class="tip" tabindex="0" data-tip="Como na vida real: pula as compras que o Screener indicaria AGUARDAR (ações com tendência fraca ou mais fracas que o Ibovespa em 6 meses; os internacionais não são filtrados) e compra uma fatia 1,5x maior quando a compra tem prioridade (Top 5 do tipo ou Score 65 ou mais)." aria-label="Ajuda: Como na vida real: pula as compras que o Screener indicaria AGUARDAR (ações com tendência fraca ou mais fracas que o Ibovespa em 6 meses; os internacionais não são filtrados) e compra uma fatia 1,5x maior quando a compra tem prioridade (Top 5 do tipo ou Score 65 ou mais).">?</span></label>
-                <label class="toggle bt-check" data-mode="carteira" hidden><input type="checkbox" id="pfCdi" checked> Caixa rende CDI <span class="tip" tabindex="0" data-tip="O dinheiro parado (esperando sinal) rende o CDI do dia, como num Tesouro Selic ou CDB de liquidez diária." aria-label="Ajuda: O dinheiro parado (esperando sinal) rende o CDI do dia, como num Tesouro Selic ou CDB de liquidez diária.">?</span></label>
-                <label class="toggle bt-check"><input type="checkbox" id="btStrict"> Exigir candle de rejeição <span class="tip" tabindex="0" data-tip="Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener." aria-label="Ajuda: Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener.">?</span></label>
-                <div><button type="submit" class="btn">Rodar backtest</button></div>
+                    <button type="button" class="btn-accent" id="pfRobustBtn">Testar robustez</button>
+                    <span class="tip" tabindex="0" data-tip="Roda a mesma carteira começando em cada ano possível (sempre até o mesmo fim) e mostra se ela ganha do BOVA11, do CDI e da regra B sozinha na maioria dos inícios. Como poucos ganhos grandes decidem o lucro, um bom resultado num período só pode ser sorte do ponto de partida. Cada ano até o fim: todos os inícios terminam no mesmo dia (e dividem os últimos anos). Janelas: trechos de mesmo tamanho, cada um num tipo de mercado — o teste mais rigoroso. O campo De é ignorado." aria-label="Ajuda: Roda a mesma carteira começando em cada ano possível (sempre até o mesmo fim) e mostra se ela ganha do BOVA11, do CDI e da regra B sozinha na maioria dos inícios. Como poucos ganhos grandes decidem o lucro, um bom resultado num período só pode ser sorte do ponto de partida. Cada ano até o fim: todos os inícios terminam no mesmo dia (e dividem os últimos anos). Janelas: trechos de mesmo tamanho, cada um num tipo de mercado — o teste mais rigoroso. O campo De é ignorado.">?</span>
+                </div>
             </div>
             <ul class="notes">
                 <li data-mode="carteira" hidden><strong>Carteira:</strong> um único caixa que segue o ranking do screener dia a dia. Em cada pregão o ranking é refeito como seria naquele dia (liquidez da época, setup e Score do dia), e os ativos dele compram na abertura seguinte com a fatia do patrimônio; o que é vendido volta para o caixa.</li>
@@ -164,9 +205,12 @@
                     <h2 id="btTitle"></h2>
                     <div class="small muted" id="btSubtitle"></div>
                 </div>
-                <div class="seg" role="group" aria-label="Tipo de gráfico" id="chartType">
-                    <button type="button" data-type="candles" aria-pressed="true">Candles</button>
-                    <button type="button" data-type="line" aria-pressed="false">Linha</button>
+                <div class="bt-head-actions">
+                    <div class="bt-analyze"><span class="copy-wrap"><button type="button" class="btn-analyze copy-analysis" id="btAnalyzeBtn">ANALISAR BACKTEST</button> <span class="tip" tabindex="0" data-tip="Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui." aria-label="Ajuda: Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui.">?</span></span></div>
+                    <div class="seg" role="group" aria-label="Tipo de gráfico" id="chartType">
+                        <button type="button" data-type="candles" aria-pressed="true">Candles</button>
+                        <button type="button" data-type="line" aria-pressed="false">Linha</button>
+                    </div>
                 </div>
             </div>
             <div class="bt-legend" id="btLegend"></div>
@@ -249,11 +293,46 @@
             <p class="method-disclaimer">Ferramenta de estudo — não constitui recomendação de investimento.</p>
         </details>
     </div>
+    <div id="pfRobust" hidden>
+        <div class="panel">
+            <div class="panel-head bt-result-head">
+                <div>
+                    <h2 id="pfRobustTitle">Robustez</h2>
+                    <div class="small muted" id="pfRobustSubtitle"></div>
+                </div>
+                <div class="bt-analyze"><span class="copy-wrap"><button type="button" class="btn-analyze copy-analysis" id="pfRobustAnalyzeBtn">ANALISAR BACKTEST</button> <span class="tip" tabindex="0" data-tip="Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui." aria-label="Ajuda: Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui.">?</span></span></div>
+            </div>
+            <p class="bt-compare" id="pfRobustVerdict" role="status"></p>
+            <div class="kpis" id="pfRobustKpis"></div>
+            <ul class="notes" id="pfRobustSummary"></ul>
+            <h3 class="bt-subhead">Retorno ao ano em cada período <span class="tip" tabindex="0" data-tip="Taxa interna de retorno de cada período, que leva em conta quando cada aporte entrou. Compara melhor que o lucro em reais, que cresce com o tempo e com os aportes." aria-label="Ajuda: Taxa interna de retorno de cada período, que leva em conta quando cada aporte entrou. Compara melhor que o lucro em reais, que cresce com o tempo e com os aportes.">?</span></h3>
+            <div class="robust-chart"><canvas id="pfRobustChart" role="img" aria-label="Retorno ao ano da estratégia, da regra B sozinha, do BOVA11 e do CDI em cada período"></canvas></div>
+            <div class="table-container">
+                <table class="sticky-first">
+                    <thead id="pfRobustHead"></thead>
+                    <tbody id="pfRobustBody"></tbody>
+                </table>
+            </div>
+            <ul class="notes">
+                <li>Cada linha é a <strong>mesma configuração</strong> começando num ano diferente e indo até o mesmo fim; BOVA11 e CDI recebem os mesmos aportes, nas mesmas datas.</li>
+                <li><strong>✓</strong> = a estratégia terminou com mais lucro que a comparação naquele início.</li>
+                <li><strong>Parcial − regra B</strong>: quanto a venda parcial lucrou a mais (ou a menos) que vender tudo só na reversão.</li>
+                <li><strong>Diferença</strong>: retorno ao ano da estratégia − o do BOVA11, em pontos percentuais.</li>
+                <li><strong>Caixa médio</strong>: parte do patrimônio parada em caixa, em média, esperando sinal.</li>
+                <li>Até o fim: inícios com menos de 2 anos até o fim ficam de fora. Janelas: só entram as completas.</li>
+            </ul>
+        </div>
+    </div>
     <div id="pfResult" hidden>
         <p class="banner" id="pfWarnings" role="status"></p>
         <div class="panel">
-            <h2 id="pfTitle"></h2>
-            <div class="small muted" id="pfSubtitle"></div>
+            <div class="panel-head bt-result-head">
+                <div>
+                    <h2 id="pfTitle"></h2>
+                    <div class="small muted" id="pfSubtitle"></div>
+                </div>
+                <div class="bt-analyze"><span class="copy-wrap"><button type="button" class="btn-analyze copy-analysis" id="pfAnalyzeBtn">ANALISAR BACKTEST</button> <span class="tip" tabindex="0" data-tip="Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui." aria-label="Ajuda: Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui.">?</span></span></div>
+            </div>
             <h3 class="bt-subhead">Lucro acumulado (R$) <span class="tip" tabindex="0" data-tip="Patrimônio da carteira menos tudo o que foi aportado, dia a dia: só o ganho (ou a perda). Uma linha por estratégia; BOVA11 e CDI recebem os mesmos aportes, nas mesmas datas." aria-label="Ajuda: Patrimônio da carteira menos tudo o que foi aportado, dia a dia: só o ganho (ou a perda). Uma linha por estratégia; BOVA11 e CDI recebem os mesmos aportes, nas mesmas datas.">?</span></h3>
             <div class="bt-legend" id="pfLegend"></div>
             <div class="bt-chart" id="pfChart" role="img" aria-label="Lucro acumulado de cada estratégia, do BOVA11 e do CDI ao longo do período"></div>
@@ -382,6 +461,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="assets/js/core.js"></script>
 <script src="assets/js/backtest.js"></script>
 
