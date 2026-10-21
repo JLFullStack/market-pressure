@@ -13,8 +13,9 @@ fixa: Ações, Fundos imobiliários, ETFs Brasil e Internacionais — BDRs, ETFs
 cripto) segue uma delas; alvo e parte vendida são os mesmos para todos os grupos que usam a
 venda parcial. Nos backtests de carteira, a venda parcial em +10% vendeu cedo demais os
 internacionais, que renderam mais saindo só na reversão: por isso é o padrão deles. Nas ações, a
-parcial "por força" ganhou da parcial no alvo e da só reversão na maioria dos períodos (com IR):
-é o padrão delas; fundos e ETFs Brasil não foram testados com ela e seguem a parcial no alvo. Na
+parcial "por força", a parcial no alvo e a só reversão empataram (o vencedor muda com o período, o
+imposto e o CDI). Fundos e ETFs
+Brasil não foram testados com ela e seguem a parcial no alvo. Na
 Carteira, a regra de uma posição é a da classe do ativo; no Screener e no Backtest, a do tipo
 (group_of).
 

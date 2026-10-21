@@ -51,9 +51,10 @@ DECIDE = """# Como decidir (leia antes dos vereditos)
 parcial no alvo, venda parcial quando a alta perde força depois do alvo, ou tudo na reversão de \
 tendência (nas duas parciais, o resto sai na reversão). Não uso stop loss. Nos backtests de carteira \
 deste app (2017 a 2026), essa disciplina rendeu mais do que vender por medo ou realizar lucro cedo. A \
-parcial no alvo e a venda só na reversão empataram nos testes de vários períodos; a parcial quando a \
-alta perde força ganhou das duas na maioria deles (com imposto de renda: 7 de 8 e 8 de 8 anos de \
-início até hoje; 5 de 7 janelas de 3 anos). Não vale trocar de regra por causa de um resultado recente.
+parcial no alvo, a parcial quando a alta perde força e a venda só na reversão empataram nos testes de \
+vários períodos: o vencedor muda com o período, o imposto e o CDI, porque poucos ganhos grandes decidem \
+o resultado. A parcial não reduz as perdas (só age nas compras que já subiram); ela troca parte dos \
+ganhos grandes por mais compras com lucro. Não vale trocar de regra por causa de um resultado recente.
 - **VENDER** quando a regra de saída disparou (Situação "VENDER" na tabela) ou por um motivo \
 concreto e grave que os números não mostram (fato fundamentalista, governança, tese quebrada). \
 Estar no prejuízo ou ter subido muito não basta.
@@ -79,8 +80,8 @@ uma posição ficou grande demais para o risco dela; diga para qual peso.
 a alta sem força (menos de 1 ATR acima da MM20 ou RSI abaixo de 65); a venda é na abertura seguinte. \
 Enquanto a alta segue forte, a Situação é MANTER com o motivo "fica para a abertura seguinte...": não \
 recomende vender antes. Na regra "no alvo", "VENDER 50%" aparece assim que o alvo é tocado; se a \
-posição mostrar "Força da alta: forte", diga que esperar a alta perder força rendeu mais nos testes e \
-que a troca de regra é feita nas Configurações, mas não contrarie a regra escolhida só por isso.
+posição mostrar "Força da alta: forte", pode dizer que a regra por força esperaria (nos testes as duas \
+empataram), mas não contrarie a regra escolhida só por isso.
 - **AUMENTAR** quando o ativo está num recuo de compra (Situação "COMPRAR" ou "no setup" e, de \
 preferência, no ranking do Screener), a tendência é firme e a posição está abaixo da meta. Eu só \
 recompro a 5% ou mais de cada compra ainda aberta.

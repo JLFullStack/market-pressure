@@ -70,8 +70,9 @@
             <ul class="notes">
                 <li>Os tipos são as <strong>classes da Carteira</strong>: lá, a "Situação" de cada posição segue a regra da classe do ativo. No Screener e no Backtest vale o tipo do ativo (BDRs e ETFs do exterior entram em Internacionais).</li>
                 <li><strong>Venda parcial quando a alta perder força</strong>: usa o mesmo alvo e a mesma parte acima, mas não vende no alvo. Depois que a compra o atinge, mantém tudo enquanto a alta está forte e vende a parte na abertura seguinte ao primeiro fechamento com menos de 1 ATR acima da MM20 ou RSI abaixo de 65, se esse fechamento ainda estiver no alvo ou acima.</li>
-                <li><strong>Ações</strong>: nos backtests de carteira (2017 a 2026, com imposto de renda), vender quando a alta perde força rendeu mais que vender no alvo (7 de 8 anos de início) e que vender só na reversão (8 de 8). Por isso é o padrão delas. Fundos e ETFs Brasil ainda não foram testados com ela.</li>
-                <li><strong>Internacionais</strong>: nos backtests de carteira, vender 50% em +10% vendeu os vencedores cedo demais; sair só na reversão rendeu mais. Por isso é o padrão deles.</li>
+                <li><strong>Ações</strong>: nos backtests de carteira (2017 a 2026), vender quando a alta perde força, vender no alvo e vender só na reversão empataram: o vencedor muda com o período, o imposto e o CDI, porque poucos ganhos grandes decidem o resultado. Fundos e ETFs Brasil ainda não foram testados com a venda quando a alta perde força.</li>
+                <li><strong>O que a venda parcial faz</strong>: ela só age nas compras que já subiram até o alvo, então não reduz as perdas; troca parte dos ganhos grandes por mais compras com lucro.</li>
+                <li><strong>Internacionais</strong>: nos backtests de carteira, vender 50% em +10% vendeu os vencedores cedo demais; sair só na reversão rendeu mais.</li>
             </ul>
             <p class="small muted" id="reversalText"></p>
             <div class="strategy-actions">

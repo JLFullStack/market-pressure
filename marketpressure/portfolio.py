@@ -515,9 +515,8 @@ def _strength_text(st, money):
     if not st["strong"]:
         return f"A alta já perdeu força ({numbers}): a venda segue a regra."
     return (f"A alta ainda está forte ({numbers}; forte = 1 ATR ou mais acima da MM20 e RSI 65 ou mais). "
-            "Nos backtests de carteira do app, esperar a alta perder força para vender a parcial (a regra \"Venda "
-            "parcial quando a alta perder força\" das Configurações) rendeu mais que vender no alvo na maioria dos "
-            "períodos. Pela regra escolhida, porém, a venda é agora.")
+            "A regra \"Venda parcial quando a alta perder força\" das Configurações esperaria; nos backtests de "
+            "carteira do app ela empatou com vender no alvo. Pela regra escolhida, a venda é agora.")
 
 
 SIGNAL_LABELS = {"sell": "VENDER", "buy": "COMPRAR", "hold": "MANTER", "attention": "MANTER"}

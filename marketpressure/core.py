@@ -277,16 +277,15 @@ ENTRY = {"weakSlope": 0.01, "relativeWindow": 126}
 # Força da alta: forte = fechamento a atrAboveMm20 ATR ou mais acima da MM20 e RSI ≥ rsi. Decide o
 # momento da venda parcial "por força" (PARTIAL_TIMINGS) e aparece na Situação da Carteira e no
 # "Analisar carteira". Nos backtests (ações, 2017–2026), adiar a parcial até o fechamento perder a
-# MM20 rendeu mais por compra, mas menos na carteira; já vender quando a alta perde força (abaixo)
-# rendeu mais que a parcial no alvo e que só a reversão.
+# MM20 rendeu mais por compra, mas menos na carteira.
 STRENGTH = {"atrAboveMm20": 1.0, "rsi": 65}
 
 # Momento da venda parcial de cada compra (strategy.py): "alvo" = quando a máxima de um pregão
 # depois do da compra toca o alvo (vendida no alvo, ou na abertura se ela já abriu acima); "forca" =
 # depois de o alvo ser tocado, na abertura seguinte ao primeiro fechamento em que a alta perde força
-# (weak_close) com esse fechamento ainda no alvo ou acima. Backtests de carteira (60/40, 2017–2026,
-# com IR): a "forca" ganhou da parcial no alvo em 7 de 8 inícios e da só reversão em 8 de 8 (5 de 7
-# nas janelas de 3 anos); confirmar a perda de força por 2, 3 ou 5 dias não melhorou.
+# (weak_close) com esse fechamento ainda no alvo ou acima. Backtests de carteira (60/40, 2017–2026):
+# empate com a parcial no alvo e com a só reversão (o vencedor muda com o período, o imposto e o CDI);
+# confirmar a perda de força por 2, 3 ou 5 dias não melhorou.
 PARTIAL_TIMINGS = ("alvo", "forca")
 
 

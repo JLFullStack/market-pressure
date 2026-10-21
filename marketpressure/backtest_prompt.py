@@ -102,10 +102,9 @@ consistente: cortam justamente as altas grandes que pagam as perdas.
 - **Saídas**: nas ações, vender 50% em +10% e o resto na regra B ganhou da regra B sozinha por pouco \
 (cerca de 1 ponto percentual ao ano), com o sinal mudando conforme o período. **Vender os 50% depois \
 do alvo, na abertura seguinte ao primeiro fechamento em que a alta perde força** (menos de 1 ATR acima \
-da MM20 ou RSI abaixo de 65, com o fechamento ainda no alvo ou acima) foi a melhor saída das ações: \
-veja os números nos testes de robustez abaixo; é a regra "Venda parcial quando a alta perder força" \
-das Configurações e o padrão das ações. Confirmar a perda de força por 2, 3 ou 5 pregões seguidos não \
-melhorou (medianas parecidas e quedas maiores); segurar até o fechamento perder a MM20, saídas por \
+da MM20 ou RSI abaixo de 65, com o fechamento ainda no alvo ou acima) também empatou com as duas: veja \
+os números nos testes de robustez abaixo. É a regra "Venda parcial quando a alta perder força" das \
+Configurações. Confirmar a perda de força por 2, 3 ou 5 pregões seguidos não melhorou (medianas parecidas e quedas maiores); segurar até o fechamento perder a MM20, saídas por \
 tamanho da alta e saídas em duas etapas também não. Nos internacionais, a venda parcial vendia cedo \
 os grandes vencedores: a regra é só a reversão. Fundos e ETFs Brasil ainda não foram testados com a \
 parcial por força.
@@ -133,12 +132,16 @@ ao ano) e numa alta forte do Brasil (2023–25). Quedas de quase 40% aconteceram
 Só internacionais foi estável, mas com poucas compras e ajudado pelo dólar.
   - **Indicação do Screener ligada x desligada**: ligada ganhou em 6 de 8 inícios (mediana de cerca de +4 pontos ao ano) \
 e teve queda máxima menor; perdeu pouco nos inícios de alta forte (2023 e 2024). Ainda não testada em janelas.
-  - **Venda parcial quando a alta perde força** (outubro de 2026; 60/40, fatia 10%, Indicação ligada, sem CDI): no período \
-inteiro, sem imposto, 22,1% ao ano contra 20,3% da parcial no alvo e 22,9% da regra B sozinha (queda máxima de −40% contra \
-−46% da regra B). Com imposto e venda na abertura seguinte: 20,7% ao ano líquido contra 16,9% (parcial no alvo) e 18,7% \
-(regra B sozinha); cada ano até o fim: ganhou da parcial no alvo em 7 de 8 inícios e da regra B sozinha em 8 de 8 \
-(medianas 20,8%, 17,7% e 18,9%); janelas de 3 anos: 5 de 7 contra as duas. Perdeu nos inícios curtos e recentes (2024; \
-2022–24 e 2023–25 em algumas comparações). Só 4 das 80 vendas na abertura saíram abaixo do alvo.
+  - **Venda parcial quando a alta perde força** (outubro de 2026; 60/40, fatia 10%, Indicação ligada): **inconclusivo, o \
+vencedor muda com cada detalhe da simulação**. Sem CDI e sem imposto, a regra B sozinha rendeu mais no período inteiro \
+(22,9% contra 20,9% ao ano); sem CDI e com imposto, a parcial por força rendeu mais (20,7% contra 18,7% líquidos) e venceu \
+a regra B em 8 de 8 inícios, mas só porque ligar o imposto mudou o caixa e quais compras aconteceram (o lucro bruto da \
+regra B caiu R$ 119 mil); com CDI e imposto, a regra B voltou a render mais (22,7% contra 20,1% líquidos), venceu 5 de 7 \
+janelas de 3 anos (mediana 25,8% contra 18,2%) e teve a pior janela menos ruim (2021–23: 6,4% contra 1,7%; CDI 10,2%). \
+Poucos ganhos grandes decidem a comparação: a PRIO3 de 2020 (+487%, que a parcial vendeu pela metade em +10%) e a A1MD34 \
+de 2026 (+162%, cerca de 27% do lucro das operações). Cerca de 6 em cada 10 parciais por força saíram entre +10% e +13%, \
+quase no alvo. A parcial, no alvo ou por força, só age nas compras que já subiram: não reduz as perdas, só o tamanho dos \
+ganhos; o que ela dá é mais compras com lucro (55% contra 49%).
   - **Venda parcial no alvo x regra B sozinha**: empate — a parcial venceu 32 de 63 comparações somando todos os testes. Nas \
 janelas de 3 anos, a parcial protege em mercado ruim ou sem tendência e a regra B ganha muito em alta forte; a mediana \
 da diferença é perto de zero.

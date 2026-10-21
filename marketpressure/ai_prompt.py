@@ -361,8 +361,8 @@ def build(scan, payload, ticker, mode, strict, lots, settings):
         lines.append(f"- Alvo que libera a venda parcial, se eu comprar hoje: {fmt_brl(target_price)} "
                      f"(+{fmt_pct_value(strategy['target'])}%). Depois dele, a parte sai na abertura seguinte ao primeiro "
                      f"fechamento sem força ({st.WEAK_TEXT}) ainda em {fmt_brl(target_price)} ou acima; enquanto a alta "
-                     "segue forte, mantenho tudo. Nos backtests de carteira do app (2017 a 2026, com imposto de renda), "
-                     "isso rendeu mais que vender no alvo e que vender só na reversão na maioria dos períodos.")
+                     "segue forte, mantenho tudo. Nos backtests de carteira do app (2017 a 2026), essa regra, a parcial no "
+                     "alvo e a venda só na reversão empataram (o vencedor muda com o período, o imposto e o CDI).")
     lines += [f"- Reversão de tendência (venda do restante): {strategy['reversal']}",
               "- Recompra só em outro recuo, a 5% ou mais de cada compra ainda aberta. Não uso stop loss.", ""]
 
