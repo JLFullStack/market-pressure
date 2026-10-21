@@ -83,7 +83,8 @@ não pede mudança, diga isso — é uma resposta válida.
 Termine com um resumo de três linhas, para quem não quiser ler o resto."""
 
 RULES_FOCUS = {
-    "ativo": "Compare a venda parcial com a regra B sozinha e diga se as compras que a Indicação \
+    "ativo": "Compare a venda parcial (no alvo ou quando a alta perde força, conforme a regra) com a \
+regra B sozinha e diga se as compras que a Indicação \
 do Screener mandaria aguardar renderam menos que as outras neste ativo. Lembre que um ativo só é \
 uma amostra pequena.",
     "carteira": "Compare a saída escolhida com a regra B sozinha, o tamanho da fatia, o limite de \
@@ -98,11 +99,16 @@ TESTED = """# O que o app já testou (backtests de carteira de 2017 a 2026, aç�
 médio por compra em cerca de 3 pontos percentuais.
 - **Stop loss** fixo (−15%, −20%, −25%) e **stop móvel** por ATR não aumentaram o lucro de forma \
 consistente: cortam justamente as altas grandes que pagam as perdas.
-- **Saídas**: nas ações, vender 50% em +10% e o resto na regra B foi a saída mais consistente, mas o \
-ganho sobre a regra B sozinha é pequeno (cerca de 1 ponto percentual ao ano) e muda de sinal \
-conforme o período. Adiar a venda parcial numa alta forte, saídas por tamanho da alta e saídas em \
-duas etapas não melhoraram a carteira. Nos internacionais, a venda parcial vendia cedo os grandes \
-vencedores: a regra é só a reversão.
+- **Saídas**: nas ações, vender 50% em +10% e o resto na regra B ganhou da regra B sozinha por pouco \
+(cerca de 1 ponto percentual ao ano), com o sinal mudando conforme o período. **Vender os 50% depois \
+do alvo, na abertura seguinte ao primeiro fechamento em que a alta perde força** (menos de 1 ATR acima \
+da MM20 ou RSI abaixo de 65, com o fechamento ainda no alvo ou acima) foi a melhor saída das ações: \
+veja os números nos testes de robustez abaixo; é a regra "Venda parcial quando a alta perder força" \
+das Configurações e o padrão das ações. Confirmar a perda de força por 2, 3 ou 5 pregões seguidos não \
+melhorou (medianas parecidas e quedas maiores); segurar até o fechamento perder a MM20, saídas por \
+tamanho da alta e saídas em duas etapas também não. Nos internacionais, a venda parcial vendia cedo \
+os grandes vencedores: a regra é só a reversão. Fundos e ETFs Brasil ainda não foram testados com a \
+parcial por força.
 - **Filtro de entrada (Indicação do Screener)**: compras em tendência fraca ou com o ativo mais \
 fraco que o BOVA11 em 6 meses renderam menos por compra nas duas metades do período; as do Top 5 \
 ou com Score ≥ 65 renderam mais. No lucro total da carteira, porém, nenhum conjunto de regras de \
@@ -127,7 +133,13 @@ ao ano) e numa alta forte do Brasil (2023–25). Quedas de quase 40% aconteceram
 Só internacionais foi estável, mas com poucas compras e ajudado pelo dólar.
   - **Indicação do Screener ligada x desligada**: ligada ganhou em 6 de 8 inícios (mediana de cerca de +4 pontos ao ano) \
 e teve queda máxima menor; perdeu pouco nos inícios de alta forte (2023 e 2024). Ainda não testada em janelas.
-  - **Venda parcial x regra B sozinha**: empate — a parcial venceu 32 de 63 comparações somando todos os testes. Nas \
+  - **Venda parcial quando a alta perde força** (outubro de 2026; 60/40, fatia 10%, Indicação ligada, sem CDI): no período \
+inteiro, sem imposto, 22,1% ao ano contra 20,3% da parcial no alvo e 22,9% da regra B sozinha (queda máxima de −40% contra \
+−46% da regra B). Com imposto e venda na abertura seguinte: 20,7% ao ano líquido contra 16,9% (parcial no alvo) e 18,7% \
+(regra B sozinha); cada ano até o fim: ganhou da parcial no alvo em 7 de 8 inícios e da regra B sozinha em 8 de 8 \
+(medianas 20,8%, 17,7% e 18,9%); janelas de 3 anos: 5 de 7 contra as duas. Perdeu nos inícios curtos e recentes (2024; \
+2022–24 e 2023–25 em algumas comparações). Só 4 das 80 vendas na abertura saíram abaixo do alvo.
+  - **Venda parcial no alvo x regra B sozinha**: empate — a parcial venceu 32 de 63 comparações somando todos os testes. Nas \
 janelas de 3 anos, a parcial protege em mercado ruim ou sem tendência e a regra B ganha muito em alta forte; a mediana \
 da diferença é perto de zero.
   - **Régua justa e imposto de renda** (cada ano até o fim, com imposto): contra os índices na proporção das metas \
@@ -156,8 +168,10 @@ da MM200; recuo de pelo menos {pct(c['minPullback'])}% a partir da máxima de 20
 - **Compra** na abertura do pregão seguinte ao sinal. Recompra no mesmo ativo só num novo recuo, \
 a {pct(c['reentryDistance'])}% ou mais do preço de cada compra ainda aberta.
 - **Saída** (sem stop loss): "regra B" = fechamento abaixo de MM20, MM50 e MM200 com a MM50 abaixo \
-da MM200 (tendência de baixa formada): vende o que restar na abertura seguinte. Com venda parcial, \
-cada compra vende uma parte quando a máxima de um pregão atinge o alvo sobre o preço dela.
+da MM200 (tendência de baixa formada): vende o que restar na abertura seguinte. Com venda parcial \
+"no alvo", cada compra vende uma parte quando a máxima de um pregão atinge o alvo sobre o preço dela; \
+"quando a alta perder força", depois de atingir o alvo, vende a parte na abertura seguinte ao primeiro \
+fechamento com menos de 1 ATR acima da MM20 ou RSI abaixo de 65 que ainda esteja no alvo ou acima.
 - **Score Composto** = 60% × pressão compradora do recuo (volume, momentum, tendência e estrutura, \
 0–100) + 40% × taxa de acerto da estratégia no histórico do ativo até aquele dia. O ranking de cada \
 tipo (ações, fundos listados, ETFs, BDRs) ordena por ele e mostra o Top {c['topN']}.
@@ -185,20 +199,23 @@ def _date(d):
     return fmt_date(d) if d else "—"
 
 
-def _rule_text(target, fraction):
+def _rule_text(target, fraction, timing="alvo"):
     if fraction <= 0:
         return "só a regra B (vende tudo na reversão)"
+    when = (f"depois de +{fmt_num(target, 1)}%, quando a alta perde força" if timing == "forca"
+            else f"em +{fmt_num(target, 1)}%")
     if fraction >= 100:
-        return f"vende 100% em +{fmt_num(target, 1)}%"
-    return f"vende {fmt_num(fraction, 0)}% em +{fmt_num(target, 1)}% e o resto na regra B"
+        return f"vende 100% {when}"
+    return f"vende {fmt_num(fraction, 0)}% {when} e o resto na regra B"
 
 
 def _exit_lines(p):
     """A saída usada no backtest de carteira: a de cada grupo (Configurações) ou a manual."""
     if p.get("exit") == "config" and p.get("rules"):
         return ["- Saída: a de cada grupo nas Configurações do app:"] + [
-            f"  - {st.GROUPS.get(g, g)}: {_rule_text(r['target'], r['fraction'])}" for g, r in p["rules"].items()]
-    return [f"- Saída: {_rule_text(p['target'], p['fraction'])} (a mesma para todos os ativos)"]
+            f"  - {st.GROUPS.get(g, g)}: {_rule_text(r['target'], r['fraction'], r.get('timing', 'alvo'))}"
+            for g, r in p["rules"].items()]
+    return [f"- Saída: {_rule_text(p['target'], p['fraction'], p.get('timing', 'alvo'))} (a mesma para todos os ativos)"]
 
 
 def _params_lines(p, universe):
@@ -244,8 +261,9 @@ tipo: 1 a 100 (padrão 20). **Liquidez mínima**: {liquidity}.
 No modo Um ativo, o valor de cada compra.
 - **Alocação**: "Máx. de ativos" (limite de ativos diferentes) ou "Metas por classe" (Ações, Fundos imobiliários, ETFs \
 Brasil e Internacionais, em %).
-- **Saída**: "Conforme as Configurações" (a regra de cada classe na aba Configurações: venda parcial no alvo + regra B, ou \
-só a regra B) ou "Informada aqui" (alvo e parte vendida para todos; parte 0 = só a regra B).
+- **Saída**: "Conforme as Configurações" (a regra de cada classe na aba Configurações: venda parcial no alvo + regra B, venda \
+parcial quando a alta perder força + regra B, ou só a regra B) ou "Informada aqui" (alvo, parte vendida e **momento da venda \
+parcial** — no alvo ou quando a alta perder força — para todos; parte 0 = só a regra B).
 - **Período**: datas De e Até (o histórico começa em 2017).
 - **Opções**: seguir a Indicação do Screener, caixa rende CDI, exigir candle de rejeição, descontar imposto de renda.
 - **Testar robustez**: a mesma configuração em vários períodos — "cada ano até o fim" ou janelas de 2, 3 ou 5 anos — \

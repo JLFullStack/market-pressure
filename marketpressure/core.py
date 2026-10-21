@@ -274,12 +274,20 @@ REENTRY_DISTANCE = 0.05
 ENTRY = {"weakSlope": 0.01, "relativeWindow": 126}
 
 
-# Força da alta quando uma compra atinge o alvo da venda parcial (só informação, na Situação da
-# Carteira e no "Analisar carteira"): forte = fechamento a atrAboveMm20 ATR ou mais acima da MM20
-# e RSI ≥ rsi. Nos backtests (ações, 2017–2026), adiar a parcial até o fechamento perder a MM20
-# rendeu mais por compra nas duas metades do período, mas menos na carteira: o dinheiro da parcial
-# volta ao caixa e compra os próximos pullbacks.
+# Força da alta: forte = fechamento a atrAboveMm20 ATR ou mais acima da MM20 e RSI ≥ rsi. Decide o
+# momento da venda parcial "por força" (PARTIAL_TIMINGS) e aparece na Situação da Carteira e no
+# "Analisar carteira". Nos backtests (ações, 2017–2026), adiar a parcial até o fechamento perder a
+# MM20 rendeu mais por compra, mas menos na carteira; já vender quando a alta perde força (abaixo)
+# rendeu mais que a parcial no alvo e que só a reversão.
 STRENGTH = {"atrAboveMm20": 1.0, "rsi": 65}
+
+# Momento da venda parcial de cada compra (strategy.py): "alvo" = quando a máxima de um pregão
+# depois do da compra toca o alvo (vendida no alvo, ou na abertura se ela já abriu acima); "forca" =
+# depois de o alvo ser tocado, na abertura seguinte ao primeiro fechamento em que a alta perde força
+# (weak_close) com esse fechamento ainda no alvo ou acima. Backtests de carteira (60/40, 2017–2026,
+# com IR): a "forca" ganhou da parcial no alvo em 7 de 8 inícios e da só reversão em 8 de 8 (5 de 7
+# nas janelas de 3 anos); confirmar a perda de força por 2, 3 ou 5 dias não melhorou.
+PARTIAL_TIMINGS = ("alvo", "forca")
 
 
 def trend_strength(ind, i):
@@ -292,6 +300,13 @@ def trend_strength(ind, i):
     above = (c - mm20) / atr_now
     return {"strong": above >= STRENGTH["atrAboveMm20"] and r >= STRENGTH["rsi"], "rsi": r,
             "atrAboveMm20": above, "mm20": mm20}
+
+
+def weak_close(ind, i, goal):
+    """O fechamento i dispara a venda parcial "por força"? No alvo (goal) ou acima e com a alta sem
+    força (trend_strength; sem os indicadores, conta como sem força)."""
+    st = trend_strength(ind, i)
+    return ind["closes"][i] >= goal and not (st and st["strong"])
 
 
 def entry_stats(closes, mm200, i):

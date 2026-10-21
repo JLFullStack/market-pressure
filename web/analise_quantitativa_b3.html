@@ -155,7 +155,7 @@
             </div>
             <div>
                 <dt>Histórico (backtest)</dt>
-                <dd><p>Backtest da estratégia nos 10 anos de histórico do próprio ativo: compra no pullback, na abertura do pregão seguinte ao sinal, e recompra a cada pullback novo (a pelo menos 5% das compras abertas). A saída é a regra configurada para o tipo do ativo em <a href="configuracoes.html" class="inline-link">Configurações</a>: venda parcial (50% em +10%) e o restante na reversão de tendência, ou tudo na reversão (fechamento abaixo da MM20, da MM50 e da MM200 com a MM50 abaixo da MM200). Sem custos.</p>
+                <dd><p>Backtest da estratégia nos 10 anos de histórico do próprio ativo: compra no pullback, na abertura do pregão seguinte ao sinal, e recompra a cada pullback novo (a pelo menos 5% das compras abertas). A saída é a regra configurada para o tipo do ativo em <a href="configuracoes.html" class="inline-link">Configurações</a>: venda parcial (50% em +10%, ou 50% quando a alta perde força depois de +10%) e o restante na reversão de tendência, ou tudo na reversão (fechamento abaixo da MM20, da MM50 e da MM200 com a MM50 abaixo da MM200). Sem custos.</p>
                     <p>Taxa de acerto = compras encerradas com resultado positivo, suavizada para uma base de 50% quando há poucas. Entre parênteses: acertos/compras e o retorno médio por compra. Com a venda parcial, acerto alto com média baixa (ou o contrário) é normal: olhe os dois juntos.</p>
                     <p>Abaixo: as compras encerradas nos últimos 3 anos e as ainda abertas (pelo preço de hoje). Nos testes de carteira, o histórico recente foi o que melhor separou compras boas de ruins nas ações; nos BDRs, nenhum histórico antecipou nada.</p></dd>
             </div>

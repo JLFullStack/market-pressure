@@ -29,7 +29,7 @@ from . import market_data, runtime
 from . import screener as sc
 from . import strategy as st
 from .core import (EXIT, entry_stats, entry_warnings, add_up, adjusted_candles, closed_candles, compute_indicators, day_of, evaluate_setup,
-                   exit_signal, fmt_brl, fmt_date, fmt_num, fmt_sessions)
+                   exit_signal, fmt_brl, fmt_date, fmt_num, fmt_sessions, trend_strength, PARTIAL_TIMINGS)
 
 log = logging.getLogger(__name__)
 
@@ -104,6 +104,7 @@ def parse_params(body):
         "cost": _number(body, "cost", 0.1, 0, 5, "O custo por operação (%)") / 100,
         "target": _number(body, "target", EXIT["partialTarget"] * 100, 0.5, 500, "O alvo da venda parcial (%)") / 100,
         "fraction": _number(body, "fraction", EXIT["partialFraction"] * 100, 0, 100, "A parte vendida no alvo (%)") / 100,
+        "timing": _timing(body.get("momento")),   # momento da venda parcial com a saída informada à mão
         "strict": bool(body.get("strict")),
         "cdi": body.get("cdi", True) is not False,
         "liquidity": _liquidity(body.get("liquidity")),
@@ -119,7 +120,7 @@ def parse_params(body):
     if params["exit"] == "config":
         # Saída das Configurações: a regra de cada grupo (reversão = sem venda parcial).
         settings = st.load()
-        params["rules"] = {group: (rule["target"], rule["fraction"] if rule["key"] == "parcial" else 0.0)
+        params["rules"] = {group: (rule["target"], st.partial_fraction(rule), st.timing(rule))
                            for group in st.GROUPS for rule in [st.for_group(settings, group)]}
     return params
 
@@ -145,6 +146,14 @@ def _exit(value):
     value = str(value or "config")
     if value not in ("config", "manual"):
         raise ValueError("Escolha a saída: a das Configurações ou a informada no formulário.")
+    return value
+
+
+def _timing(value):
+    """Momento da venda parcial com a saída informada à mão (core.PARTIAL_TIMINGS; padrão "alvo")."""
+    value = str(value or "alvo")
+    if value not in PARTIAL_TIMINGS:
+        raise ValueError("Escolha quando vender a parcial: no alvo ou quando a alta perder força.")
     return value
 
 
@@ -248,7 +257,9 @@ def signals(asset, strict):
         divs[day_of(d["date"])] = divs.get(day_of(d["date"]), 0) + d["amount"]
     out = {"ticker": asset["ticker"], "kind": asset["kind"], "name": asset.get("name"), "candles": raw, "days": days,
            "idx": {d: i for i, d in enumerate(days)}, "ok": ok, "exit": [exit_signal(ind, i) for i in range(n)],
-           "score": score, "divs": divs, "traded": traded, "entry": entry}
+           "score": score, "divs": divs, "traded": traded, "entry": entry,
+           # alta com força no fechamento (core.trend_strength): decide a venda parcial "forca"
+           "strong": [bool((trend_strength(ind, i) or {}).get("strong")) for i in range(n)]}
     _signals_cache[key] = out
     return out
 
@@ -289,11 +300,32 @@ def _avg_cash(curve):
     return add_up(p["cash"] / p["equity"] for p in curve if p["equity"] > 0) / len(curve) * 100
 
 
+def _partial_price(lot, goal, fraction, timing, a, i, last):
+    """Preço da venda parcial de um lote no pregão i do ativo a, ou None se ela não acontece hoje.
+    "alvo": a máxima de um pregão depois do da compra toca o alvo (vende no alvo, ou na abertura se
+    ela já abriu acima). "forca": depois de o alvo ser tocado, o primeiro fechamento no alvo ou
+    acima com a alta sem força (core.weak_close) marca a venda para a abertura seguinte (last: sem
+    pregão seguinte no período, não marca)."""
+    if fraction <= 0 or lot["hit"] or i <= lot["i"]:
+        return None
+    c = a["candles"][i]
+    if timing != "forca":
+        return max(goal, c["o"]) if c["h"] >= goal else None
+    if lot.get("due"):            # sinal no fechamento anterior: vende na abertura de hoje
+        return c["o"]
+    lot["armed"] = lot.get("armed") or c["h"] >= goal
+    if lot["armed"] and not last and c["c"] >= goal and not a["strong"][i]:   # core.weak_close
+        lot["due"] = True
+    return None
+
+
 def simulate(data, cal, params, fraction, cdi):
     """Uma carteira do primeiro ao último dia de cal. Devolve a curva diária (patrimônio, aportado,
     caixa), os aportes e as operações (uma por compra). fraction None = a regra de cada tipo
-    (params["rules"]: {grupo: (alvo, parte vendida)}, grupo pelo tipo e nome do ativo,
-    screener.rule_group); um número = a mesma parte para todos."""
+    (params["rules"]: {grupo: (alvo, parte vendida, momento)}, grupo pelo tipo e nome do ativo,
+    screener.rule_group); um número = a mesma parte para todos, no momento params["timing"].
+    Venda parcial (_partial_price): "alvo" vende quando a máxima toca o alvo; "forca" vende na
+    abertura seguinte ao primeiro fechamento sem força no alvo ou acima (core.weak_close)."""
     target, cost, reentry = params["target"], params["cost"], sc.CONFIG["reentryDistance"]
     rules = params.get("rules") if fraction is None else None
     classes, bench6m = params.get("classes"), params.get("bench6m") or {}
@@ -308,8 +340,8 @@ def simulate(data, cal, params, fraction, cdi):
 
     def rule_of(t):
         if not rules:
-            return target, fraction
-        return rules.get(group_of(t), (target, 0.0))
+            return target, fraction, params.get("timing", "alvo")
+        return rules.get(group_of(t), (target, 0.0, "alvo"))
     months = _first_sessions(cal)
     # Imposto de renda: ganho de cada venda (valor líquido − custo da parte vendida) no mês, por grupo.
     carry = {"comum": 0.0, "fii": 0.0}           # prejuízo a compensar
@@ -416,14 +448,14 @@ def simulate(data, cal, params, fraction, cdi):
             a = data[t]
             c = a["candles"][i]
             last_px[t] = c["c"]
-            tg, fr = rule_of(t)
+            tg, fr, timing = rule_of(t)
             for lot in hold.get(t, ()):
                 trade = trades[lot["trade"]]
                 trade["peakClose"] = max(trade["peakClose"], c["c"])
                 trade["peakHigh"] = max(trade["peakHigh"], c["h"])
                 goal = lot["price"] * (1 + tg)
-                if fr > 0 and not lot["hit"] and i > lot["i"] and c["h"] >= goal:
-                    price = max(goal, c["o"])
+                price = _partial_price(lot, goal, fr, timing, a, i, d == last_day or i + 1 >= len(a["candles"]))
+                if price is not None:
                     qty = lot["qty"] * fr
                     value = qty * price * (1 - cost)
                     cash += value
@@ -744,12 +776,14 @@ def _rule_runs(params, data):
     if params.get("rules"):
         fraction = None
         used = {sc.rule_group(data[t]) for t in data}
-        has_partial = any(params["rules"].get(k, (0, 0.0))[1] > 0 for k in used)
+        has_partial = any(params["rules"].get(k, (0, 0.0, "alvo"))[1] > 0 for k in used)
         rule_label = "Saída das Configurações (por tipo)"
     else:
         fraction = params["fraction"]
         has_partial = fraction > 0
-        rule_label = f"{pct(fraction)}% em +{pct(params['target'])}% + regra B" if fraction > 0 else "Só a regra B"
+        when = " quando a alta perder força" if params.get("timing") == "forca" else ""
+        rule_label = (f"{pct(fraction)}% em +{pct(params['target'])}%{when} + regra B" if fraction > 0
+                      else "Só a regra B")
     runs = [("rule", rule_label, fraction)]
     if has_partial:
         runs.append(("onlyB", "Só a regra B", 0.0))
@@ -763,7 +797,8 @@ def _params_out(params):
             | {"classes": {g: v * 100 for g, v in params["classes"].items()} if params.get("classes") else None}
             | {"position": params["position"] * 100, "cost": params["cost"] * 100,
                "target": params["target"] * 100, "fraction": params["fraction"] * 100,
-               "rules": {k: {"target": v[0] * 100, "fraction": v[1] * 100}
+               "timing": params.get("timing", "alvo"),
+               "rules": {k: {"target": v[0] * 100, "fraction": v[1] * 100, "timing": v[2]}
                          for k, v in (params.get("rules") or {}).items()}})
 
 

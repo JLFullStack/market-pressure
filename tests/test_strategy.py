@@ -15,14 +15,16 @@ class StrategyTest(DatabaseTestCase):
     def test_default_until_saved(self):
         self.assertEqual(st.load(), st.DEFAULT)
         self.assertEqual(st.DEFAULT["kinds"]["internacionais"], "reversao")   # internacionais: só a reversão
-        self.assertEqual(st.DEFAULT["kinds"]["acoes"], "parcial")
-        saved, error = st.from_form({"target": "15,5", "fraction": "30", "kinds": {"etfs": "reversao"}})
+        self.assertEqual(st.DEFAULT["kinds"]["acoes"], "forca")   # ações: parcial quando a alta perde força
+        self.assertEqual(st.DEFAULT["kinds"]["fundos"], "parcial")
+        saved, error = st.from_form({"target": "15,5", "fraction": "30", "kinds": {"etfs": "reversao", "acoes": "parcial"}})
         self.assertIsNone(error)
         st.save(saved)
         loaded = st.load()
         self.assertEqual((loaded["target"], loaded["fraction"]), (0.155, 0.3))
         self.assertEqual(loaded["kinds"]["etfs"], "reversao")
-        self.assertEqual(st.for_group(loaded, "acoes"), {"key": "parcial", "target": 0.155, "fraction": 0.3, "group": "acoes"})
+        self.assertEqual(st.for_group(loaded, "acoes"), {"key": "parcial", "target": 0.155, "fraction": 0.3, "group": "acoes",
+                                                         "timing": "alvo"})
         acoes = next(k for k in st.describe(loaded)["kinds"] if k["group"] == "acoes")
         self.assertEqual(acoes["text"], "Vende 30% de cada compra ao atingir +15,5% sobre o preço dela; "
                                         "o restante na reversão de tendência.")
@@ -41,7 +43,7 @@ class StrategyTest(DatabaseTestCase):
         rule = st.asset_rules(st.DEFAULT)
         self.assertEqual(rule("AAPL34", "b3")["key"], "reversao")   # BDR pelo código
         self.assertEqual(rule("VOO", "us")["key"], "reversao")
-        self.assertEqual(rule("PETR4", "b3")["key"], "parcial")
+        self.assertEqual(rule("PETR4", "b3")["key"], "forca")
         by_class = st.asset_rules(st.DEFAULT, {"PETR4": "Internacionais"})   # na Carteira vale a classe
         self.assertEqual(by_class("PETR4", "b3")["key"], "reversao")
 
@@ -98,14 +100,20 @@ class RuleByKindTest(DatabaseTestCase):
     def test_backtests_have_both_rules(self):
         from .support import candles
         bts = screener.backtests(screener.compute_indicators(candles(400)))
-        self.assertEqual(set(bts), {"loose", "strict", "looseRev", "strictRev"})
+        self.assertEqual(set(bts), {"loose", "strict", "looseRev", "strictRev", "looseForca", "strictForca"})
         self.assertEqual(bts["loose"]["trades"], bts["looseRev"]["trades"])   # mesmas compras e saídas
+        self.assertEqual(bts["loose"]["trades"], bts["looseForca"]["trades"])
 
     def test_portfolio_backtest_follows_the_configured_rules(self):
         from marketpressure import portfolio_backtest as pb
         p = pb.parse_params({"universe": "acoes", "saida": "config"})
         self.assertEqual(p["rules"]["internacionais"][1], 0.0)    # padrão dos internacionais: só a reversão
-        self.assertEqual(p["rules"]["acoes"][1], 0.5)
+        self.assertEqual(p["rules"]["acoes"], (0.1, 0.5, "forca"))
+        self.assertEqual(p["rules"]["fundos"], (0.1, 0.5, "alvo"))
+        manual = pb.parse_params({"universe": "acoes", "saida": "manual", "momento": "forca"})
+        self.assertEqual(manual["timing"], "forca")
+        with self.assertRaises(ValueError):
+            pb.parse_params({"universe": "acoes", "saida": "manual", "momento": "x"})
         self.assertNotIn("rules", pb.parse_params({"universe": "acoes", "saida": "manual"}))
         with self.assertRaises(ValueError):
             pb.parse_params({"universe": "acoes", "saida": "x"})
@@ -123,6 +131,8 @@ class AdviceTest(unittest.TestCase):
         self.assertIn("vender 50% em +10% (R$ 55,00)", a["reason"])
         a = screener.advice(self.ROW, None, REVERSAL)
         self.assertIn("vender tudo na reversão", a["reason"])
+        a = screener.advice(self.ROW, None, {**PARTIAL, "key": "forca"})
+        self.assertIn("vender 50% depois de +10% (R$ 55,00) quando a alta perder força", a["reason"])
 
     def test_wait_when_already_bought_in_the_region(self):
         lots = [{"date": "2026-09-28", "price": 49.0}]

@@ -48,10 +48,12 @@ Termine com um resumo de três linhas, para quem não quiser ler o resto."""
 DECIDE = """# Como decidir (leia antes dos vereditos)
 
 - **Eu sigo uma estratégia de saída por classe**, descrita em "Minha estratégia de venda": venda \
-parcial no alvo e o resto na reversão de tendência, ou tudo na reversão. Não uso stop loss. Nos \
-backtests de carteira deste app (2017 a 2026), essa disciplina rendeu mais do que vender por medo \
-ou realizar lucro cedo. A venda parcial e a venda só na reversão empataram nos testes de vários \
-períodos: as duas são válidas, e não vale trocar uma pela outra por causa de um resultado recente.
+parcial no alvo, venda parcial quando a alta perde força depois do alvo, ou tudo na reversão de \
+tendência (nas duas parciais, o resto sai na reversão). Não uso stop loss. Nos backtests de carteira \
+deste app (2017 a 2026), essa disciplina rendeu mais do que vender por medo ou realizar lucro cedo. A \
+parcial no alvo e a venda só na reversão empataram nos testes de vários períodos; a parcial quando a \
+alta perde força ganhou das duas na maioria deles (com imposto de renda: 7 de 8 e 8 de 8 anos de \
+início até hoje; 5 de 7 janelas de 3 anos). Não vale trocar de regra por causa de um resultado recente.
 - **VENDER** quando a regra de saída disparou (Situação "VENDER" na tabela) ou por um motivo \
 concreto e grave que os números não mostram (fato fundamentalista, governança, tese quebrada). \
 Estar no prejuízo ou ter subido muito não basta.
@@ -72,12 +74,13 @@ na reversão de tendência, da diversificação e do tamanho de cada compra. Nã
 prefira posição menor ou EVITAR.
 - **REDUZIR** quando a venda parcial da estratégia está pendente (Situação "VENDER 50%") ou quando \
 uma posição ficou grande demais para o risco dela; diga para qual peso.
-- **Venda parcial com a alta ainda forte** (a posição mostra "Força da alta: forte"): decida entre \
-vender os 50% agora ou segurar até o fechamento perder a MM20. Nos testes do app, segurar rendeu mais \
-por compra (cerca de +0,8 ponto), mas menos na carteira, porque o dinheiro da parcial volta ao caixa e \
-compra os próximos pullbacks. Recomende segurar só se o ranking do Screener (abaixo) não tiver boas \
-compras nas classes abaixo da meta e a posição não estiver grande demais; diga o ponto de venda (a \
-MM20). Com a alta já sem força, venda como manda a regra.
+- **Venda parcial e força da alta**: na regra "quando a alta perder força", o app só mostra \
+"VENDER 50%" depois que a compra atingiu o alvo **e** um fechamento, ainda no alvo ou acima, mostrou \
+a alta sem força (menos de 1 ATR acima da MM20 ou RSI abaixo de 65); a venda é na abertura seguinte. \
+Enquanto a alta segue forte, a Situação é MANTER com o motivo "fica para a abertura seguinte...": não \
+recomende vender antes. Na regra "no alvo", "VENDER 50%" aparece assim que o alvo é tocado; se a \
+posição mostrar "Força da alta: forte", diga que esperar a alta perder força rendeu mais nos testes e \
+que a troca de regra é feita nas Configurações, mas não contrarie a regra escolhida só por isso.
 - **AUMENTAR** quando o ativo está num recuo de compra (Situação "COMPRAR" ou "no setup" e, de \
 preferência, no ranking do Screener), a tendência é firme e a posição está abaixo da meta. Eu só \
 recompro a 5% ou mais de cada compra ainda aberta.
@@ -117,7 +120,8 @@ são brutos (JCP tem 15% de imposto; nos EUA, 30% retidos).
 - **Rentabilidade da carteira**: por cotas (descontando aportes e resgates), comparada ao CDI e ao \
 BOVA11 com os mesmos dias.
 - **Situação**: VENDER quando a reversão de tendência disparou (fechamento abaixo da MM20, MM50 e \
-MM200, com a MM50 abaixo da MM200); VENDER 50% quando compras atingiram o alvo da venda parcial; \
+MM200, com a MM50 abaixo da MM200); VENDER 50% quando compras atingiram o alvo da venda parcial (na \
+regra "quando a alta perder força", só depois de um fechamento sem força ainda no alvo ou acima); \
 COMPRAR quando o ativo está no setup de recuo ("Garrafa de Gás": tendência de alta de longo prazo e \
 fechamento até 3% acima de uma média testada) longe das compras abertas e, fora dos internacionais, \
 sem tendência fraca nem força relativa abaixo do Ibovespa (a mesma regra da Indicação do Screener); \

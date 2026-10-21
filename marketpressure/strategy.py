@@ -1,16 +1,22 @@
 """Estratégia de venda escolhida na aba Configurações, por tipo de ativo.
 
-Duas regras, as mesmas do backtest:
+Três regras, as mesmas do backtest:
 - "parcial": vende `fraction` de cada compra quando a máxima atinge +`target` sobre o preço
   dela; o restante sai na reversão de tendência (regra B, core.exit_signal);
+- "forca": depois que a compra atinge +`target`, vende `fraction` dela na abertura seguinte ao
+  primeiro fechamento em que a alta perde força (core.weak_close: fechamento ainda no alvo ou
+  acima, com menos de 1 ATR sobre a MM20 ou RSI abaixo de 65); o restante na reversão;
 - "reversao": vende tudo na reversão de tendência.
 
 Cada grupo de ativos (GROUPS = as classes fixas da Carteira, portfolio.CLASSES, menos Renda
 fixa: Ações, Fundos imobiliários, ETFs Brasil e Internacionais — BDRs, ETFs do exterior, EUA e
-cripto) segue uma das duas; alvo e parte vendida são os mesmos para todos os grupos que usam a
+cripto) segue uma delas; alvo e parte vendida são os mesmos para todos os grupos que usam a
 venda parcial. Nos backtests de carteira, a venda parcial em +10% vendeu cedo demais os
-internacionais, que renderam mais saindo só na reversão: por isso é o padrão deles. Na Carteira,
-a regra de uma posição é a da classe do ativo; no Screener e no Backtest, a do tipo (group_of).
+internacionais, que renderam mais saindo só na reversão: por isso é o padrão deles. Nas ações, a
+parcial "por força" ganhou da parcial no alvo e da só reversão na maioria dos períodos (com IR):
+é o padrão delas; fundos e ETFs Brasil não foram testados com ela e seguem a parcial no alvo. Na
+Carteira, a regra de uma posição é a da classe do ativo; no Screener e no Backtest, a do tipo
+(group_of).
 
 Tabelas: settings (uma linha: alvo, parte vendida e a regra antiga, única, que vale para os
 grupos sem escolha salva) e settings_kinds (grupo, regra). A Carteira (situação das posições), o
@@ -30,9 +36,12 @@ log = logging.getLogger(__name__)
 TABLE = "settings"
 KINDS_TABLE = "settings_kinds"
 STRATEGIES = {
+    "forca": "Venda parcial quando a alta perder força (acima do alvo) + reversão de tendência",
     "parcial": "Venda parcial no alvo + reversão de tendência",
     "reversao": "Vender 100% na reversão de tendência",
 }
+PARTIAL_KEYS = ("parcial", "forca")   # regras com venda parcial
+TIMING = {"parcial": "alvo", "forca": "forca"}   # regra → momento da venda parcial (core.PARTIAL_TIMINGS)
 GROUPS = {c["group"]: c["name"] for c in CLASSES if c["group"]}
 GROUP_HINTS = {
     "acoes": "ações e units",
@@ -41,19 +50,31 @@ GROUP_HINTS = {
     "internacionais": "BDRs, ETFs do exterior, ativos dos EUA e cripto",
 }
 INTERNATIONAL = ("internacionais",)
-DEFAULT_KINDS = {g: "reversao" if g in INTERNATIONAL else "parcial" for g in GROUPS}
+DEFAULT_KINDS = {g: "reversao" if g in INTERNATIONAL else "forca" if g == "acoes" else "parcial" for g in GROUPS}
 LEGACY_GROUPS = {"bdrs": "internacionais", "exterior": "internacionais"}   # grupos de antes
 DEFAULT = {"target": EXIT["partialTarget"], "fraction": EXIT["partialFraction"], "kinds": dict(DEFAULT_KINDS)}
 TARGET_RANGE = (0.5, 500)    # alvo da venda parcial, em %
 FRACTION_RANGE = (1, 100)    # parte de cada compra vendida no alvo, em %
 REVERSAL_TEXT = "fechamento abaixo da MM20, MM50 e MM200 com a MM50 abaixo da MM200"
+WEAK_TEXT = "fechamento com menos de 1 ATR acima da MM20 ou RSI abaixo de 65"   # core.STRENGTH
+
+
+def timing(rule):
+    """Momento da venda parcial de uma regra ({key, ...}): "alvo" ou "forca" (core.PARTIAL_TIMINGS)."""
+    return TIMING.get(rule.get("key"), "alvo")
+
+
+def partial_fraction(rule):
+    """Parte de cada compra vendida pela venda parcial: 0 na regra "reversao"."""
+    return rule["fraction"] if rule.get("key") in PARTIAL_KEYS else 0.0
 
 
 def for_group(settings, group):
     """Regra de um grupo no formato que a Carteira e o Screener usam: {key, target, fraction}."""
     group = group if group in GROUPS else "acoes"
-    return {"key": settings["kinds"].get(group, "parcial"), "target": settings["target"], "fraction": settings["fraction"],
-            "group": group}
+    key = settings["kinds"].get(group, DEFAULT_KINDS.get(group, "parcial"))
+    return {"key": key, "target": settings["target"], "fraction": settings["fraction"], "group": group,
+            "timing": TIMING.get(key, "alvo")}
 
 
 def group_of(kind=None, market="b3", name=""):
@@ -92,12 +113,16 @@ def screener_kinds(settings):
 
 def describe_one(s):
     """Uma regra ({key, target, fraction}) com os textos da página."""
+    rest = "; o restante na reversão de tendência" if s["fraction"] < 1 else ""
     if s["key"] == "parcial":
-        rest = "; o restante na reversão de tendência" if s["fraction"] < 1 else ""
         text = f"Vende {pct(s['fraction'])}% de cada compra ao atingir +{pct(s['target'])}% sobre o preço dela{rest}."
+    elif s["key"] == "forca":
+        text = (f"Depois que uma compra atinge +{pct(s['target'])}% sobre o preço dela, vende {pct(s['fraction'])}% "
+                f"na abertura seguinte ao primeiro fechamento em que a alta perde força ({WEAK_TEXT}), se esse "
+                f"fechamento ainda estiver em +{pct(s['target'])}% ou acima{rest}.")
     else:
         text = "Vende 100% da posição na reversão de tendência."
-    return {**s, "label": STRATEGIES[s["key"]], "text": text, "reversal": REVERSAL_TEXT,
+    return {**s, "label": STRATEGIES[s["key"]], "text": text, "reversal": REVERSAL_TEXT, "timing": timing(s),
             "targetPct": s["target"] * 100, "fractionPct": s["fraction"] * 100}
 
 
@@ -112,7 +137,7 @@ def describe(settings):
 
 def from_form(body):
     """Formulário da aba Configurações → (configurações, erro). target e fraction chegam em %;
-    kinds = {grupo: "parcial" | "reversao"} (grupos ausentes ficam com o padrão)."""
+    kinds = {grupo: "forca" | "parcial" | "reversao"} (grupos ausentes ficam com o padrão)."""
     target, fraction = parse_number(body.get("target")), parse_number(body.get("fraction"))
     if target is None or not TARGET_RANGE[0] <= target <= TARGET_RANGE[1]:
         return None, f"A rentabilidade do alvo deve ficar entre {fmt_num(TARGET_RANGE[0])}% e {fmt_num(TARGET_RANGE[1], 0)}%."

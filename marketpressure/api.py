@@ -21,6 +21,7 @@ from . import portfolio_prompt
 from . import portfolio_service as svc
 from . import portfolio_store as store
 from . import strategy as st
+from .core import PARTIAL_TIMINGS
 
 log = logging.getLogger(__name__)
 
@@ -166,8 +167,9 @@ def percent_arg(req, name, default, low, high):
 
 def backtest_args(req):
     """Parâmetros do backtest de um ativo (ticker, market b3|us, saida config|manual, target e
-    fraction em %, strict=1 exige o candle de rejeição, from/to = período, AAAA-MM-DD, opcionais;
-    amount = valor de cada compra) → os argumentos de screener.backtest_view."""
+    fraction em % e momento alvo|forca (só com saida=manual), strict=1 exige o candle de rejeição,
+    from/to = período, AAAA-MM-DD, opcionais; amount = valor de cada compra) → os argumentos de
+    screener.backtest_view."""
     market = req.arg("market", "b3")
     if market not in screener.BACKTEST_MARKETS:
         raise HTTPError(400, "market deve ser b3 ou us")
@@ -176,10 +178,13 @@ def backtest_args(req):
         # Saída das Configurações, pela regra do tipo do ativo (reversão = sem venda parcial).
         name, kind = screener.asset_info(ticker, market)
         rule = st.for_group(st.load(), st.group_of(kind, market, name))
-        target, fraction = rule["target"], rule["fraction"] if rule["key"] == "parcial" else 0.0
+        target, fraction, timing = rule["target"], st.partial_fraction(rule), st.timing(rule)
     else:
         target = percent_arg(req, "target", screener.CONFIG["partialTarget"] * 100, 0.5, 500)
         fraction = percent_arg(req, "fraction", screener.CONFIG["partialFraction"] * 100, 0, 100)
+        timing = req.arg("momento", "alvo")
+        if timing not in PARTIAL_TIMINGS:
+            raise HTTPError(400, "momento deve ser alvo ou forca")
     amount = pf.parse_number(req.arg("amount"), screener.BACKTEST_AMOUNT)
     if amount is None or not 1 <= amount <= 100_000_000:
         raise HTTPError(400, "O valor por compra deve ficar entre R$ 1 e R$ 100 milhões.")
@@ -189,7 +194,7 @@ def backtest_args(req):
             raise HTTPError(400, "informe as datas do período como AAAA-MM-DD")
     if start and end and start >= end:
         raise HTTPError(400, "O início do período deve ser antes do fim.")
-    return ticker, market, target, fraction, req.arg("strict") == "1", start, end, amount
+    return ticker, market, target, fraction, req.arg("strict") == "1", start, end, amount, timing
 
 
 def single_backtest(args):

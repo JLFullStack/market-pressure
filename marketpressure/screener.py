@@ -18,7 +18,7 @@ from . import strategy as st
 from . import market_data, runtime
 from .core import (ENTRY, EXIT, REENTRY_DISTANCE, SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
                   entry_stats, entry_warnings, evaluate_setup, exit_signal, fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_sessions,
-                  in_session_hours, last_close, session_in_progress)
+                  in_session_hours, last_close, session_in_progress, weak_close)
 
 CONFIG = {
     # Universo: ativos da lista do Yahoo (market_data.load_universe) de quatro tipos, cada um com
@@ -101,7 +101,7 @@ CONFIG = {
 
 log = logging.getLogger(__name__)
 
-SCAN_VERSION = 8  # mude se o formato das análises mudar (descarta a varredura salva no banco)
+SCAN_VERSION = 9  # mude se o formato das análises mudar (descarta a varredura salva no banco)
 MODES = ("fechamento", "intradiario")
 KINDS = ("acoes", "fundos", "etfs", "bdrs")  # tipos de ativo (market_data.asset_kind), um ranking cada
 
@@ -219,30 +219,22 @@ def pressure(ind, i, setup, live=False, weights=None):
     }
 
 
-def backtest_lots(ind, strict, target=None, fraction=None, start=None):
+def backtest_lots(ind, strict, target=None, fraction=None, start=None, timing="alvo"):
     """Repete a estratégia no histórico do ativo, lote a lote: compra na abertura seguinte ao sinal
     do setup e recompra a cada pullback novo enquanto a posição está aberta; o mesmo pullback não
-    gera nova compra (preço a menos de reentryDistance de alguma compra da posição). Cada compra
-    vende `fraction` ao atingir +`target` (máxima de um candle depois do da compra; preenchida no
-    alvo, ou na abertura se ela já abriu acima). Quando o fechamento dispara exit_signal, o
-    restante de todas as compras é vendido na abertura seguinte.
-    Lote: {"entry": {"i", "price"}, "partial": {"i", "price"} | None, "exit": {"i", "price"} | None}
-    (i = índice do candle da execução). fraction 0 = só a regra B. start: primeiro candle em que
-    um sinal pode comprar (nunca antes de backtestStart, quando a MM200 e a inclinação existem)."""
+    gera nova compra (preço a menos de reentryDistance de alguma compra da posição). Quando o
+    fechamento dispara exit_signal, o restante de todas as compras é vendido na abertura seguinte.
+    Com fraction > 0, cada compra vende `fraction` pela venda parcial no momento `timing`
+    (with_partials). Lote: {"entry": {"i", "price"}, "partial": {"i", "price"} | None,
+    "exit": {"i", "price"} | None} (i = índice do candle da execução). fraction 0 = só a regra B.
+    start: primeiro candle em que um sinal pode comprar (nunca antes de backtestStart, quando a
+    MM200 e a inclinação existem)."""
     target = CONFIG["partialTarget"] if target is None else target
     fraction = CONFIG["partialFraction"] if fraction is None else fraction
     candles = ind["candles"]
     last = len(candles) - 1
     lots, held = [], []
-    for i in range(max(CONFIG["backtestStart"], start or 0), last + 1):
-        c = candles[i]
-        if fraction > 0:
-            for lot in held:
-                goal = lot["entry"]["price"] * (1 + target)
-                if lot["partial"] is None and i > lot["entry"]["i"] and c["h"] >= goal:
-                    lot["partial"] = {"i": i, "price": max(goal, c["o"])}
-        if i == last:
-            break
+    for i in range(max(CONFIG["backtestStart"], start or 0), last):
         if held and exit_signal(ind, i):
             for lot in held:
                 lot["exit"] = {"i": i + 1, "price": candles[i + 1]["o"]}
@@ -256,7 +248,37 @@ def backtest_lots(ind, strict, target=None, fraction=None, start=None):
             lot = {"entry": {"i": i + 1, "price": price}, "partial": None, "exit": None}
             held.append(lot)
             lots.append(lot)
-    return lots
+    return with_partials(ind, lots, target, timing) if fraction > 0 else lots
+
+
+def with_partials(ind, lots, target, timing="alvo"):
+    """Cópias dos lotes com a venda parcial no momento escolhido (core.PARTIAL_TIMINGS). A venda
+    parcial não muda as compras nem a saída pela regra B, então os mesmos lotes servem aos dois
+    momentos. Um lote pode vender do pregão seguinte ao da compra até o da saída (o fechamento que
+    dispara a regra B é o último pregão com o lote aberto).
+    "alvo": a máxima do pregão toca +target; vende no alvo, ou na abertura se ela já abriu acima.
+    "forca": depois de tocado o alvo, o primeiro fechamento no alvo ou acima com a alta sem força
+    (core.weak_close) vende na abertura do pregão seguinte, se o lote ainda estiver aberto nele."""
+    candles = ind["candles"]
+    last = len(candles) - 1
+    out = []
+    for lot in lots:
+        lot = {**lot, "partial": None}
+        goal = lot["entry"]["price"] * (1 + target)
+        end = lot["exit"]["i"] - 1 if lot["exit"] else last   # último pregão com o lote aberto
+        armed = False
+        for i in range(lot["entry"]["i"] + 1, end + 1):
+            c = candles[i]
+            if timing == "forca":
+                armed = armed or c["h"] >= goal
+                if armed and i < end and weak_close(ind, i, goal):
+                    lot["partial"] = {"i": i + 1, "price": candles[i + 1]["o"]}
+                    break
+            elif c["h"] >= goal:
+                lot["partial"] = {"i": i, "price": max(goal, c["o"])}
+                break
+        out.append(lot)
+    return out
 
 
 def lot_return(lot, fraction, mark=None):
@@ -301,13 +323,16 @@ def backtest(ind, strict, fraction=None):
 
 
 def backtests(ind):
-    """Os quatro backtests que o ranking usa: sem e com o candle de rejeição (loose/strict), com a
-    venda parcial do CONFIG e só com a reversão (sufixo Rev). As compras e saídas não dependem da
-    venda parcial, então cada filtro roda uma vez."""
+    """Os seis backtests que o ranking usa: sem e com o candle de rejeição (loose/strict), com a
+    venda parcial do CONFIG no alvo, com ela quando a alta perde força (sufixo Forca) e só com a
+    reversão (sufixo Rev). As compras e saídas não dependem da venda parcial, então cada filtro
+    roda uma vez (with_partials só refaz a parcial)."""
     out = {}
     for strict, name in ((False, "loose"), (True, "strict")):
-        lots = backtest_lots(ind, strict)
-        out[name] = summarize_lots(lots, CONFIG["partialFraction"], ind)
+        lots = backtest_lots(ind, strict, fraction=0)
+        out[name] = summarize_lots(with_partials(ind, lots, CONFIG["partialTarget"]), CONFIG["partialFraction"], ind)
+        out[name + "Forca"] = summarize_lots(with_partials(ind, lots, CONFIG["partialTarget"], "forca"),
+                                             CONFIG["partialFraction"], ind)
         out[name + "Rev"] = summarize_lots(lots, 0.0, ind)
     return out
 
@@ -454,10 +479,14 @@ def rule_group(a):
     return st.group_of(a.get("kind"), "b3", a.get("name") or "")
 
 
+BT_SUFFIX = {"reversao": "Rev", "forca": "Forca"}   # regra de venda → sufixo do backtest da análise
+
+
 def bt_key(strict, group, kinds=None):
-    """Qual backtest da análise vale para o grupo: com a venda parcial ("loose"/"strict") ou só com
-    a reversão (sufixo "Rev"), conforme a regra do grupo nas Configurações (kinds: {grupo: regra})."""
-    return ("strict" if strict else "loose") + ("Rev" if (kinds or {}).get(group or "acoes") == "reversao" else "")
+    """Qual backtest da análise vale para o grupo: com a venda parcial no alvo ("loose"/"strict"),
+    com ela quando a alta perde força (sufixo "Forca") ou só com a reversão (sufixo "Rev"), conforme
+    a regra do grupo nas Configurações (kinds: {grupo: regra})."""
+    return ("strict" if strict else "loose") + BT_SUFFIX.get((kinds or {}).get(group or "acoes"), "")
 
 
 def build_ranking(analyses, strict, kinds=None):
@@ -601,9 +630,13 @@ def advice(a, lots, strategy, kind=None, rank=None):
     if nearest:
         reason = (f"Já na carteira, em novo pullback: {fmt_num(gap * 100)}% da compra mais próxima "
                   f"({fmt_date(nearest['date'])}, {fmt_brl(nearest['price'])}).\n") + reason
-    if strategy["key"] == "parcial":
+    if strategy["key"] in ("parcial", "forca"):
         rest = " e o restante na reversão de tendência" if strategy["fraction"] < 1 else ""
-        reason += (f"\nSaída: vender {fmt_pct_value(strategy['fraction'])}% em +{fmt_pct_value(strategy['target'])}% "
+        when = (" quando a alta perder força (na abertura seguinte ao primeiro fechamento com menos de 1 ATR acima da "
+                "MM20 ou RSI abaixo de 65, ainda no alvo ou acima)" if strategy["key"] == "forca" else "")
+        reason += (f"\nSaída: vender {fmt_pct_value(strategy['fraction'])}% depois de +{fmt_pct_value(strategy['target'])}% "
+                   f"({fmt_brl(price * (1 + strategy['target']))}){when}{rest}." if when else
+                   f"\nSaída: vender {fmt_pct_value(strategy['fraction'])}% em +{fmt_pct_value(strategy['target'])}% "
                    f"({fmt_brl(price * (1 + strategy['target']))}){rest}.")
     else:
         reason += "\nSaída: vender tudo na reversão de tendência."
@@ -960,11 +993,12 @@ def lot_wait_reasons(ind, signal_i, group, bench6m):
 
 
 def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False, start=None, end=None,
-                  amount=BACKTEST_AMOUNT):
+                  amount=BACKTEST_AMOUNT, timing="alvo"):
     """Tudo o que a aba Backtest mostra de um ativo: candles e médias (pregões fechados; fundos no
     preço ajustado por proventos, como no screener), cada lote com compra, venda parcial e saída,
     marcadores do gráfico, resultado acumulado e o resumo, também com só a regra B para comparar.
-    target e fraction em fração (0,10 = 10%); None = os do CONFIG. start/end (AAAA-MM-DD, opcionais):
+    target e fraction em fração (0,10 = 10%); None = os do CONFIG; timing = momento da venda parcial
+    (core.PARTIAL_TIMINGS: "alvo" ou "forca"). start/end (AAAA-MM-DD, opcionais):
     período do backtest. As médias usam o histórico anterior a start; compras só a partir de start
     (ajustado para o primeiro pregão com MM200, se for antes) e o que estiver aberto em end é
     marcado pelo fechamento desse dia. amount: valor de cada compra, para os resultados em
@@ -998,7 +1032,7 @@ def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False,
     if start and days[first] > start and start < first_day:
         note = (f"Início ajustado para {fmt_date(days[first])}: o histórico do Yahoo começa em {fmt_date(days[0])} "
                 f"e as médias precisam de {CONFIG['backtestStart']} pregões antes da primeira compra.")
-    lots = backtest_lots(ind, strict, target, fraction, first)
+    lots = backtest_lots(ind, strict, target, fraction, first, timing)
 
     group = st.group_of(kind, market, name)
     bench6m = benchmark_6m() if group not in CONFIG["adviceIgnoreKinds"] else {}
@@ -1078,14 +1112,18 @@ def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False,
                        f"({fmt_brl(stats['profit'])} contra {fmt_brl(only_b['profit'])}).")
 
     rule_b = "quando o fechamento fica abaixo de MM20, MM50 e MM200 com MM50 < MM200 (regra B)"
-    if fraction > 0:
+    if fraction > 0 and timing == "forca":
+        rule = (f"Depois que a compra atinge +{_pct_label(target)}%, vende {_pct_label(fraction)}% dela na abertura seguinte "
+                f"ao primeiro fechamento em que a alta perde força (menos de 1 ATR acima da MM20 ou RSI abaixo de 65), "
+                f"com o fechamento ainda em +{_pct_label(target)}% ou acima; o restante {rule_b}.")
+    elif fraction > 0:
         rule = f"Vende {_pct_label(fraction)}% de cada compra em +{_pct_label(target)}%; o restante {rule_b}."
     else:
         rule = f"Vende tudo {rule_b}."
     return {
         "ticker": ticker, "market": market, "name": name, "kind": kind, "kindLabel": KIND_LABEL.get(kind, kind),
         "currency": BACKTEST_MARKETS[market], "adjusted": adjusted, "strict": strict,
-        "rule": {"target": target * 100, "fraction": fraction * 100, "text": rule},
+        "rule": {"target": target * 100, "fraction": fraction * 100, "timing": timing, "text": rule},
         "period": f"{fmt_date(days[first])} a {fmt_date(days[last])}", "lastDate": days[last], "lastClose": closes[last],
         "bounds": {"min": first_day, "max": last_day, "from": days[first], "to": days[last]}, "note": note,
         "candles": [{"time": days[i], "open": c["o"], "high": c["h"], "low": c["l"], "close": c["c"]}

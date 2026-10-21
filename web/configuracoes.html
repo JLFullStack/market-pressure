@@ -41,7 +41,7 @@
 
     <div class="panel">
         <h2>⚙️ Estratégia de venda</h2>
-        <p class="muted">Cada tipo de ativo segue uma das duas regras de venda. A escolha vale para:</p>
+        <p class="muted">Cada tipo de ativo segue uma das três regras de venda. A escolha vale para:</p>
         <ul class="notes">
             <li>a <a href="carteira.html" class="inline-link">Carteira</a>: a coluna "Situação" das posições indica quando e quanto vender, com o motivo;</li>
             <li>o <a href="analise_quantitativa_b3.html" class="inline-link">Screener</a>: o histórico (backtest), o Score e a "Indicação" de cada ativo, e o texto do "ANALISAR ATIVO";</li>
@@ -49,13 +49,13 @@
         </ul>
         <form id="strategyForm" novalidate>
             <fieldset class="strategy-options">
-                <legend class="strategy-legend">Venda parcial no alvo</legend>
+                <legend class="strategy-legend">Venda parcial (alvo e parte vendida)</legend>
                 <p class="strategy-params">
                     Vender
                     <input class="select" name="fraction" type="text" inputmode="decimal" size="4" aria-label="Parte de cada compra vendida no alvo (%)"> %
-                    de cada compra ao atingir
+                    de cada compra depois de
                     <input class="select" name="target" type="text" inputmode="decimal" size="4" aria-label="Rentabilidade do alvo (%)"> %
-                    de rentabilidade sobre o preço dela; o restante na reversão de tendência.
+                    de rentabilidade sobre o preço dela (no alvo ou quando a alta perder força, conforme a regra do tipo); o restante na reversão de tendência.
                 </p>
             </fieldset>
             <fieldset class="strategy-options">
@@ -69,6 +69,8 @@
             </fieldset>
             <ul class="notes">
                 <li>Os tipos são as <strong>classes da Carteira</strong>: lá, a "Situação" de cada posição segue a regra da classe do ativo. No Screener e no Backtest vale o tipo do ativo (BDRs e ETFs do exterior entram em Internacionais).</li>
+                <li><strong>Venda parcial quando a alta perder força</strong>: usa o mesmo alvo e a mesma parte acima, mas não vende no alvo. Depois que a compra o atinge, mantém tudo enquanto a alta está forte e vende a parte na abertura seguinte ao primeiro fechamento com menos de 1 ATR acima da MM20 ou RSI abaixo de 65, se esse fechamento ainda estiver no alvo ou acima.</li>
+                <li><strong>Ações</strong>: nos backtests de carteira (2017 a 2026, com imposto de renda), vender quando a alta perde força rendeu mais que vender no alvo (7 de 8 anos de início) e que vender só na reversão (8 de 8). Por isso é o padrão delas. Fundos e ETFs Brasil ainda não foram testados com ela.</li>
                 <li><strong>Internacionais</strong>: nos backtests de carteira, vender 50% em +10% vendeu os vencedores cedo demais; sair só na reversão rendeu mais. Por isso é o padrão deles.</li>
             </ul>
             <p class="small muted" id="reversalText"></p>

@@ -108,7 +108,8 @@ function init() {
     const q = new URLSearchParams(location.search);
     if (q.get('mode') === 'carteira') {
         const fields = { universe: 'pfUniverse', tickers: 'pfTickers', topN: 'pfTopN', liquidity: 'pfLiquidity', initial: 'pfInitial', monthly: 'pfMonthly', position: 'pfPosition',
-                         maxAssets: 'pfMaxAssets', cost: 'pfCost', target: 'btTarget', fraction: 'btFraction', from: 'btFrom', to: 'btTo', saida: 'btExit' };
+                         maxAssets: 'pfMaxAssets', cost: 'pfCost', target: 'btTarget', fraction: 'btFraction', from: 'btFrom', to: 'btTo', saida: 'btExit',
+                         momento: 'btTiming' };
         for (const [key, id] of Object.entries(fields)) if (q.get(key) !== null) $(id).value = q.get(key);
         $('btStrict').checked = q.get('strict') === '1';
         $('pfCdi').checked = q.get('cdi') !== '0';
@@ -127,6 +128,8 @@ function init() {
         if (q.get('market')) $('btMarket').value = q.get('market') === 'us' ? 'us' : 'b3';
         if (q.get('target')) $('btTarget').value = q.get('target');
         if (q.get('fraction')) $('btFraction').value = q.get('fraction');
+        // Links antigos, sem o momento da venda parcial, eram todos "no alvo".
+        $('btTiming').value = q.get('momento') === 'forca' ? 'forca' : (q.get('target') || q.get('fraction') ? 'alvo' : $('btTiming').value);
         // Links antigos com alvo/parte e sem "saida" usam os valores do link.
         $('btExit').value = q.get('saida') || (q.get('target') || q.get('fraction') ? 'manual' : 'config');
         syncExit();
@@ -138,11 +141,12 @@ function init() {
     }
 }
 
-// Saída "Conforme as Configurações": o alvo e a parte do formulário não valem (ficam desabilitados).
+// Saída "Conforme as Configurações": o alvo, a parte e o momento do formulário não valem (ficam desabilitados).
 function syncExit() {
     const manual = $('btExit').value === 'manual';
     $('btTarget').disabled = !manual;
     $('btFraction').disabled = !manual;
+    $('btTiming').disabled = !manual;
 }
 
 // Alocação por classe: as metas aparecem no lugar do "Máx. de ativos".
@@ -182,7 +186,7 @@ async function run() {
     const params = new URLSearchParams({
         ticker: $('btTicker').value.trim(), market: $('btMarket').value,
         target: $('btTarget').value, fraction: $('btFraction').value, amount: $('btAmount').value,
-        strict: $('btStrict').checked ? '1' : '0', saida: $('btExit').value
+        strict: $('btStrict').checked ? '1' : '0', saida: $('btExit').value, momento: $('btTiming').value
     });
     // Período: só entra na consulta (e na URL) quando preenchido.
     if ($('btFrom').value) params.set('from', $('btFrom').value);
@@ -219,7 +223,7 @@ function render(d) {
     $('btTitle').innerText = `${d.ticker} — ${d.name}`;
     $('btSubtitle').innerText = `${d.kindLabel} · ${d.period} (${fmtNum(d.stats.periodSessions, 0)} pregões, ≈ ${d.stats.periodDuration}) · ${d.rule.text}${d.strict ? ' Com candle de rejeição.' : ''}`;
     $('btLegend').innerHTML = priceLegend();
-    $('btEquityLegend').innerHTML = `<span><i class="swatch-line" style="background:${COLORS.profit}"></i>${d.equityB ? `Com venda parcial (${fmtNum(d.rule.fraction, 0)}% em +${fmtNum(d.rule.target, 1)}%) + regra B` : 'Estratégia escolhida'}</span>`
+    $('btEquityLegend').innerHTML = `<span><i class="swatch-line" style="background:${COLORS.profit}"></i>${d.equityB ? `Com venda parcial (${fmtNum(d.rule.fraction, 0)}% ${d.rule.timing === 'forca' ? 'depois de' : 'em'} +${fmtNum(d.rule.target, 1)}%${d.rule.timing === 'forca' ? ', quando a alta perde força' : ''}) + regra B` : 'Estratégia escolhida'}</span>`
         + (d.equityB ? `<span><i class="swatch-line" style="background:${COLORS.profitB}"></i>Só a regra B</span>` : '');
     $('btCompareChart').innerText = d.compare || '';
     $('btChartNote').innerText = `Lucro (ganho ou perda) somado de todas as compras, já descontado o valor investido, com ${fmtBRL(d.stats.amount)} em cada compra; a parte ainda aberta é marcada pelo fechamento do dia.`
@@ -462,7 +466,7 @@ function portfolioBody() {
         position: $('pfPosition').value, maxAssets: $('pfMaxAssets').value, topN: $('pfTopN').value, liquidity: $('pfLiquidity').value,
         cost: $('pfCost').value, target: $('btTarget').value,
         fraction: $('btFraction').value, from: $('btFrom').value, to: $('btTo').value, strict: $('btStrict').checked, cdi: $('pfCdi').checked, ir: $('pfTax').checked,
-        saida: $('btExit').value, indicacao: $('pfAdvice').checked, alocacao: $('pfAlloc').value,
+        saida: $('btExit').value, momento: $('btTiming').value, indicacao: $('pfAdvice').checked, alocacao: $('pfAlloc').value,
         metas: Object.fromEntries(META_GROUPS.map(g => [g, $(`pfMeta_${g}`).value])),
         janela: $('pfRobustWindow').value
     };

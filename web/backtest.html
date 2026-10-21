@@ -141,7 +141,7 @@
                 <fieldset class="bt-group">
                     <legend>Saída</legend>
                     <div class="bt-fields">
-                        <label class="field"><span>Saída <span class="tip" tabindex="0" data-tip="Conforme as Configurações: cada tipo de ativo sai pela regra escolhida na aba Configurações (venda parcial no alvo + reversão, ou só a reversão). Informada aqui: o alvo e a parte vendida abaixo valem para todos os ativos." aria-label="Ajuda: Conforme as Configurações: cada tipo de ativo sai pela regra escolhida na aba Configurações (venda parcial no alvo + reversão, ou só a reversão). Informada aqui: o alvo e a parte vendida abaixo valem para todos os ativos.">?</span></span>
+                        <label class="field"><span>Saída <span class="tip" tabindex="0" data-tip="Conforme as Configurações: cada tipo de ativo sai pela regra escolhida na aba Configurações (venda parcial no alvo + reversão, venda parcial quando a alta perder força + reversão, ou só a reversão). Informada aqui: o alvo, a parte vendida e o momento da venda parcial abaixo valem para todos os ativos." aria-label="Ajuda: Conforme as Configurações: cada tipo de ativo sai pela regra escolhida na aba Configurações (venda parcial no alvo + reversão, venda parcial quando a alta perder força + reversão, ou só a reversão). Informada aqui: o alvo, a parte vendida e o momento da venda parcial abaixo valem para todos os ativos.">?</span></span>
                         <select id="btExit" class="select">
                             <option value="config">Conforme as Configurações</option>
                             <option value="manual">Informada aqui</option>
@@ -152,6 +152,12 @@
                     </label>
                         <label class="field"><span>Parte vendida no alvo (%) <span class="tip" tabindex="0" data-tip="Quanto de cada compra é vendido ao atingir o alvo. 50 = metade; 0 = nunca vende parcial, só pela regra B; 100 = vende tudo no alvo." aria-label="Ajuda: Quanto de cada compra é vendido ao atingir o alvo. 50 = metade; 0 = nunca vende parcial, só pela regra B; 100 = vende tudo no alvo.">?</span></span>
                         <input type="number" id="btFraction" class="select" min="0" max="100" step="5" value="50" inputmode="decimal">
+                    </label>
+                        <label class="field"><span>Momento da venda parcial <span class="tip" tabindex="0" data-tip="No alvo: vende a parte assim que a máxima do pregão toca o alvo. Quando a alta perder força: depois de tocar o alvo, mantém tudo enquanto a alta está forte e vende a parte na abertura seguinte ao primeiro fechamento com menos de 1 ATR acima da MM20 ou RSI abaixo de 65, se esse fechamento ainda estiver no alvo ou acima. Nos backtests de carteira (ações, 2017 a 2026, com IR), vender quando a alta perde força rendeu mais na maioria dos períodos." aria-label="Ajuda: No alvo: vende a parte assim que a máxima do pregão toca o alvo. Quando a alta perder força: depois de tocar o alvo, mantém tudo enquanto a alta está forte e vende a parte na abertura seguinte ao primeiro fechamento com menos de 1 ATR acima da MM20 ou RSI abaixo de 65, se esse fechamento ainda estiver no alvo ou acima. Nos backtests de carteira (ações, 2017 a 2026, com IR), vender quando a alta perde força rendeu mais na maioria dos períodos.">?</span></span>
+                        <select id="btTiming" class="select">
+                            <option value="forca">Quando a alta perder força</option>
+                            <option value="alvo">No alvo</option>
+                        </select>
                     </label>
                     </div>
                 </fieldset>
@@ -279,7 +285,8 @@
                 </div>
                 <div>
                     <dt>Venda parcial</dt>
-                    <dd><p>Cada compra vende a parte escolhida quando a máxima de um pregão posterior ao da compra atinge o alvo: pelo preço do alvo, ou pela abertura se o pregão já abriu acima dele.</p></dd>
+                    <dd><p>No alvo: cada compra vende a parte escolhida quando a máxima de um pregão posterior ao da compra atinge o alvo, pelo preço do alvo, ou pela abertura se o pregão já abriu acima dele.</p>
+                        <p>Quando a alta perder força: depois de atingir o alvo, a compra vende a parte na abertura do pregão seguinte ao primeiro fechamento com menos de 1 ATR acima da MM20 ou RSI abaixo de 65 que ainda esteja no alvo ou acima. Se a regra B disparar antes, a compra sai inteira.</p></dd>
                 </div>
                 <div>
                     <dt>Saída (regra B)</dt>

@@ -111,7 +111,7 @@ class PartialExitTest(unittest.TestCase):
         partial = pf.partial_to_sell(lots, "b3")
         self.assertEqual({k: partial[k] for k in ("quantity", "lots", "target", "fraction", "rounded")},
                          {"quantity": 50, "lots": 1, "target": 10.0, "fraction": 50.0, "rounded": False})
-        self.assertEqual(partial["due"], [{"date": "2024-01-02", "price": 10, "hitDate": "2024-01-04"}])
+        self.assertEqual(partial["due"], [{"date": "2024-01-02", "price": 10, "hitDate": "2024-01-04", "dueDate": "2024-01-04"}])
 
     def test_sale_after_the_target_settles_the_partial(self):
         txs = [tx("2024-01-02", "compra", 100, 10), tx("2024-01-05", "venda", 50, 11)]
@@ -205,7 +205,7 @@ class StrengthTextTest(unittest.TestCase):
         money = lambda v: f"R$ {v:.2f}"
         strong = pf._strength_text({"strong": True, "rsi": 72.0, "atrAboveMm20": 1.8, "mm20": 52.81}, money)
         self.assertIn("A alta ainda está forte", strong)
-        self.assertIn("abaixo da MM20 (hoje R$ 52.81)", strong)
+        self.assertIn("Venda parcial quando a alta perder força", strong)
         faded = pf._strength_text({"strong": False, "rsi": 55.0, "atrAboveMm20": 0.4, "mm20": 52.81}, money)
         self.assertIn("já perdeu força", faded)
 

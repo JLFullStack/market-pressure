@@ -85,6 +85,10 @@ class ServerTest(DatabaseTestCase):
         status, data, _ = self.request("GET", "/api/backtest?ticker=petr4&target=10&fraction=50")
         self.assertEqual(status, 200)
         self.assertEqual((data["ticker"], data["kind"], data["rule"]["fraction"]), ("PETR4", "acoes", 50))
+        self.assertEqual(data["rule"]["timing"], "forca")   # ações: parcial quando a alta perde força (padrão)
+        manual = self.request("GET", "/api/backtest?ticker=PETR4&saida=manual&target=10&fraction=50&momento=alvo")[1]
+        self.assertEqual(manual["rule"]["timing"], "alvo")
+        self.assertEqual(self.request("GET", "/api/backtest?ticker=PETR4&saida=manual&momento=x")[0], 400)
         self.assertEqual(len(data["candles"]), len(data["equity"]))
         self.assertTrue(data["lots"])
         self.assertEqual(data["stats"]["lots"], len(data["lots"]))
