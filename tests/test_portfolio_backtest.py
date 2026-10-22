@@ -76,6 +76,9 @@ class PortfolioBacktestTest(DatabaseTestCase):
         self.assertTrue(all(t["rank"] == 1 for t in result["trades"]))
         self.assertEqual(set(result["markers"]), {t["ticker"] for t in result["trades"]})
         self.assertEqual(sum(a["trades"] for a in result["assets"]), len(result["trades"]))
+        ranking = result["profitRanking"]  # gráfico "Lucro por ativo": do maior lucro ao maior prejuízo
+        self.assertEqual([r["profit"] for r in ranking], sorted((r["profit"] for r in ranking), reverse=True))
+        self.assertTrue(all(r["profit"] != 0 for r in ranking))
 
     def test_invalid_parameters(self):
         for kw in ({"tickers": ""}, {"position": "0"}, {"universe": "x"}, {"from": "2021-12-01", "to": "2021-11-01"},

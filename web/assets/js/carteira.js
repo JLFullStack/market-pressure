@@ -47,38 +47,6 @@ const PATRIMONY_SERIES = [
 const CLASS_COLORS = { 'Ações': '#4f8dff', 'Fundos imobiliários': '#3ddc97', 'ETFs Brasil': '#ffc65c', 'Internacionais': '#a78bfa', 'Renda fixa': '#22d3ee' };
 const EXTRA_COLORS = ['#f472b6', '#ff8a5b', '#94a3b8'];
 const classColor = (name, k = 0) => CLASS_COLORS[name] || EXTRA_COLORS[k % EXTRA_COLORS.length];
-// Visual comum dos gráficos (Chart.js): grade, tooltip escuro e animação de entrada.
-const CHART_GRID = 'rgba(120, 150, 210, 0.1)';
-const CHART_ENTER = { duration: 900, easing: 'easeOutQuart' };
-const chartTooltip = () => ({
-    backgroundColor: 'rgba(10, 16, 32, 0.95)', borderColor: cssVar('--border-strong'), borderWidth: 1,
-    titleColor: cssVar('--text-color'), bodyColor: cssVar('--text-color'), padding: 12, cornerRadius: 10,
-    titleFont: { weight: '700' }, caretSize: 6,
-});
-// Preenchimento em degradê vertical (cor cheia em cima, alpha embaixo) para barras e áreas.
-const verticalGradient = (color, topAlpha = 1, bottomAlpha = 0.45) => (ctx) => {
-    const { chart } = ctx;
-    if (!chart.chartArea) return color;
-    const { top, bottom } = chart.chartArea;
-    const g = chart.ctx.createLinearGradient(0, top, 0, bottom);
-    g.addColorStop(0, hexAlpha(color, topAlpha));
-    g.addColorStop(1, hexAlpha(color, bottomAlpha));
-    return g;
-};
-// Mesmo degradê, na horizontal (barras deitadas): mais transparente à esquerda.
-const horizontalGradient = (color, leftAlpha = 0.5, rightAlpha = 1) => (ctx) => {
-    const { chart } = ctx;
-    if (!chart.chartArea) return color;
-    const { left, right } = chart.chartArea;
-    const g = chart.ctx.createLinearGradient(left, 0, right, 0);
-    g.addColorStop(0, hexAlpha(color, leftAlpha));
-    g.addColorStop(1, hexAlpha(color, rightAlpha));
-    return g;
-};
-const hexAlpha = (hex, a) => {
-    const n = parseInt(hex.slice(1), 16);
-    return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-};
 const PATRIMONY_MODES = { valor: 'Aplicado e ganho', classes: 'Por classe' };
 const APORTE_MODES = { todos: 'Todos os ativos da carteira', escolher: 'Escolher ativos', pullback: 'Pelas regras do pullback' };
 // Indicação da posição (COMPRAR, VENDER, MANTER; portfolio.position_signal: statusKey) → badge.
@@ -1141,7 +1109,6 @@ const crosshairPlugin = {
     }
 };
 
-const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 // Cria o gráfico do canvas quando o painel dele aparece na tela (onReveal, em core.js), para a
 // animação de entrada acontecer à vista. Um novo pedido para o mesmo canvas antes disso

@@ -40,10 +40,12 @@
         </div>
     </header>
 
-    <div class="panel">
+    <section class="panel hero" data-reveal>
+        <div class="hero-aurora" aria-hidden="true"></div>
         <div class="header-panel">
-            <div>
-                <h1>🧪 Backtest</h1>
+            <div class="hero-title">
+                <div class="eyebrow">Backtest · estratégia Garrafa de Gás</div>
+                <h1>Laboratório de estratégia</h1>
                 <div class="subtitle" id="btHeaderText">Cada compra (lote) do setup no histórico do ativo, com a venda parcial e a saída pela regra B</div>
             </div>
             <div class="seg" role="group" aria-label="Tipo de backtest" id="btMode">
@@ -71,7 +73,7 @@
                             <option value="fundos">Fundos listados</option>
                             <option value="etfs">ETFs</option>
                             <option value="bdrs">BDRs</option>
-                            <option value="todos">Todos os tipos</option>
+                            <option value="todos" selected>Todos os tipos</option>
                             <option value="lista">Lista de ativos</option>
                         </select>
                     </label>
@@ -103,7 +105,7 @@
                         <input type="number" id="pfInitial" class="select" min="100" step="1000" value="10000" inputmode="decimal">
                     </label>
                         <label class="field" data-mode="carteira" hidden><span>Aporte mensal (R$) <span class="tip" tabindex="0" data-tip="Dinheiro novo no primeiro pregão de cada mês (0 = sem aportes). O BOVA11 e o CDI de comparação recebem os mesmos aportes." aria-label="Ajuda: Dinheiro novo no primeiro pregão de cada mês (0 = sem aportes). O BOVA11 e o CDI de comparação recebem os mesmos aportes.">?</span></span>
-                        <input type="number" id="pfMonthly" class="select" min="0" step="100" value="0" inputmode="decimal">
+                        <input type="number" id="pfMonthly" class="select" min="0" step="100" value="2000" inputmode="decimal">
                     </label>
                         <label class="field" data-mode="carteira" hidden><span>Fatia por compra (%) <span class="tip" tabindex="0" data-tip="Quanto do patrimônio do dia vai em cada compra. 10 = cada compra usa 10% do patrimônio (o lucro passa a comprar mais: juros compostos). Só compra se houver caixa para pelo menos metade da fatia." aria-label="Ajuda: Quanto do patrimônio do dia vai em cada compra. 10 = cada compra usa 10% do patrimônio (o lucro passa a comprar mais: juros compostos). Só compra se houver caixa para pelo menos metade da fatia.">?</span></span>
                         <input type="number" id="pfPosition" class="select" min="1" max="100" step="1" value="10" inputmode="decimal">
@@ -119,7 +121,7 @@
                         <label class="field" data-mode="carteira" hidden><span>Alocação <span class="tip" tabindex="0" data-tip="Máx. de ativos: compra enquanto houver caixa, com um limite de ativos diferentes. Metas por classe: cada classe (a mesma da Carteira) só compra até a sua meta em % do patrimônio, sem limite de ativos, como na carteira 60/40." aria-label="Ajuda: Máx. de ativos: compra enquanto houver caixa, com um limite de ativos diferentes. Metas por classe: cada classe (a mesma da Carteira) só compra até a sua meta em % do patrimônio, sem limite de ativos, como na carteira 60/40.">?</span></span>
                         <select id="pfAlloc" class="select">
                             <option value="ativos">Máx. de ativos</option>
-                            <option value="classes">Metas por classe</option>
+                            <option value="classes" selected>Metas por classe</option>
                         </select>
                     </label>
                         <label class="field" data-mode="carteira" data-alloc="ativos" hidden><span>Máx. de ativos <span class="tip" tabindex="0" data-tip="Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam." aria-label="Ajuda: Quantos ativos diferentes a carteira pode ter ao mesmo tempo. Recompras num ativo que já está na carteira não contam.">?</span></span>
@@ -175,7 +177,7 @@
                     <div class="bt-checks">
                         <label class="toggle" data-mode="carteira" hidden><input type="checkbox" id="pfAdvice" checked> Seguir a Indicação do Screener <span class="tip" tabindex="0" data-tip="Como na vida real: pula as compras que o Screener indicaria AGUARDAR (ações com tendência fraca ou mais fracas que o Ibovespa em 6 meses; os internacionais não são filtrados) e compra uma fatia 1,5x maior quando a compra tem prioridade (Top 5 do tipo ou Score 65 ou mais)." aria-label="Ajuda: Como na vida real: pula as compras que o Screener indicaria AGUARDAR (ações com tendência fraca ou mais fracas que o Ibovespa em 6 meses; os internacionais não são filtrados) e compra uma fatia 1,5x maior quando a compra tem prioridade (Top 5 do tipo ou Score 65 ou mais).">?</span></label>
                         <label class="toggle" data-mode="carteira" hidden><input type="checkbox" id="pfCdi" checked> Caixa rende CDI <span class="tip" tabindex="0" data-tip="O dinheiro parado (esperando sinal) rende o CDI do dia, como num Tesouro Selic ou CDB de liquidez diária." aria-label="Ajuda: O dinheiro parado (esperando sinal) rende o CDI do dia, como num Tesouro Selic ou CDB de liquidez diária.">?</span></label>
-                        <label class="toggle" data-mode="carteira" hidden><input type="checkbox" id="pfTax"> Descontar imposto de renda <span class="tip" tabindex="0" data-tip="Desconta o imposto de renda das vendas: 15% sobre o ganho líquido do mês em ações, ETFs e BDRs (ações isentas quando as vendas de ações do mês somam até R$ 20 mil), 20% em fundos imobiliários, prejuízo compensado nos meses seguintes, pago no mês seguinte. O resultado também mostra o lucro líquido vendendo tudo no último dia; os índices e o CDI pagam 15% sobre o ganho só nessa venda. O CDI do caixa rende 15% a menos (imposto da renda fixa). Não inclui o imposto de JCP e de proventos de BDRs." aria-label="Ajuda: Desconta o imposto de renda das vendas: 15% sobre o ganho líquido do mês em ações, ETFs e BDRs (ações isentas quando as vendas de ações do mês somam até R$ 20 mil), 20% em fundos imobiliários, prejuízo compensado nos meses seguintes, pago no mês seguinte. O resultado também mostra o lucro líquido vendendo tudo no último dia; os índices e o CDI pagam 15% sobre o ganho só nessa venda. O CDI do caixa rende 15% a menos (imposto da renda fixa). Não inclui o imposto de JCP e de proventos de BDRs.">?</span></label>
+                        <label class="toggle" data-mode="carteira" hidden><input type="checkbox" id="pfTax" checked> Descontar imposto de renda <span class="tip" tabindex="0" data-tip="Desconta o imposto de renda das vendas: 15% sobre o ganho líquido do mês em ações, ETFs e BDRs (ações isentas quando as vendas de ações do mês somam até R$ 20 mil), 20% em fundos imobiliários, prejuízo compensado nos meses seguintes, pago no mês seguinte. O resultado também mostra o lucro líquido vendendo tudo no último dia; os índices e o CDI pagam 15% sobre o ganho só nessa venda. O CDI do caixa rende 15% a menos (imposto da renda fixa). Não inclui o imposto de JCP e de proventos de BDRs." aria-label="Ajuda: Desconta o imposto de renda das vendas: 15% sobre o ganho líquido do mês em ações, ETFs e BDRs (ações isentas quando as vendas de ações do mês somam até R$ 20 mil), 20% em fundos imobiliários, prejuízo compensado nos meses seguintes, pago no mês seguinte. O resultado também mostra o lucro líquido vendendo tudo no último dia; os índices e o CDI pagam 15% sobre o ganho só nessa venda. O CDI do caixa rende 15% a menos (imposto da renda fixa). Não inclui o imposto de JCP e de proventos de BDRs.">?</span></label>
                         <label class="toggle"><input type="checkbox" id="btStrict"> Exigir candle de rejeição <span class="tip" tabindex="0" data-tip="Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener." aria-label="Ajuda: Só compra quando o candle do sinal é de rejeição (doji, martelo ou corpo estreito), como a opção do screener.">?</span></label>
                     </div>
                 </fieldset>
@@ -203,15 +205,15 @@
             </ul>
             <div class="form-msg" id="btMsg" role="status" aria-live="polite"></div>
         </form>
-    </div>
+    </section>
 
     <div id="btResult" hidden>
-        <div class="panel">
+        <div class="panel" data-reveal>
             <div class="panel-head">
-                <div>
+                <div class="result-head"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3v18M17 3v18"/><rect x="5" y="7" width="4" height="8" rx="1"/><rect x="15" y="9" width="4" height="7" rx="1"/></svg></span><div>
                     <h2 id="btTitle"></h2>
                     <div class="small muted" id="btSubtitle"></div>
-                </div>
+                </div></div>
                 <div class="bt-head-actions">
                     <div class="bt-analyze"><span class="copy-wrap"><button type="button" class="btn-analyze copy-analysis" id="btAnalyzeBtn">ANALISAR BACKTEST</button> <span class="tip" tabindex="0" data-tip="Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui." aria-label="Ajuda: Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui.">?</span></span></div>
                     <div class="seg" role="group" aria-label="Tipo de gráfico" id="chartType">
@@ -221,22 +223,30 @@
                 </div>
             </div>
             <div class="bt-legend" id="btLegend"></div>
-            <div class="bt-chart" id="priceChart" role="img" aria-label="Gráfico de preço com médias móveis e as compras e vendas de cada lote"></div>
+            <div class="bt-chart" data-reveal="wipe" id="priceChart" role="img" aria-label="Gráfico de preço com médias móveis e as compras e vendas de cada lote"></div>
             <h3 class="bt-subhead">Lucro acumulado no período (R$) <span class="tip" tabindex="0" data-tip="Quanto você teria ganho (ou perdido) até cada dia, já descontado o valor investido: o que já foi vendido pelo preço de venda e o que segue aberto pelo fechamento do dia. Uma linha por estratégia, com o mesmo valor por compra." aria-label="Ajuda: lucro acumulado no período">?</span></h3>
             <div class="bt-legend" id="btEquityLegend"></div>
-            <div class="bt-chart bt-chart-small" id="equityChart" role="img" aria-label="Soma do resultado dos lotes ao longo do tempo"></div>
+            <div class="bt-chart bt-chart-small" data-reveal="wipe" id="equityChart" role="img" aria-label="Soma do resultado dos lotes ao longo do tempo"></div>
             <p class="bt-compare" id="btCompareChart" role="status"></p>
             <p class="small muted" id="btChartNote"></p>
         </div>
 
-        <div class="panel">
-            <h2>Resumo</h2>
-            <div class="kpis" id="btKpis"></div>
+        <div class="panel" data-reveal>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><h2>Resumo</h2></div>
+            <div class="kpis kpi-cards bt-kpis" id="btKpis"></div>
             <p class="small muted" id="btCompare"></p>
         </div>
 
-        <div class="panel">
-            <h2>Lotes</h2>
+        <div class="panel" data-reveal>
+            <div class="panel-head">
+                <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 20V10M10 20V5M15 20v-7M20 20V8"/></svg></span><h2>Resultado de cada compra</h2></div>
+                <span class="small muted">verde: lucro · vermelho: prejuízo · tom claro: compra ainda aberta</span>
+            </div>
+            <div class="chart-wrap chart-small" data-reveal="late"><canvas id="btLotsChart" role="img" aria-label="Resultado em % de cada compra (lote), na ordem em que aconteceram"></canvas></div>
+        </div>
+
+        <div class="panel" data-reveal>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></span><h2>Lotes</h2></div>
             <div class="table-container">
                 <table>
                     <thead>
@@ -277,7 +287,7 @@
             </ul>
         </div>
 
-        <details class="panel method">
+        <details class="panel method" data-reveal>
             <summary>Como o backtest funciona</summary>
             <dl class="method-list">
                 <div>
@@ -302,19 +312,20 @@
         </details>
     </div>
     <div id="pfRobust" hidden>
-        <div class="panel">
+        <div class="panel" data-reveal>
             <div class="panel-head bt-result-head">
-                <div>
+                <div class="result-head"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><div>
                     <h2 id="pfRobustTitle">Robustez</h2>
                     <div class="small muted" id="pfRobustSubtitle"></div>
-                </div>
+                </div></div>
                 <div class="bt-analyze"><span class="copy-wrap"><button type="button" class="btn-analyze copy-analysis" id="pfRobustAnalyzeBtn">ANALISAR BACKTEST</button> <span class="tip" tabindex="0" data-tip="Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui." aria-label="Ajuda: Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui.">?</span></span></div>
             </div>
+            <details class="warn-details" id="pfRobustWarnings" hidden></details>
             <p class="bt-compare" id="pfRobustVerdict" role="status"></p>
-            <div class="kpis" id="pfRobustKpis"></div>
+            <div class="kpis kpi-cards bt-kpis" id="pfRobustKpis"></div>
             <ul class="notes" id="pfRobustSummary"></ul>
             <h3 class="bt-subhead">Retorno ao ano em cada período <span class="tip" tabindex="0" data-tip="Taxa interna de retorno de cada período, que leva em conta quando cada aporte entrou. Compara melhor que o lucro em reais, que cresce com o tempo e com os aportes." aria-label="Ajuda: Taxa interna de retorno de cada período, que leva em conta quando cada aporte entrou. Compara melhor que o lucro em reais, que cresce com o tempo e com os aportes.">?</span></h3>
-            <div class="robust-chart"><canvas id="pfRobustChart" role="img" aria-label="Retorno ao ano da estratégia, da regra B sozinha, do BOVA11 e do CDI em cada período"></canvas></div>
+            <div class="robust-chart" data-reveal="late"><canvas id="pfRobustChart" role="img" aria-label="Retorno ao ano da estratégia, da regra B sozinha, do BOVA11 e do CDI em cada período"></canvas></div>
             <div class="table-container">
                 <table class="sticky-first">
                     <thead id="pfRobustHead"></thead>
@@ -333,33 +344,47 @@
     </div>
     <div id="pfResult" hidden>
         <p class="banner" id="pfWarnings" role="status"></p>
-        <div class="panel">
+        <div class="panel" data-reveal>
             <div class="panel-head bt-result-head">
-                <div>
+                <div class="result-head"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 6V4h10v2"/></svg></span><div>
                     <h2 id="pfTitle"></h2>
                     <div class="small muted" id="pfSubtitle"></div>
-                </div>
+                </div></div>
                 <div class="bt-analyze"><span class="copy-wrap"><button type="button" class="btn-analyze copy-analysis" id="pfAnalyzeBtn">ANALISAR BACKTEST</button> <span class="tip" tabindex="0" data-tip="Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui." aria-label="Ajuda: Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente e cético com backtests e entrega a configuração, as regras da estratégia, o que o app já testou e todos os números deste resultado, para uma nota da qualidade do resultado e das regras, os riscos e vieses e melhorias que dá para testar aqui.">?</span></span></div>
             </div>
             <h3 class="bt-subhead">Lucro acumulado (R$) <span class="tip" tabindex="0" data-tip="Patrimônio da carteira menos tudo o que foi aportado, dia a dia: só o ganho (ou a perda). Uma linha por estratégia; BOVA11 e CDI recebem os mesmos aportes, nas mesmas datas." aria-label="Ajuda: Patrimônio da carteira menos tudo o que foi aportado, dia a dia: só o ganho (ou a perda). Uma linha por estratégia; BOVA11 e CDI recebem os mesmos aportes, nas mesmas datas.">?</span></h3>
             <div class="bt-legend" id="pfLegend"></div>
-            <div class="bt-chart" id="pfChart" role="img" aria-label="Lucro acumulado de cada estratégia, do BOVA11 e do CDI ao longo do período"></div>
+            <div class="bt-chart" data-reveal="wipe" id="pfChart" role="img" aria-label="Lucro acumulado de cada estratégia, do BOVA11 e do CDI ao longo do período"></div>
             <p class="bt-compare" id="pfCompare" role="status"></p>
             <p class="small muted" id="pfNote"></p>
         </div>
 
-        <div class="panel">
-            <h2 id="pfSummaryTitle">Resumo</h2>
-            <div class="kpis" id="pfKpis"></div>
+        <div class="panel" data-reveal>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><h2 id="pfSummaryTitle">Resumo</h2></div>
+            <div class="kpis kpi-cards bt-kpis" id="pfKpis"></div>
             <p class="small muted" id="pfOnlyB"></p>
         </div>
 
-        <div class="panel">
+        <div class="chart-grid">
+            <div class="panel" data-reveal>
+                <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span><h2>Rentabilidade por ano</h2></div>
+                <div class="chart-wrap chart-small" data-reveal="late"><canvas id="pfYearsChart" role="img" aria-label="Rentabilidade de cada estratégia em cada ano"></canvas></div>
+            </div>
+            <div class="panel" data-reveal>
+                <div class="panel-head">
+                    <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 8-8M15 7h5v5"/></svg></span><h2>Lucro por ativo</h2></div>
+                    <span class="small muted">os que mais ganharam e os que mais perderam</span>
+                </div>
+                <div class="chart-wrap chart-small" data-reveal="late"><canvas id="pfAssetsChart" role="img" aria-label="Lucro da carteira nos ativos que mais ganharam e nos que mais perderam"></canvas></div>
+            </div>
+        </div>
+
+        <div class="panel" data-reveal>
             <div class="panel-head">
-                <div>
+                <div class="result-head"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3v18M17 3v18"/><rect x="5" y="7" width="4" height="8" rx="1"/><rect x="15" y="9" width="4" height="7" rx="1"/></svg></span><div>
                     <h2>Operações no gráfico <span class="tip" tabindex="0" data-tip="Escolha um ativo para ver o gráfico dele no período com as compras (C), vendas parciais (P) e saídas pela regra B (V) que a carteira fez nele. Clicar numa operação da tabela abaixo também abre o gráfico nela." aria-label="Ajuda: Escolha um ativo para ver o gráfico dele no período com as compras (C), vendas parciais (P) e saídas pela regra B (V) que a carteira fez nele. Clicar numa operação da tabela abaixo também abre o gráfico nela.">?</span></h2>
                     <div class="small muted" id="pfChartInfo"></div>
-                </div>
+                </div></div>
                 <div class="seg" role="group" aria-label="Tipo de gráfico" id="pfChartType">
                     <button type="button" data-type="candles" aria-pressed="true">Candles</button>
                     <button type="button" data-type="line" aria-pressed="false">Linha</button>
@@ -371,12 +396,12 @@
                 </label>
             </div>
             <div class="bt-legend" id="pfPriceLegend"></div>
-            <div class="bt-chart" id="pfPriceChart" role="img" aria-label="Gráfico de preço do ativo com as compras e vendas da carteira"></div>
+            <div class="bt-chart" data-reveal="wipe" id="pfPriceChart" role="img" aria-label="Gráfico de preço do ativo com as compras e vendas da carteira"></div>
             <p class="small muted" id="pfChartMsg" role="status"></p>
         </div>
 
-        <div class="panel">
-            <h2>Ano a ano <span class="tip" tabindex="0" data-tip="Quanto cada estratégia ganhou em cada ano civil: lucro em reais (patrimônio no fim do ano − patrimônio no início − aportes do ano) e rentabilidade em %, que desconta os aportes (como a rentabilidade de uma carteira ou de um fundo). O primeiro e o último ano podem ser parciais." aria-label="Ajuda: Quanto cada estratégia ganhou em cada ano civil: lucro em reais (patrimônio no fim do ano − patrimônio no início − aportes do ano) e rentabilidade em %, que desconta os aportes (como a rentabilidade de uma carteira ou de um fundo). O primeiro e o último ano podem ser parciais.">?</span></h2>
+        <div class="panel" data-reveal>
+            <h2 class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span><span>Ano a ano</span> <span class="tip" tabindex="0" data-tip="Quanto cada estratégia ganhou em cada ano civil: lucro em reais (patrimônio no fim do ano − patrimônio no início − aportes do ano) e rentabilidade em %, que desconta os aportes (como a rentabilidade de uma carteira ou de um fundo). O primeiro e o último ano podem ser parciais." aria-label="Ajuda: Quanto cada estratégia ganhou em cada ano civil: lucro em reais (patrimônio no fim do ano − patrimônio no início − aportes do ano) e rentabilidade em %, que desconta os aportes (como a rentabilidade de uma carteira ou de um fundo). O primeiro e o último ano podem ser parciais.">?</span></h2>
             <div class="table-container">
                 <table class="pf-years sticky-first">
                     <thead id="pfYearsHead"></thead>
@@ -386,8 +411,8 @@
             <p class="small muted" id="pfYearsNote"></p>
         </div>
 
-        <div class="panel">
-            <h2>Comparação</h2>
+        <div class="panel" data-reveal>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h10M4 12h16M4 17h7"/></svg></span><h2>Comparação</h2></div>
             <div class="table-container">
                 <table class="sticky-first">
                     <thead id="pfCompareHead"></thead>
@@ -396,8 +421,8 @@
             </div>
         </div>
 
-        <div class="panel">
-            <h2 id="pfTradesTitle">Operações</h2>
+        <div class="panel" data-reveal>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></span><h2 id="pfTradesTitle">Operações</h2></div>
             <div class="table-container">
                 <table class="sticky-two rank-merge">
                     <thead>
@@ -435,7 +460,7 @@
             </nav>
         </div>
 
-        <details class="panel method">
+        <details class="panel method" data-reveal>
             <summary>Como o backtest de carteira funciona</summary>
             <dl class="method-list">
                 <div>

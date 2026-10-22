@@ -12,14 +12,14 @@
 //        -> botão "ANALISAR BACKTEST": o texto para a IA, com os parâmetros do resultado mostrado
 // Aqui só se desenham os gráficos e as tabelas.
 
-// Cores (validadas sobre o fundo #161b22 do painel). Médias como no TradingView do usuário:
+// Cores (sobre o fundo #0e1527 do painel). Médias como no TradingView do usuário:
 // MM20 laranja, MM50 azul, MM200 roxa.
 const COLORS = {
-    up: '#26a69a', down: '#ef5350', close: '#c9d1d9',
-    mm20: '#e3a33b', mm50: '#3987e5', mm200: '#a371f7',
-    buy: '#3fb950', partial: '#e3b341', exit: '#f85149',
-    profit: '#58a6ff', profitB: '#e3a33b', zero: '#8b949e',
-    grid: '#21262d', border: '#30363d', text: '#c9d1d9', panel: '#161b22'
+    up: '#3ddc97', down: '#ff6b6b', close: '#dce5f5',
+    mm20: '#ffb057', mm50: '#5aa2ff', mm200: '#a78bfa',
+    buy: '#3ddc97', partial: '#ffc65c', exit: '#ff6b6b',
+    profit: '#5aa2ff', profitB: '#ffb057', zero: '#8a99b6',
+    grid: 'rgba(120, 150, 210, 0.08)', border: '#1f2b46', text: '#dce5f5', panel: '#0e1527', crosshair: '#5aa2ff'
 };
 const MA_LABEL = { mm20: 'MM20', mm50: 'MM50', mm200: 'MM200' };
 // Marcador de cada evento de lote (o rótulo, ex. "C3" ou "V1–4", vem pronto do servidor).
@@ -31,7 +31,7 @@ const MARKER = {
 const CHART_KEY = 'marketpressure_backtest_grafico'; // "candles" | "line"
 const PAGE_SIZE_KEY = 'marketpressure_backtest_por_pagina'; // linhas por página das tabelas de lotes e de operações
 // Linhas do gráfico do modo Carteira, por estratégia (chave do servidor).
-const PF_COLORS = { rule: '#58a6ff', onlyB: '#e3a33b', bova: '#3fb950', ivvb: '#a371f7', mix: '#39c5cf', cdi: '#8b949e' };
+const PF_COLORS = { rule: '#5aa2ff', onlyB: '#ffb057', bova: '#4ad991', ivvb: '#a78bfa', mix: '#22d3ee', cdi: '#94a3b8' };
 // Linhas da tabela de comparação do modo Carteira: [rótulo, ajuda, campo, formato].
 const PF_ROWS = [
     ['Patrimônio final', 'Valor da carteira no último dia: caixa + ativos pelo fechamento.', 'final', 'brl'],
@@ -57,11 +57,12 @@ const $ = (id) => document.getElementById(id);
 const signClass = (v) => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
 const state = { data: null, type: 'candles', price: null, equity: null, series: {}, seq: 0, mode: 'ativo', pfChart: null,
                 pf: null, robust: null, robustChart: null, pfPrice: null, query: null, pfBody: null, robustBody: null, pfSeq: 0, pageSize: 25,
-                pages: { lots: 0, trades: 0 }, selected: { lots: null, trades: null } };
+                pages: { lots: 0, trades: 0 }, selected: { lots: null, trades: null }, charts: {}, chartSeq: {} };
 
 document.addEventListener('DOMContentLoaded', init);
 
 function init() {
+    observeReveal();
     try { state.type = localStorage.getItem(CHART_KEY) === 'line' ? 'line' : 'candles'; } catch (e) { /* sem preferência */ }
     setTypeButtons();
     $('btForm').addEventListener('submit', (ev) => { ev.preventDefault(); if (state.mode === 'carteira') runPortfolio(); else run(); });
@@ -220,8 +221,10 @@ async function run() {
 // ---------------------------------------------------------------- Renderização
 
 function render(d) {
+    replayReveal($('btResult')); // resultado novo: os blocos entram de novo ao aparecer
     $('btTitle').innerText = `${d.ticker} — ${d.name}`;
-    $('btSubtitle').innerText = `${d.kindLabel} · ${d.period} (${fmtNum(d.stats.periodSessions, 0)} pregões, ≈ ${d.stats.periodDuration}) · ${d.rule.text}${d.strict ? ' Com candle de rejeição.' : ''}`;
+    setChips($('btSubtitle'), [d.kindLabel, `${d.period} (${fmtNum(d.stats.periodSessions, 0)} pregões, ≈ ${d.stats.periodDuration})`,
+        d.rule.text, d.strict ? 'com candle de rejeição' : null]);
     $('btLegend').innerHTML = priceLegend();
     $('btEquityLegend').innerHTML = `<span><i class="swatch-line" style="background:${COLORS.profit}"></i>${d.equityB ? `Com venda parcial (${fmtNum(d.rule.fraction, 0)}% ${d.rule.timing === 'forca' ? 'depois de' : 'em'} +${fmtNum(d.rule.target, 1)}%${d.rule.timing === 'forca' ? ', quando a alta perde força' : ''}) + regra B` : 'Estratégia escolhida'}</span>`
         + (d.equityB ? `<span><i class="swatch-line" style="background:${COLORS.profitB}"></i>Só a regra B</span>` : '');
@@ -231,20 +234,24 @@ function render(d) {
         + (d.market === 'us' ? ' Ativo dos EUA: resultado em reais sem a variação do dólar.' : '');
     drawCharts(d);
     renderKpis(d);
+    renderLotsChart(d);
     state.pages.lots = 0;
     state.selected.lots = null;
+    $('lotsBody')._itemsSeen = false;
     renderLots(d);
     keepTipsWithText($('btResult') || document);
 }
 
 // O tamanho vem do contêiner (.bt-chart no CSS): autoSize acompanha a largura da página.
 function chartOptions() {
+    const line = { color: COLORS.crosshair, width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: '#2f6bff' };
     return {
-        layout: { background: { type: 'solid', color: COLORS.panel }, textColor: COLORS.text, fontSize: 12 },
+        layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#8a99b6', fontSize: 12,
+                  fontFamily: getComputedStyle(document.body).fontFamily },
         grid: { vertLines: { color: COLORS.grid }, horzLines: { color: COLORS.grid } },
-        rightPriceScale: { borderColor: COLORS.border },
-        timeScale: { borderColor: COLORS.border },
-        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        rightPriceScale: { borderVisible: false },
+        timeScale: { borderVisible: false },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal, vertLine: line, horzLine: line },
         localization: { locale: 'pt-BR', priceFormatter: (p) => fmtNum(p, 2) },
         autoSize: true
     };
@@ -261,7 +268,8 @@ function drawCharts(d) {
     // a mesma sem venda parcial (só a regra B). Linha tracejada no zero.
     const equity = state.equity = LightweightCharts.createChart($('equityChart'), chartOptions());
     const money = { type: 'custom', formatter: (v) => fmtBRL(v) };
-    const eq = equity.addLineSeries({ color: COLORS.profit, lineWidth: 2, priceFormat: money, title: d.equityB ? 'Com venda parcial' : '' });
+    const eq = equity.addAreaSeries({ lineColor: COLORS.profit, topColor: 'rgba(90, 162, 255, 0.35)', bottomColor: 'rgba(90, 162, 255, 0.02)',
+                                      lineWidth: 2, priceFormat: money, title: d.equityB ? 'Com venda parcial' : '' });
     eq.setData(d.equity);
     eq.createPriceLine({ price: 0, color: COLORS.zero, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false });
     if (d.equityB) {
@@ -327,11 +335,64 @@ function priceLegend() {
 }
 
 const pct = (v, d = 1) => v === null || v === undefined ? '—' : fmtPct(v, d);
+
+// Subtítulo de um resultado como pílulas (uma por informação): quebram de linha uma a uma no celular.
+function setChips(el, parts) {
+    el.innerHTML = `<span class="chips">${parts.filter(Boolean).map(t => `<span class="chip">${escapeHTML(t)}</span>`).join('')}</span>`;
+}
 const money = (v, currency) => currency === 'R$' ? fmtBRL(v) : `${currency} ${fmtNum(v, 2)}`;
 
+// Cartão de resumo. value: o texto, ou cnt(...) para um número que conta ao aparecer. O tom do
+// cartão vem do sinal (cls pos/neg: verde/vermelho) ou é distribuído depois (toneCards).
 function kpi(label, value, note = '', cls = '', help = '') {
-    return `<div class="kpi"><div class="kpi-label">${label} ${help ? tip(help) : ''}</div><div class="kpi-value ${cls}">${value}</div><div class="kpi-note">${note}</div></div>`;
+    const shown = value && typeof value === 'object'
+        ? `<div class="kpi-value num ${cls}" data-count="${value.n}" data-format="${value.f}" data-decimals="${value.d}">${COUNT_FORMAT[value.f](0, value.d)}</div>`
+        : `<div class="kpi-value ${cls}">${value}</div>`;
+    const tone = cls === 'pos' ? ' tone-green' : cls === 'neg' ? ' tone-red' : '';
+    return `<div class="kpi kpi-card${tone}"><div class="kpi-label">${label} ${help ? tip(help) : ''}</div>${shown}<div class="kpi-note">${note}</div></div>`;
 }
+
+// Número que conta até o valor (formato do contador de core.js); "—" sem valor.
+const cnt = (v, f = 'pct', d = 1) => v === null || v === undefined ? '—' : { n: v, f, d };
+
+// Os cartões sem sinal ganham tons alternados; todos entram um a um a cada resultado novo.
+const TONES = ['tone-blue', 'tone-cyan', 'tone-violet'];
+function showCards(box) {
+    let k = 0;
+    box.querySelectorAll('.kpi-card').forEach(card => {
+        if (!card.classList.contains('tone-green') && !card.classList.contains('tone-red')) card.classList.add(TONES[k++ % TONES.length]);
+    });
+    box._itemsSeen = false;
+    revealItems(box, '.kpi-card');
+}
+
+// Gráfico Chart.js criado quando o quadro dele aparece (onReveal); um pedido mais novo para o mesmo
+// canvas substitui o que esperava.
+function chartWhenVisible(canvasId, config) {
+    const seq = (state.chartSeq[canvasId] || 0) + 1;
+    state.chartSeq[canvasId] = seq;
+    if (typeof Chart === 'undefined') return;
+    onReveal($(canvasId), () => {
+        if (state.chartSeq[canvasId] !== seq) return;
+        state.charts[canvasId]?.destroy();
+        state.charts[canvasId] = new Chart($(canvasId), config);
+    });
+}
+
+// Eixos e legenda comuns dos gráficos de barras do Backtest.
+const barOptions = (yTick, extra = {}) => ({
+    responsive: true, maintainAspectRatio: false, animation: CHART_ENTER,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+        legend: { labels: { color: COLORS.text, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12 } },
+        tooltip: chartTooltip()
+    },
+    scales: {
+        x: { ticks: { color: COLORS.zero, maxRotation: 0, autoSkip: true }, grid: { display: false }, border: { color: COLORS.border } },
+        y: { ticks: { color: COLORS.zero, callback: yTick }, grid: { color: CHART_GRID }, border: { display: false } }
+    },
+    ...extra
+});
 
 // ---------------------------------------------------------------- Tooltips
 
@@ -339,20 +400,20 @@ function renderKpis(d) {
     const s = d.stats;
     const brl = (v) => v === null || v === undefined ? '—' : fmtBRL(v);
     $('btKpis').innerHTML = [
-        kpi('Lucro no período', brl(s.profit), `${pct(s.sumReturn, 0)} do valor de uma compra · realizado ${brl(s.realized)} · em aberto ${brl(s.unrealized)}`,
+        kpi('Lucro no período', cnt(s.profit, 'brl'), `${pct(s.sumReturn, 0)} do valor de uma compra · realizado ${brl(s.realized)} · em aberto ${brl(s.unrealized)}`,
             signClass(s.profit), 'Quanto você teria ganho (ou perdido) em reais no período, investindo o valor por compra em cada compra do setup. Inclui as vendas já feitas e o que segue aberto, pelo último fechamento. Sem custos, impostos e proventos.'),
-        kpi('Total aplicado', brl(s.invested), `${s.lots} compra(s) × ${brl(s.amount)}`, '',
+        kpi('Total aplicado', cnt(s.invested, 'brl'), `${s.lots} compra(s) × ${brl(s.amount)}`, '',
             'Soma de todas as compras do período. Não é o dinheiro necessário de uma vez: o que é vendido volta para o caixa e pode pagar as compras seguintes.'),
-        kpi('Capital máximo ao mesmo tempo', brl(s.maxCapital), `hoje em aberto: ${brl(s.openCapital)}`, '',
+        kpi('Capital máximo ao mesmo tempo', cnt(s.maxCapital, 'brl'), `hoje em aberto: ${brl(s.openCapital)}`, '',
             'Maior valor investido ao mesmo tempo (preço de compra da parte ainda não vendida de cada compra). É quanto você precisaria ter para seguir todos os sinais.'),
-        kpi('Retorno sobre o capital máximo', pct(s.returnOnMaxCapital, 1), `sobre o total aplicado: ${pct(s.returnOnInvested, 1)}`, signClass(s.returnOnMaxCapital),
+        kpi('Retorno sobre o capital máximo', cnt(s.returnOnMaxCapital), `sobre o total aplicado: ${pct(s.returnOnInvested, 1)}`, signClass(s.returnOnMaxCapital),
             'Lucro no período dividido pelo capital máximo empregado ao mesmo tempo: o retorno sobre o dinheiro que a estratégia realmente precisou. "Sobre o total aplicado" divide pela soma de todas as compras (é a média por compra).'),
-        kpi('Compras', fmtNum(s.lots, 0), `${s.closed} encerrada(s) · ${s.open} aberta(s) · ${s.exits} saída(s) pela regra B`, '',
+        kpi('Compras', cnt(s.lots, 'int'), `${s.closed} encerrada(s) · ${s.open} aberta(s) · ${s.exits} saída(s) pela regra B`, '',
             'Cada sinal do setup que gerou compra é um lote. Encerrada = vendida por inteiro; aberta = ainda em carteira no fim do período. Saídas = vezes em que a regra B vendeu o que estava aberto.'),
-        kpi('Taxa de acerto', s.winRate === null ? '—' : `${fmtNum(s.winRate, 0)}%`,
+        kpi('Taxa de acerto', cnt(s.winRate, 'pctu', 0),
             `${s.wins} de ${s.closed} encerradas no lucro · no ranking: ${fmtNum(s.winRateSmoothed, 0)}% (suavizada)`, '',
             'Percentual das compras encerradas que deram lucro (venda parcial + saída). A do ranking do screener é suavizada para 50% quando há poucas operações.'),
-        kpi('Retorno médio por compra', pct(s.avgReturn), `mediana ${pct(s.medianReturn)} · compras encerradas`, signClass(s.avgReturn),
+        kpi('Retorno médio por compra', cnt(s.avgReturn), `mediana ${pct(s.medianReturn)} · compras encerradas`, signClass(s.avgReturn),
             'Média do resultado das compras encerradas. A mediana é o resultado do meio: metade das compras rendeu mais e metade menos.'),
         kpi('Melhor e pior compra', `${pct(s.best, 0)} / ${pct(s.worst, 0)}`, 'compras encerradas', '',
             'Maior ganho e maior perda entre as compras encerradas.'),
@@ -369,9 +430,10 @@ function renderKpis(d) {
         kpi('Indicação do Screener', s.advice ? `${s.advice.wait} de ${s.lots} seriam AGUARDAR` : '—',
             s.advice && s.advice.wait ? `retorno médio ${pct(s.advice.waitReturn)} nelas x ${pct(s.advice.buyReturn)} nas demais` : 'todas as compras seriam COMPRAR', '',
             'Quantas compras do backtest a Indicação do Screener mandaria aguardar (tendência fraca ou mais fraca que o Ibovespa em 6 meses; internacionais não são filtrados) e como elas se saíram em comparação com as demais. Essas compras aparecem com o selo AGUARDAR na tabela.'),
-        kpi('Comprar e manter', pct(s.buyHold), s.buyHoldFrom ? `da 1ª compra (${fmtDate(s.buyHoldFrom)}) até ${fmtDate(d.lastDate)}` : 'sem compras', signClass(s.buyHold),
+        kpi('Comprar e manter', cnt(s.buyHold), s.buyHoldFrom ? `da 1ª compra (${fmtDate(s.buyHoldFrom)}) até ${fmtDate(d.lastDate)}` : 'sem compras', signClass(s.buyHold),
             'Quanto teria rendido comprar uma vez, no preço da primeira compra do período, e manter até o fim, sem vender. Serve de comparação para a estratégia.')
     ].join('');
+    showCards($('btKpis'));
     const b = d.onlyB;
     $('btCompare').innerHTML = b ? `<strong>Só a regra B</strong> (sem venda parcial), no mesmo período e com o mesmo valor por compra: lucro <strong>${brl(b.profit)}</strong>`
         + ` · capital máximo ao mesmo tempo ${brl(b.maxCapital)} · retorno sobre o capital máximo <strong class="${signClass(b.returnOnMaxCapital)}">${pct(b.returnOnMaxCapital, 1)}</strong>`
@@ -390,12 +452,12 @@ function renderLots(d) {
     const rows = pageRows('lots', d.lots);
     $('lotsBody').innerHTML = rows.length ? rows.map(l => `
         <tr class="lot-row${String(l.n) === state.selected.lots ? ' selected' : ''}" tabindex="0" data-n="${l.n}" aria-label="Focar o lote ${l.n} no gráfico">
-            <td class="c"><strong>${l.n}</strong></td>
+            <td class="c"><span class="year-pill">${l.n}</span></td>
             <td class="nowrap">${lotCell(l.entry, d.currency)}</td>
             <td class="nowrap">${lotCell(l.partial, d.currency)}</td>
             <td class="nowrap">${lotCell(l.exit, d.currency)}</td>
-            <td class="r nowrap ${signClass(l.return)}"><strong>${pct(l.return)}</strong></td>
-            <td class="r nowrap ${signClass(l.profit)}">${fmtBRL(l.profit)}</td>
+            <td class="r nowrap"><span class="delta-pill ${signClass(l.return)}">${pct(l.return)}</span></td>
+            <td class="r nowrap ${signClass(l.profit)}"><strong>${fmtBRL(l.profit)}</strong></td>
             <td class="r nowrap">${fmtNum(l.days, 0)}<div class="small muted">≈ ${escapeHTML(l.duration)}</div></td>
             <td class="r nowrap">${pct(l.maxGain)}</td>
             <td class="r nowrap">${l.giveback === null ? '—' : `${fmtNum(l.giveback, 1)}%`}</td>
@@ -403,6 +465,34 @@ function renderLots(d) {
                 ${l.wait && l.wait.length ? signalBadge('AGUARDAR', `A Indicação do Screener mandaria aguardar esta compra: ${l.wait.join('; ')}.`, 'badge-fill') : ''}</td>
         </tr>`).join('')
         : '<tr><td colspan="10" class="empty-row">Nenhum sinal do setup no período.</td></tr>';
+    revealItems($('lotsBody'));
+}
+
+// "Resultado de cada compra": uma barra por lote (verde lucro, vermelho prejuízo; as abertas em tom
+// mais claro, pelo último fechamento).
+function renderLotsChart(d) {
+    const lots = d.lots;
+    const color = (l) => l.return >= 0 ? COLORS.up : COLORS.down;
+    chartWhenVisible('btLotsChart', {
+        type: 'bar',
+        data: {
+            labels: lots.map(l => `#${l.n}`),
+            datasets: [{
+                label: 'Resultado', data: lots.map(l => l.return),
+                backgroundColor: lots.map(l => hexAlpha(color(l), l.open ? 0.38 : 0.85)), hoverBackgroundColor: lots.map(color),
+                borderRadius: 5, borderSkipped: false, maxBarThickness: 26
+            }]
+        },
+        options: barOptions((v) => `${fmtNum(v, 0)}%`, {
+            plugins: {
+                legend: { display: false },
+                tooltip: { ...chartTooltip(), callbacks: {
+                    title: (items) => { const l = lots[items[0].dataIndex]; return `Compra ${l.n} · ${fmtDate(l.entry.date)}${l.open ? ' · aberta' : ''}`; },
+                    label: (ctx) => { const l = lots[ctx.dataIndex]; return ` ${fmtPct(l.return, 1)} · ${fmtBRL(l.profit)} · ${fmtNum(l.days, 0)} pregões`; }
+                } }
+            }
+        })
+    });
 }
 
 // ---------------------------------------------------------------- Paginação
@@ -536,12 +626,16 @@ async function runRobustness() {
 }
 
 function renderRobustness(d) {
+    replayReveal($('pfRobust'));
     setTimeout(() => keepTipsWithText($('pfRobust')));
     const unit = d.window ? 'janelas' : 'inícios';
     $('pfRobustTitle').innerText = d.window ? `Robustez — janelas de ${d.window} anos` : 'Robustez — cada ano de início até o fim';
-    $('pfRobustSubtitle').innerText = `${d.rule} · ${d.periods} ${unit}` + (d.window ? '' : `, todos até ${fmtDate(d.end)}`)
-        + ` · régua: ${d.ref.label}` + (d.tax ? ' · com imposto de renda (valores líquidos, vendendo tudo no fim de cada período)' : '')
-        + (d.warnings.length ? ` · ${d.warnings.join(' ')}` : '');
+    setChips($('pfRobustSubtitle'), [d.rule, `${d.periods} ${unit}` + (d.window ? '' : `, todos até ${fmtDate(d.end)}`),
+        `régua: ${d.ref.label}`, d.tax ? 'com imposto de renda (valores líquidos, vendendo tudo no fim de cada período)' : null]);
+    // Avisos (ex.: a lista dos ativos sem histórico suficiente) num bloco recolhível, fora do subtítulo.
+    $('pfRobustWarnings').hidden = !d.warnings.length;
+    $('pfRobustWarnings').innerHTML = d.warnings.length
+        ? `<summary>Avisos (${d.warnings.length})</summary><ul class="notes">${d.warnings.map(w => `<li>${escapeHTML(w)}</li>`).join('')}</ul>` : '';
     $('pfRobustVerdict').innerText = d.verdict;
     $('pfRobustSummary').innerHTML = d.summary.map(t => `<li>${escapeHTML(t)}</li>`).join('');
 
@@ -549,19 +643,20 @@ function renderRobustness(d) {
     const pct = (v, dec = 1) => v === null || v === undefined ? '—' : fmtPct(v, dec);
     const pp = (v) => v === null || v === undefined ? '—' : `${v >= 0 ? '+' : ''}${fmtNum(v, 1)} p.p.`;
     const score = (w) => `<div class="robust-score"><span>${escapeHTML(ROBUST_SHORT[w.key] || w.key)}</span>`
-        + `<span class="robust-bar"><i style="width:${w.wins / d.periods * 100}%"></i></span><strong>${w.wins}/${d.periods}</strong></div>`;
+        + `<span class="robust-bar"><i style="--w:${(w.wins / d.periods).toFixed(3)}"></i></span><strong>${w.wins}/${d.periods}</strong></div>`;
     $('pfRobustKpis').innerHTML = [
-        kpi('Retorno ao ano', pct(c.irr.median), `mediana · de ${pct(c.irr.min)} a ${pct(c.irr.max)}`, signClass(c.irr.median),
+        kpi('Retorno ao ano', cnt(c.irr.median), `mediana · de ${pct(c.irr.min)} a ${pct(c.irr.max)}`, signClass(c.irr.median),
             'Taxa interna de retorno da estratégia em cada período: a mediana e a faixa do pior ao melhor.'),
         kpi(`Contra: ${escapeHTML(c.excess.label)}`, pp(c.excess.median), `mediana ao ano · pior ${pp(c.excess.worst)} (${escapeHTML(c.excess.worstLabel || '—')}) · à frente em ${c.excess.positive}/${d.periods}`,
             signClass(c.excess.median), `Retorno ao ano da estratégia menos o da régua (${d.ref.label}) com os mesmos aportes, em pontos percentuais. Com metas por classe, a régua são os índices na mesma proporção das metas.`),
         kpi('Placar', c.wins.map(score).join(''), `${unit} em que a estratégia lucrou mais`, '',
             'Em quantos períodos a estratégia terminou com mais lucro que cada comparação.'),
-        kpi('Maior queda', pct(c.drawdown.worst), `${escapeHTML(c.drawdown.worstLabel)} · mediana ${pct(c.drawdown.median)}`, 'neg',
+        kpi('Maior queda', cnt(c.drawdown.worst), `${escapeHTML(c.drawdown.worstLabel)} · mediana ${pct(c.drawdown.median)}`, 'neg',
             'Maior queda do patrimônio de um topo até um fundo, descontados os aportes: a pior entre os períodos e a mediana.'),
-        kpi('Lucro sobre o aportado', pct(c.profitPct.median, 0), 'mediana entre os períodos', signClass(c.profitPct.median),
+        kpi('Lucro sobre o aportado', cnt(c.profitPct.median, 'pct', 0), 'mediana entre os períodos', signClass(c.profitPct.median),
             'Lucro ÷ total aportado em cada período. Cresce com a duração; compare períodos de mesmo tamanho.')
     ].join('');
+    showCards($('pfRobustKpis'));
 
     const cols = d.columns.map(col => [col.key, col.label, PF_COLORS[col.key]]);
     renderRobustChart(d, cols);
@@ -580,9 +675,11 @@ function renderRobustness(d) {
             ${d.hasPartial ? `<td class="r nowrap ${signClass(r.diffOnlyB)}">${r.diffOnlyB >= 0 ? '+' : ''}${fmtBRL(r.diffOnlyB)}</td>` : ''}
             <td class="r nowrap ${signClass(r.rule.irr)}">${pct(r.rule.irr)}</td>
             <td class="r nowrap ${signClass(r[d.ref.key].irr)}">${pct(r[d.ref.key].irr)}</td>
-            <td class="r nowrap ${signClass(r.excess)}">${pp(r.excess)}</td>
+            <td class="r nowrap"><span class="delta-pill ${signClass(r.excess)}">${pp(r.excess)}</span></td>
             <td class="r nowrap neg">${pct(r.rule.maxDrawdown)}</td>
         </tr>`).join('');
+    $('pfRobustBody')._itemsSeen = false;
+    revealItems($('pfRobustBody'));
 }
 
 // Rótulos curtos do placar (chaves do servidor).
@@ -590,42 +687,35 @@ const ROBUST_SHORT = { mix: 'Índices metas', bova: 'BOVA11', ivvb: 'IVVB11', cd
 
 // Barras agrupadas: o retorno ao ano de cada linha (estratégia, regra B, BOVA11, CDI) em cada período.
 function renderRobustChart(d, cols) {
-    state.robustChart?.destroy();
-    state.robustChart = new Chart($('pfRobustChart'), {
+    chartWhenVisible('pfRobustChart', {
         type: 'bar',
         data: {
             labels: d.rows.map(r => r.label),
             datasets: cols.map(([key, label, color]) => ({
-                label, data: d.rows.map(r => r[key].irr), backgroundColor: color, hoverBackgroundColor: color,
-                borderRadius: 2, maxBarThickness: 28
+                label, data: d.rows.map(r => r[key].irr), backgroundColor: verticalGradient(color, 0.95, 0.45), hoverBackgroundColor: color,
+                borderRadius: 5, borderSkipped: false, maxBarThickness: 26
             }))
         },
-        options: {
-            responsive: true, maintainAspectRatio: false, animation: false,
-            interaction: { mode: 'index', intersect: false },
+        options: barOptions((v) => `${fmtNum(v, 0)}%`, {
             plugins: {
                 legend: { labels: { color: COLORS.text, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12 } },
-                tooltip: {
-                    backgroundColor: COLORS.panel, borderColor: COLORS.border, borderWidth: 1, titleColor: COLORS.text, bodyColor: COLORS.text, padding: 10,
-                    callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw === null ? '—' : `${fmtPct(ctx.raw, 1)} ao ano`}` }
-                }
-            },
-            scales: {
-                x: { ticks: { color: COLORS.zero, maxRotation: 0 }, grid: { display: false }, border: { color: COLORS.border } },
-                y: { ticks: { color: COLORS.zero, callback: (v) => `${fmtNum(v, 0)}%` }, grid: { color: COLORS.grid }, border: { display: false } }
+                tooltip: { ...chartTooltip(), callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw === null ? '—' : `${fmtPct(ctx.raw, 1)} ao ano`}` } }
             }
-        }
+        })
     });
 }
 
 function renderPortfolio(d) {
+    replayReveal($('pfResult'));
     setTimeout(() => keepTipsWithText($('pfResult')));  // "?" dos cartões e da comparação, já desenhados
     const p = d.params;
     $('pfTitle').innerText = `Carteira — ${d.universe.label} (${d.universe.ranked} ativos passaram pelo ranking)`;
-    $('pfSubtitle').innerText = `${d.period} (${fmtNum(d.sessions, 0)} pregões, ≈ ${d.duration}) · Top ${p.topN} do ranking · capital inicial ${fmtBRL(p.initial)}`
-        + (p.monthly > 0 ? ` + ${fmtBRL(p.monthly)} por mês` : '') + ` · ${fmtNum(p.position, 0)}% do patrimônio por compra · até ${p.maxAssets} ativos`
-        + ` · liquidez mínima ${$('pfLiquidity').querySelector(`option[value="${p.liquidity}"]`)?.textContent || p.liquidity}`
-        + ` · custo ${fmtNum(p.cost, 2)}% por operação${p.cdi ? ' · caixa no CDI' : ''}${p.tax ? ' · com imposto de renda' : ''}${p.strict ? ' · com candle de rejeição' : ''}`;
+    setChips($('pfSubtitle'), [`${d.period} (${fmtNum(d.sessions, 0)} pregões, ≈ ${d.duration})`, `Top ${p.topN} do ranking`,
+        `capital inicial ${fmtBRL(p.initial)}` + (p.monthly > 0 ? ` + ${fmtBRL(p.monthly)} por mês` : ''),
+        `${fmtNum(p.position, 0)}% do patrimônio por compra`, `até ${p.maxAssets} ativos`,
+        `liquidez mínima ${$('pfLiquidity').querySelector(`option[value="${p.liquidity}"]`)?.textContent || p.liquidity}`,
+        `custo ${fmtNum(p.cost, 2)}% por operação`, p.cdi ? 'caixa no CDI' : null, p.tax ? 'com imposto de renda' : null,
+        p.strict ? 'com candle de rejeição' : null]);
     $('pfWarnings').innerText = d.warnings.join(' ');
     $('pfWarnings').style.display = d.warnings.length ? 'block' : 'none';
     $('pfCompare').innerText = d.compare || '';
@@ -638,9 +728,12 @@ function renderPortfolio(d) {
     const chart = state.pfChart = LightweightCharts.createChart($('pfChart'), chartOptions());
     const moneyFmt = { type: 'custom', formatter: (v) => fmtBRL(v) };
     d.strategies.forEach((st, k) => {
-        const line = chart.addLineSeries({ color: PF_COLORS[st.key], lineWidth: st.key === 'rule' || st.key === 'onlyB' ? 2 : 1,
-                                           lineStyle: st.key === 'cdi' ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Solid,
-                                           priceFormat: moneyFmt, title: st.label });
+        const style = { lineWidth: st.key === 'rule' || st.key === 'onlyB' ? 2 : 1, priceFormat: moneyFmt, title: st.label,
+                        lineStyle: st.key === 'cdi' ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Solid };
+        // A estratégia escolhida em área com degradê; as comparações em linha.
+        const line = k === 0
+            ? chart.addAreaSeries({ ...style, lineColor: PF_COLORS[st.key], topColor: hexAlpha(PF_COLORS[st.key], 0.32), bottomColor: hexAlpha(PF_COLORS[st.key], 0.02) })
+            : chart.addLineSeries({ ...style, color: PF_COLORS[st.key] });
         line.setData(st.curve);
         if (k === 0) line.createPriceLine({ price: 0, color: COLORS.zero, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false });
     });
@@ -662,6 +755,10 @@ function renderPortfolio(d) {
     const rule = d.strategies[0];
     renderPfKpis(d);
     renderPfYears(d);
+    renderPfYearsChart(d);
+    renderPfAssetsChart(d);
+    $('pfCompareBody')._itemsSeen = false;
+    revealItems($('pfCompareBody'));
     $('pfAsset').innerHTML = d.assets.map(a => `<option value="${escapeHTML(a.ticker)}">${escapeHTML(a.ticker)} — ${a.trades} operação(ões) · lucro ${fmtBRL(a.profit)}</option>`).join('')
         || '<option value="">Nenhuma operação</option>';
     $('pfPriceLegend').innerHTML = priceLegend();
@@ -671,8 +768,62 @@ function renderPortfolio(d) {
     $('pfTradesTitle').innerText = `Operações — ${rule.label} (${d.trades.length})`;
     state.pages.trades = 0;
     state.selected.trades = null;
+    $('pfTradesBody')._itemsSeen = false;
     renderPfTrades();
 }
+
+// "Rentabilidade por ano": a rentabilidade (pela cota) de cada estratégia em cada ano.
+function renderPfYearsChart(d) {
+    const sts = d.strategies;
+    chartWhenVisible('pfYearsChart', {
+        type: 'bar',
+        data: {
+            labels: sts[0].years.map(y => String(y.year)),
+            datasets: sts.map(st => ({
+                label: st.label.replace(' (mesmos aportes)', ''), data: st.years.map(y => y.return),
+                backgroundColor: verticalGradient(PF_COLORS[st.key], 0.95, 0.45), hoverBackgroundColor: PF_COLORS[st.key],
+                borderRadius: 4, borderSkipped: false, maxBarThickness: 18
+            }))
+        },
+        options: barOptions((v) => `${fmtNum(v, 0)}%`, {
+            plugins: {
+                legend: { labels: { color: COLORS.text, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 10 } },
+                tooltip: { ...chartTooltip(), callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtPct(ctx.raw, 1)}` } }
+            }
+        })
+    });
+}
+
+// "Lucro por ativo": os ativos que mais ganharam e os que mais perderam (profitRanking, do Python).
+function renderPfAssetsChart(d) {
+    const rows = d.profitRanking || [];
+    const color = (v) => v >= 0 ? COLORS.up : COLORS.down;
+    chartWhenVisible('pfAssetsChart', {
+        type: 'bar',
+        data: {
+            labels: rows.map(r => r.ticker),
+            datasets: [{
+                label: 'Lucro', data: rows.map(r => r.profit),
+                backgroundColor: (ctx) => {
+                    const v = rows[ctx.dataIndex]?.profit ?? 0;
+                    return v >= 0 ? horizontalGradient(COLORS.up, 0.45, 0.95)(ctx) : horizontalGradient(COLORS.down, 0.95, 0.45)(ctx);
+                },
+                hoverBackgroundColor: rows.map(r => color(r.profit)),
+                borderRadius: 5, borderSkipped: false, maxBarThickness: 18
+            }]
+        },
+        options: barOptions((v) => fmtCompactBRLBt(v), {
+            indexAxis: 'y',
+            interaction: { mode: 'index', axis: 'y', intersect: false },
+            plugins: { legend: { display: false }, tooltip: { ...chartTooltip(), callbacks: { label: (ctx) => ` ${fmtBRL(ctx.raw)}` } } },
+            scales: {
+                x: { ticks: { color: COLORS.zero, maxRotation: 0, callback: (v) => fmtCompactBRLBt(v) }, grid: { color: CHART_GRID }, border: { display: false } },
+                y: { ticks: { color: COLORS.text }, grid: { display: false }, border: { color: COLORS.border } }
+            }
+        })
+    });
+}
+const fmtCompactBRLBt = (v) => `R$ ${v.toLocaleString('pt-BR', { notation: 'compact', maximumFractionDigits: 1 })}`;
 
 // Tabela de operações, uma página por vez.
 function renderPfTrades() {
@@ -683,7 +834,7 @@ function renderPfTrades() {
     const point = (x) => x ? `${fmtDate(x.date)}<div class="small muted">${fmtBRL(x.price)}</div>` : '<span class="muted">—</span>';
     $('pfTradesBody').innerHTML = rows.length ? rows.map(t => `
         <tr class="lot-row${String(t.n) === state.selected.trades ? ' selected' : ''}" tabindex="0" data-n="${t.n}" aria-label="Ver a operação ${t.n} (${escapeHTML(t.ticker)}) no gráfico">
-            <td class="c">${t.n}</td>
+            <td class="c"><span class="year-pill">${t.n}</span></td>
             <td><div class="rank-inline">#${t.n}</div><a href="${single(t.ticker)}" class="ticker-link">${escapeHTML(t.ticker)}</a></td>
             <td class="c nowrap">${t.rank}º<div class="small muted">Score ${fmtNum(t.score, 0)}</div></td>
             <td class="nowrap">${point(t.entry)}</td>
@@ -692,11 +843,12 @@ function renderPfTrades() {
             <td class="r nowrap">${fmtBRL(t.invested)}</td>
             <td class="r nowrap">${t.dividends ? fmtBRL(t.dividends) : '<span class="muted">—</span>'}</td>
             <td class="r nowrap ${signClass(t.profit)}"><strong>${fmtBRL(t.profit)}</strong></td>
-            <td class="r nowrap ${signClass(t.return)}">${fmtPct(t.return, 1)}</td>
+            <td class="r nowrap"><span class="delta-pill ${signClass(t.return)}">${fmtPct(t.return, 1)}</span></td>
             <td class="r nowrap">${fmtNum(t.days, 0)}<div class="small muted">≈ ${escapeHTML(t.duration)}</div></td>
             <td><span class="badge ${t.open ? 'badge-fill' : 'badge-low'}">${escapeHTML(t.status)}</span></td>
         </tr>`).join('')
         : '<tr><td colspan="12" class="empty-row">Nenhuma compra no período.</td></tr>';
+    revealItems($('pfTradesBody'));
 }
 
 // Tabela ano a ano: para cada ano, o lucro (R$) e a rentabilidade (%) de cada estratégia.
@@ -707,11 +859,13 @@ function renderPfYears(d) {
     const years = sts[0].years;
     const partial = (y, k) => (k === 0 && y.from.slice(5) !== '01-02' && y.from.slice(5) > '01-05') || (k === years.length - 1 && y.to.slice(5) < '12-20');
     $('pfYearsBody').innerHTML = years.map((y, k) => `<tr>
-            <td class="nowrap"><strong>${y.year}</strong>${partial(y, k) ? `<div class="small muted">${fmtDate(y.from).slice(0, 5)} a ${fmtDate(y.to).slice(0, 5)}</div>` : ''}</td>
-            ${sts.map(st => { const r = st.years[k]; return `<td class="r nowrap ${signClass(r.profit)}">${fmtBRL(r.profit)}</td><td class="r nowrap ${signClass(r.return)}">${fmtPct(r.return, 1)}</td>`; }).join('')}
+            <td class="nowrap"><span class="year-pill">${y.year}</span>${partial(y, k) ? `<div class="small muted">${fmtDate(y.from).slice(0, 5)} a ${fmtDate(y.to).slice(0, 5)}</div>` : ''}</td>
+            ${sts.map(st => { const r = st.years[k]; return `<td class="r nowrap ${signClass(r.profit)}">${fmtBRL(r.profit)}</td><td class="r nowrap"><span class="delta-pill ${signClass(r.return)}">${fmtPct(r.return, 1)}</span></td>`; }).join('')}
         </tr>`).join('')
         + `<tr class="total-row"><td><strong>Total</strong></td>${sts.map(st => `<td class="r nowrap ${signClass(st.metrics.profit)}"><strong>${fmtBRL(st.metrics.profit)}</strong></td>`
             + `<td class="r nowrap ${signClass(st.metrics.irr)}"><strong>${st.metrics.irr === null ? '—' : `${fmtPct(st.metrics.irr, 1)} a.a.`}</strong></td>`).join('')}</tr>`;
+    $('pfYearsBody')._itemsSeen = false;
+    revealItems($('pfYearsBody'));
     $('pfYearsNote').innerText = 'Total: lucro do período inteiro e o retorno ao ano equivalente. Lucro do ano = patrimônio no fim − patrimônio no início − aportes do ano (já inclui proventos e custos). Rentabilidade pela cota, sem o efeito dos aportes.';
 }
 
@@ -723,16 +877,16 @@ function renderPfKpis(d) {
     const brl = (v) => v === null || v === undefined ? '—' : fmtBRL(v);
     $('pfSummaryTitle').innerText = `Resumo — ${d.strategies[0].label}`;
     $('pfKpis').innerHTML = [
-        kpi('Lucro no período', brl(s.profit), `${pct(s.profitPct, 1)} sobre o aportado · encerradas ${brl(s.closedProfit)} · em aberto ${brl(s.openProfit)}`,
+        kpi('Lucro no período', cnt(s.profit, 'brl'), `${pct(s.profitPct, 1)} sobre o aportado · encerradas ${brl(s.closedProfit)} · em aberto ${brl(s.openProfit)}`,
             signClass(s.profit), 'Patrimônio final menos tudo o que foi aportado: quanto a carteira ganhou de fato no período, com o dinheiro girando entre os ativos do ranking. Inclui proventos e custos; sem imposto de renda.'),
-        kpi('Patrimônio final', brl(s.final), `aportado ${brl(s.contributed)}`, '', 'Valor da carteira no último dia do período: caixa + ativos pelo fechamento.'),
-        kpi('Retorno ao ano', pct(s.irr, 1), `maior queda ${pct(s.maxDrawdown, 1)}`, signClass(s.irr),
+        kpi('Patrimônio final', cnt(s.final, 'brl'), `aportado ${brl(s.contributed)}`, '', 'Valor da carteira no último dia do período: caixa + ativos pelo fechamento.'),
+        kpi('Retorno ao ano', cnt(s.irr), `maior queda ${pct(s.maxDrawdown, 1)}`, signClass(s.irr),
             'Rendimento anual equivalente (taxa interna de retorno), considerando quando cada aporte entrou. A maior queda é a pior perda do patrimônio de um topo até um fundo, descontados os aportes.'),
-        kpi('Compras', fmtNum(s.trades, 0), `${s.closed} encerrada(s) · ${s.open} aberta(s) · ${s.exits} saída(s) pela regra B`, '',
+        kpi('Compras', cnt(s.trades, 'int'), `${s.closed} encerrada(s) · ${s.open} aberta(s) · ${s.exits} saída(s) pela regra B`, '',
             'Quantas compras a carteira fez. Encerrada = vendida por inteiro; aberta = ainda na carteira no fim do período.'),
-        kpi('Taxa de acerto', s.winRate === null ? '—' : `${fmtNum(s.winRate, 0)}%`, `${s.wins} de ${s.closed} encerradas no lucro`, '',
+        kpi('Taxa de acerto', cnt(s.winRate, 'pctu', 0), `${s.wins} de ${s.closed} encerradas no lucro`, '',
             'Percentual das compras encerradas que deram lucro (vendas + proventos − valor investido, já com os custos).'),
-        kpi('Resultado médio por compra', pct(s.avgReturn), `mediana ${pct(s.medianReturn)} · compras encerradas`, signClass(s.avgReturn),
+        kpi('Resultado médio por compra', cnt(s.avgReturn), `mediana ${pct(s.medianReturn)} · compras encerradas`, signClass(s.avgReturn),
             'Média do resultado das compras encerradas, sobre o valor investido em cada uma. A mediana é o resultado do meio.'),
         kpi('Melhor e pior compra', `${pct(s.best, 0)} / ${pct(s.worst, 0)}`, 'compras encerradas', '', 'Maior ganho e maior perda entre as compras encerradas.'),
         kpi('Vendas parciais', d.params.fraction > 0 ? `${s.partials} de ${s.trades}` : '—',
@@ -745,23 +899,24 @@ function renderPfKpis(d) {
             'Quanto o preço caiu, em média, do maior fechamento depois da compra até a venda pela regra B.'),
         kpi('Alta máxima média', pct(s.avgMaxGain), 'maior máxima depois da compra', '',
             'Em média, quanto o preço chegou a subir depois de cada compra. Comparado ao resultado, mostra o potencial deixado na mesa.'),
-        kpi('Ativos negociados', fmtNum(s.assets, 0), `de ${d.universe.ranked} que passaram pelo ranking no período`, '',
+        kpi('Ativos negociados', cnt(s.assets, 'int'), `de ${d.universe.ranked} que passaram pelo ranking no período`, '',
             'Quantos ativos diferentes a carteira chegou a comprar, conforme o ranking de cada dia.'),
-        kpi('Proventos recebidos', brl(s.dividends), 'já incluídos no lucro', '', 'Dividendos e JCP recebidos pela carteira na data-ex.'),
-        kpi('Caixa médio parado', `${fmtNum(s.avgCash, 0)}%`, d.params.cdi ? 'rendendo CDI' : 'sem render juros', '',
+        kpi('Proventos recebidos', cnt(s.dividends, 'brl'), 'já incluídos no lucro', '', 'Dividendos e JCP recebidos pela carteira na data-ex.'),
+        kpi('Caixa médio parado', cnt(s.avgCash, 'pctu', 0), d.params.cdi ? 'rendendo CDI' : 'sem render juros', '',
             'Parte do patrimônio que ficou em caixa, em média, esperando ativos no ranking.'),
         s.taxPaid !== undefined ? kpi('Imposto de renda', brl(s.taxPaid), `pago no período · vendendo tudo no fim: mais ${brl(s.taxDue)} · lucro líquido ${brl(s.profitNet)} (${pct(s.irrNet, 1)} ao ano)`,
             '', 'Imposto sobre as vendas, pago no mês seguinte a cada mês com ganho. O lucro líquido desconta também o imposto que seria pago vendendo tudo no último dia: é o número a comparar com os índices, que só pagam quando vendem.') : '',
         ...comps.map(st => {
             const m = st.metrics;
             const net = m.profitNet !== undefined ? ` · líquido ${brl(m.profitNet)}` : '';
-            return kpi(`${escapeHTML(st.label.replace(' (mesmos aportes)', ''))} com os mesmos aportes`, brl(m.profit),
+            return kpi(`${escapeHTML(st.label.replace(' (mesmos aportes)', ''))} com os mesmos aportes`, cnt(m.profit, 'brl'),
                 `retorno ao ano ${pct(m.irr, 1)} · maior queda ${pct(m.maxDrawdown, 1)}${net}`, signClass(m.profit),
                 st.key === 'mix'
                     ? 'Os mesmos aportes divididos entre os índices na proporção das metas por classe (ações, fundos e ETFs Brasil no BOVA11; internacionais no IVVB11), sem vender: a régua justa para uma carteira com internacionais.'
                     : 'Lucro de comprar o índice com o mesmo capital inicial e os mesmos aportes, nas mesmas datas, sem vender: a referência para saber se a estratégia vale a pena.');
         })
     ].join('');
+    showCards($('pfKpis'));
     const b = d.strategies.find(x => x.key === 'onlyB')?.metrics;
     $('pfOnlyB').innerHTML = b ? `<strong>Só a regra B</strong> (sem venda parcial), mesma carteira e mesmo período: lucro <strong class="${signClass(b.profit)}">${brl(b.profit)}</strong>`
         + ` · retorno ao ano ${pct(b.irr, 1)} · maior queda ${pct(b.maxDrawdown, 1)} · acerto ${b.winRate === null ? '—' : `${fmtNum(b.winRate, 0)}%`}`

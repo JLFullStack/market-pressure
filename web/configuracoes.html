@@ -40,34 +40,84 @@
         </div>
     </header>
 
-    <div class="panel">
-        <h2>⚙️ Estratégia de venda</h2>
-        <p class="muted">Cada tipo de ativo segue uma das três regras de venda. A escolha vale para:</p>
-        <ul class="notes">
-            <li>a <a href="carteira.html" class="inline-link">Carteira</a>: a coluna "Situação" das posições indica quando e quanto vender, com o motivo;</li>
-            <li>o <a href="analise_quantitativa_b3.html" class="inline-link">Screener</a>: o histórico (backtest), o Score e a "Indicação" de cada ativo, e o texto do "ANALISAR ATIVO";</li>
-            <li>o <a href="backtest.html" class="inline-link">Backtest</a>, quando a saída escolhida lá é "Conforme as Configurações".</li>
-        </ul>
-        <form id="strategyForm" novalidate>
-            <fieldset class="strategy-options">
-                <legend class="strategy-legend">Venda parcial (alvo e parte vendida)</legend>
-                <p class="strategy-params">
-                    Vender
-                    <input class="select" name="fraction" type="text" inputmode="decimal" size="4" aria-label="Parte de cada compra vendida no alvo (%)"> %
-                    de cada compra depois de
-                    <input class="select" name="target" type="text" inputmode="decimal" size="4" aria-label="Rentabilidade do alvo (%)"> %
-                    de rentabilidade sobre o preço dela (no alvo ou quando a alta perder força, conforme a regra do tipo); o restante na reversão de tendência.
-                </p>
-            </fieldset>
-            <fieldset class="strategy-options">
-                <legend class="strategy-legend">Regra de cada tipo de ativo</legend>
-                <div class="table-container">
-                    <table>
-                        <thead><tr><th>Tipo de ativo</th><th>Regra de venda</th></tr></thead>
-                        <tbody id="kindsBody"></tbody>
-                    </table>
-                </div>
-            </fieldset>
+    <section class="panel hero" data-reveal>
+        <div class="hero-aurora" aria-hidden="true"></div>
+        <div class="hero-title">
+            <div class="eyebrow">Configurações</div>
+            <h1>Estratégia de venda</h1>
+            <div class="subtitle">Cada tipo de ativo segue uma das três regras de venda. A escolha vale para:</div>
+        </div>
+        <div class="applies">
+            <a href="carteira.html" class="apply-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 6V4h10v2"/></svg><span><strong>Carteira</strong>a "Situação" de cada posição: quando e quanto vender, com o motivo</span></a>
+            <a href="analise_quantitativa_b3.html" class="apply-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg><span><strong>Screener</strong>o histórico (backtest), o Score, a Indicação e o "ANALISAR ATIVO"</span></a>
+            <a href="backtest.html" class="apply-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-7"/></svg><span><strong>Backtest</strong>quando a saída escolhida lá é "Conforme as Configurações"</span></a>
+        </div>
+    </section>
+
+    <form id="strategyForm" novalidate>
+        <div class="panel" data-reveal>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></span><h2>Venda parcial</h2></div>
+            <div class="param-cards">
+                <label class="param-card tone-violet" data-reveal>
+                    <span class="kpi-label">Parte vendida</span>
+                    <span class="param-input"><input class="select" name="fraction" type="text" inputmode="decimal" size="4" aria-label="Parte de cada compra vendida no alvo (%)"><b>%</b></span>
+                    <span class="kpi-note">de cada compra</span>
+                </label>
+                <label class="param-card tone-cyan" data-reveal>
+                    <span class="kpi-label">Alvo</span>
+                    <span class="param-input"><b>+</b><input class="select" name="target" type="text" inputmode="decimal" size="4" aria-label="Rentabilidade do alvo (%)"><b>%</b></span>
+                    <span class="kpi-note">de alta sobre o preço da compra</span>
+                </label>
+            </div>
+            <p class="strategy-params small muted">Depois do alvo, a parte é vendida no alvo ou quando a alta perder força, conforme a regra do tipo; o restante sai na reversão de tendência.</p>
+        </div>
+
+        <div class="panel" data-reveal>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 8-8M15 7h5v5"/></svg></span><h2>Como cada regra vende</h2></div>
+            <div class="rule-diagrams">
+                <figure class="rule-diagram" data-rule="parcial" data-reveal>
+                    <figcaption><strong>Venda parcial no alvo</strong><span class="small muted">vende a parte ao tocar o alvo; o resto na reversão</span></figcaption>
+                    <svg viewBox="0 0 300 130" role="img" aria-label="Venda parcial no alvo: vende a parte ao tocar o alvo; o resto na reversão">
+                        <line class="dg-target" x1="8" x2="292" y1="72" y2="72"/>
+                        <text class="dg-target-label" x="292" y="66" text-anchor="end">alvo <tspan class="target-label">+10%</tspan></text>
+                        <path class="dg-ma" d="M14,112 C70,104 120,86 170,62 S240,70 290,82"/>
+                        <path class="dg-price" d="M14,108 C40,104 60,90 82,72 S128,40 160,30 S196,34 214,52 S250,92 290,104" pathLength="100"/>
+                        <g class="dg-mark dg-buy"><circle cx="14" cy="108" r="6"/><text x="14" y="97">C</text></g>
+                        <g class="dg-mark dg-partial" style="--k:0"><circle cx="82" cy="72" r="6"/><text x="82" y="61">P</text></g><g class="dg-mark dg-exit" style="--k:1"><circle cx="262" cy="96" r="6"/><text x="262" y="85">V</text></g>
+                    </svg>
+                </figure>
+                <figure class="rule-diagram" data-rule="forca" data-reveal>
+                    <figcaption><strong>Quando a alta perder força</strong><span class="small muted">segura no alvo e vende a parte quando a alta enfraquece</span></figcaption>
+                    <svg viewBox="0 0 300 130" role="img" aria-label="Quando a alta perder força: segura no alvo e vende a parte quando a alta enfraquece">
+                        <line class="dg-target" x1="8" x2="292" y1="72" y2="72"/>
+                        <text class="dg-target-label" x="292" y="66" text-anchor="end">alvo <tspan class="target-label">+10%</tspan></text>
+                        <path class="dg-ma" d="M14,112 C70,104 120,86 170,62 S240,70 290,82"/>
+                        <path class="dg-price" d="M14,108 C40,104 60,90 82,72 S128,40 160,30 S196,34 214,52 S250,92 290,104" pathLength="100"/>
+                        <g class="dg-mark dg-buy"><circle cx="14" cy="108" r="6"/><text x="14" y="97">C</text></g>
+                        <g class="dg-mark dg-partial" style="--k:0"><circle cx="206" cy="43" r="6"/><text x="206" y="32">P</text></g><g class="dg-mark dg-exit" style="--k:1"><circle cx="262" cy="96" r="6"/><text x="262" y="85">V</text></g>
+                    </svg>
+                </figure>
+                <figure class="rule-diagram" data-rule="reversao" data-reveal>
+                    <figcaption><strong>Só na reversão</strong><span class="small muted">vende tudo quando a tendência vira</span></figcaption>
+                    <svg viewBox="0 0 300 130" role="img" aria-label="Só na reversão: vende tudo quando a tendência vira">
+                        <line class="dg-target" x1="8" x2="292" y1="72" y2="72"/>
+                        <text class="dg-target-label" x="292" y="66" text-anchor="end">alvo <tspan class="target-label">+10%</tspan></text>
+                        <path class="dg-ma" d="M14,112 C70,104 120,86 170,62 S240,70 290,82"/>
+                        <path class="dg-price" d="M14,108 C40,104 60,90 82,72 S128,40 160,30 S196,34 214,52 S250,92 290,104" pathLength="100"/>
+                        <g class="dg-mark dg-buy"><circle cx="14" cy="108" r="6"/><text x="14" y="97">C</text></g>
+                        <g class="dg-mark dg-exit" style="--k:0"><circle cx="262" cy="96" r="6"/><text x="262" y="85">V</text></g>
+                    </svg>
+                </figure>
+            </div>
+            <ul class="notes">
+                <li>Ilustração com um preço que compra (<strong>C</strong>), passa do alvo, faz topo, perde força e reverte: <strong>P</strong> é a venda da parte e <strong>V</strong> a venda do restante (ou de tudo). A linha roxa tracejada é uma média móvel.</li>
+                <li>A regra escolhida para algum tipo fica destacada.</li>
+            </ul>
+        </div>
+
+        <div class="panel" data-reveal>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5zM3 12.5l9 5 9-5M3 16.5l9 5 9-5"/></svg></span><h2>Regra de cada tipo de ativo</h2></div>
+            <div class="kind-cards" id="kindsGrid"></div>
             <ul class="notes">
                 <li>Os tipos são as <strong>classes da Carteira</strong>: lá, a "Situação" de cada posição segue a regra da classe do ativo. No Screener e no Backtest vale o tipo do ativo (BDRs e ETFs do exterior entram em Internacionais).</li>
                 <li><strong>Venda parcial quando a alta perder força</strong>: usa o mesmo alvo e a mesma parte acima, mas não vende no alvo. Depois que a compra o atinge, mantém tudo enquanto a alta está forte e vende a parte na abertura seguinte ao primeiro fechamento com menos de 1 ATR acima da MM20 ou RSI abaixo de 65, se esse fechamento ainda estiver no alvo ou acima.</li>
@@ -80,9 +130,13 @@
                 <button type="submit" class="btn">Salvar estratégia</button>
                 <button type="button" class="btn-secondary" id="defaultBtn">Restaurar padrão</button>
             </div>
-        </form>
-        <div class="form-msg" id="strategyMsg" role="status"></div>
-        <div class="small muted">Em vigor: <ul class="notes" id="currentText"><li>—</li></ul></div>
+            <div class="form-msg" id="strategyMsg" role="status"></div>
+        </div>
+    </form>
+
+    <div class="panel" data-reveal>
+        <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><h2>Em vigor</h2></div>
+        <ul class="in-force" id="currentText"><li>—</li></ul>
     </div>
 </div>
 

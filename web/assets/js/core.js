@@ -491,6 +491,18 @@ function observeReveal(root = document) {
     scheduleRevealAtBottom(); // uma página curta (ou já rolada até o fim) não tem rolagem para disparar
 }
 
+// Um resultado novo no mesmo lugar (ex.: rodar o backtest de novo): os blocos de root voltam a
+// esperar a tela e entram de novo ao aparecer.
+function replayReveal(root) {
+    root.querySelectorAll('[data-reveal]').forEach(el => {
+        el.classList.remove('in', 'instant');
+        el._onReveal = [];
+        revealObserver?.unobserve(el);
+        revealLateObserver?.unobserve(el);
+    });
+    observeReveal(root);
+}
+
 // Itens de uma lista redesenhada por innerHTML (linhas de tabela, cartões): enquanto nenhum
 // apareceu, entram um a um ao rolar (em cascata quando entram juntos); depois que a lista já
 // apareceu, cada redesenho (ex.: a cada tecla na calculadora de aporte, um lançamento novo)
@@ -500,7 +512,7 @@ function revealItems(container, selector = ':scope > tr') {
     for (const el of items) {
         el.setAttribute('data-reveal', '');
         el._revealHost = container;
-        if (container._itemsSeen) el.classList.add('in', 'instant');
+        if (container._itemsSeen) { el.classList.add('instant'); revealNow(el); } // contadores de dentro também
     }
     if (!container._itemsSeen) observeReveal(container);
 }
@@ -632,3 +644,39 @@ function drawSpark(svg, values, up) {
         <path class="spark-area" d="M0,48 L${pts.join(' L')} L200,48 Z" fill="url(#${id})"/>
         <path class="spark-line" d="M${pts.join(' L')}" pathLength="100" style="stroke: ${color}"/>`;
 }
+
+// ---------------------------------------------------------------- Tema dos gráficos (Chart.js)
+
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// Visual comum dos gráficos (Carteira, Backtest): grade, tooltip escuro e animação de entrada.
+const CHART_GRID = 'rgba(120, 150, 210, 0.1)';
+const CHART_ENTER = { duration: 900, easing: 'easeOutQuart' };
+const chartTooltip = () => ({
+    backgroundColor: 'rgba(10, 16, 32, 0.95)', borderColor: cssVar('--border-strong'), borderWidth: 1,
+    titleColor: cssVar('--text-color'), bodyColor: cssVar('--text-color'), padding: 12, cornerRadius: 10,
+    titleFont: { weight: '700' }, caretSize: 6,
+});
+// Preenchimento em degradê vertical (cor cheia em cima, alpha embaixo) para barras e áreas.
+const verticalGradient = (color, topAlpha = 1, bottomAlpha = 0.45) => (ctx) => {
+    const { chart } = ctx;
+    if (!chart.chartArea) return color;
+    const { top, bottom } = chart.chartArea;
+    const g = chart.ctx.createLinearGradient(0, top, 0, bottom);
+    g.addColorStop(0, hexAlpha(color, topAlpha));
+    g.addColorStop(1, hexAlpha(color, bottomAlpha));
+    return g;
+};
+// Mesmo degradê, na horizontal (barras deitadas): mais transparente à esquerda.
+const horizontalGradient = (color, leftAlpha = 0.5, rightAlpha = 1) => (ctx) => {
+    const { chart } = ctx;
+    if (!chart.chartArea) return color;
+    const { left, right } = chart.chartArea;
+    const g = chart.ctx.createLinearGradient(left, 0, right, 0);
+    g.addColorStop(0, hexAlpha(color, leftAlpha));
+    g.addColorStop(1, hexAlpha(color, rightAlpha));
+    return g;
+};
+const hexAlpha = (hex, a) => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+};

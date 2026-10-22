@@ -872,7 +872,20 @@ def run(params):
         "adviceSkipped": skipped if params.get("advice") else None,
         "strategies": strategies, "compare": compare, "trades": rows, "markers": _markers(rows),
         "assets": sorted(traded.values(), key=lambda x: (-x["trades"], x["ticker"])), "warnings": warnings,
+        "profitRanking": _profit_ranking(traded.values()),
     }
+
+
+PROFIT_RANKING = 6  # ativos de cada ponta no gráfico "Lucro por ativo"
+
+
+def _profit_ranking(traded):
+    """Os PROFIT_RANKING ativos que mais deram lucro e os que mais deram prejuízo (só os
+    negativos), do maior lucro ao maior prejuízo: o gráfico "Lucro por ativo" da página."""
+    ranked = sorted(traded, key=lambda x: -x["profit"])
+    best = [a for a in ranked[:PROFIT_RANKING] if a["profit"] > 0]
+    worst = [a for a in ranked[-PROFIT_RANKING:] if a["profit"] < 0 and a not in best]
+    return [{"ticker": a["ticker"], "profit": a["profit"]} for a in best + worst]
 
 
 # ---------------------------------------------------------------- Robustez

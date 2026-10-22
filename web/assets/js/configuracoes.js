@@ -6,22 +6,50 @@ const form = document.getElementById('strategyForm');
 const msg = document.getElementById('strategyMsg');
 let defaults = null;
 let options = [];
+// Cor de cada tipo (a mesma da classe na Carteira) e ícone.
+const GROUP_COLORS = { acoes: '#4f8dff', fundos: '#3ddc97', etfs: '#ffc65c', internacionais: '#a78bfa' };
+const GROUP_ICONS = {
+    acoes: '<path d="M7 3v18M17 3v18"/><rect x="5" y="7" width="4" height="8" rx="1"/><rect x="15" y="9" width="4" height="7" rx="1"/>',
+    fundos: '<path d="M3 11l9-7 9 7M5 10v11h14V10M9 21v-5h6v5"/>',
+    etfs: '<path d="M12 3l9 5-9 5-9-5zM3 12.5l9 5 9-5M3 16.5l9 5 9-5"/>',
+    internacionais: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+};
 
 function showMsg(ok, text) {
     msg.className = `form-msg ${ok ? 'ok' : 'error'}`;
     msg.textContent = text;
 }
 
-// Uma linha por tipo de ativo, com a regra escolhida ({group, groupLabel, key}).
+// Um cartão por tipo de ativo, na cor da classe, com a regra escolhida ({group, groupLabel, key}).
 function renderKinds(kinds) {
-    document.getElementById('kindsBody').innerHTML = kinds.map(k => `
-        <tr>
-            <td><strong>${escapeHTML(k.groupLabel)}</strong><div class="small muted">${escapeHTML(k.hint || '')}</div></td>
-            <td><select class="select strategy-kind" name="kind_${k.group}" aria-label="Regra de venda: ${escapeHTML(k.groupLabel)}">
+    const grid = document.getElementById('kindsGrid');
+    grid.innerHTML = kinds.map(k => `
+        <label class="kind-card" style="--g:${GROUP_COLORS[k.group] || '#5aa2ff'}">
+            <span class="kind-head"><span class="kind-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${GROUP_ICONS[k.group] || ''}</svg></span>
+                <span><strong>${escapeHTML(k.groupLabel)}</strong><span class="small muted">${escapeHTML(k.hint || '')}</span></span></span>
+            <select class="select strategy-kind" name="kind_${k.group}" aria-label="Regra de venda: ${escapeHTML(k.groupLabel)}">
                 ${options.map(o => `<option value="${o.key}"${o.key === k.key ? ' selected' : ''}>${escapeHTML(o.label)}</option>`).join('')}
-            </select></td>
-        </tr>`).join('');
+            </select>
+        </label>`).join('');
+    revealItems(grid, '.kind-card');
+    markDiagrams();
 }
+
+// Destaca as ilustrações das regras escolhidas em algum tipo e mostra o alvo digitado nelas.
+function markDiagrams() {
+    const used = new Set([...form.querySelectorAll('select.strategy-kind')].map(sel => sel.value));
+    document.querySelectorAll('.rule-diagram').forEach(fig => fig.classList.toggle('used', used.has(fig.dataset.rule)));
+    const target = form.elements.target.value.trim();
+    document.querySelectorAll('.target-label').forEach(el => { el.textContent = target ? `+${target}%` : ''; });
+}
+form.addEventListener('change', (ev) => {
+    if (ev.target.matches('select.strategy-kind')) {
+        const card = ev.target.closest('.kind-card');
+        card.classList.remove('changed'); void card.offsetWidth; card.classList.add('changed'); // pulso de confirmação
+    }
+    markDiagrams();
+});
+form.addEventListener('input', markDiagrams);
 
 // Preenche o formulário com as configurações ({targetPct, fractionPct, kinds}).
 function fill(s) {
@@ -34,8 +62,11 @@ function show(data) {
     defaults = data.default;
     options = data.options;
     fill(data.strategy);
-    document.getElementById('currentText').innerHTML = data.strategy.kinds
-        .map(k => `<li><strong>${escapeHTML(k.groupLabel)}:</strong> ${escapeHTML(k.text)}</li>`).join('');
+    const current = document.getElementById('currentText');
+    current.innerHTML = data.strategy.kinds
+        .map(k => `<li style="--g:${GROUP_COLORS[k.group] || '#5aa2ff'}"><strong>${escapeHTML(k.groupLabel)}</strong><span>${escapeHTML(k.text)}</span></li>`).join('');
+    current._itemsSeen = false;
+    revealItems(current, ':scope > li');
     document.getElementById('reversalText').textContent = `Reversão de tendência: ${data.strategy.reversal}.`;
 }
 
@@ -67,6 +98,7 @@ form.addEventListener('submit', async (event) => {
     }
 });
 
+observeReveal();
 (async () => {
     const busy = busyStart('Carregando configurações...');
     try {

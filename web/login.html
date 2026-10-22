@@ -7,21 +7,57 @@
     <link rel="stylesheet" href="assets/css/styles.css">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
-<body>
+<body class="login-page">
 
-<main class="login-wrap">
+<main class="login-shell">
+    <!-- Lado da marca: só decoração (animações em CSS; esta página não carrega core.js). -->
+    <section class="login-hero" aria-hidden="true">
+        <div class="login-aurora"></div>
+        <span class="brand">MarketPressure</span>
+        <h2 class="login-headline">Swing trade na B3,<br><span class="login-grad">com método e dados.</span></h2>
+        <p class="login-lead">Screener "Garrafa de Gás", carteira com metas e backtests de estratégia em um só lugar.</p>
+        <svg class="login-chart" viewBox="0 0 420 170" preserveAspectRatio="none">
+            <defs>
+                <linearGradient id="loginLine" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0" stop-color="#3b82ff"/><stop offset="0.6" stop-color="#22d3ee"/><stop offset="1" stop-color="#9b7bff"/>
+                </linearGradient>
+                <linearGradient id="loginArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#3b82ff" stop-opacity="0.35"/><stop offset="1" stop-color="#3b82ff" stop-opacity="0"/>
+                </linearGradient>
+            </defs>
+            <path class="login-chart-area" d="M0,150 C40,140 60,120 95,124 S150,92 185,98 S240,60 270,70 S330,30 360,38 S400,20 420,14 L420,170 L0,170 Z" fill="url(#loginArea)"/>
+            <path class="login-chart-line" d="M0,150 C40,140 60,120 95,124 S150,92 185,98 S240,60 270,70 S330,30 360,38 S400,20 420,14" pathLength="100"/>
+            <circle class="login-chart-dot" cx="420" cy="14" r="5"/>
+        </svg>
+        <ul class="login-features">
+            <li><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg><span><strong>Screener</strong>pullbacks na MM200 ranqueados por pressão e histórico</span></li>
+            <li><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 6V4h10v2"/></svg><span><strong>Carteira</strong>rentabilidade contra CDI e BOVA11, aportes e metas</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-7"/></svg><span><strong>Backtest</strong>a estratégia testada em 10 anos de história</span></li>
+        </ul>
+    </section>
+
     <form class="panel login-card" id="loginForm" novalidate>
-        <h1>MarketPressure</h1>
+        <span class="brand login-card-brand">MarketPressure</span>
+        <h1>Entrar</h1>
         <p class="muted login-sub">Entre com seu CPF ou e-mail.</p>
 
         <label class="field" for="login">CPF ou e-mail
-            <input class="select" id="login" name="login" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus>
+            <span class="input-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+                <input class="select" id="login" name="login" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus>
+            </span>
         </label>
         <label class="field" for="password">Senha
-            <input class="select" id="password" name="password" type="password" autocomplete="current-password" required>
+            <span class="input-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                <input class="select" id="password" name="password" type="password" autocomplete="current-password" required>
+                <button type="button" class="pw-toggle" id="pwToggle" aria-label="Mostrar senha" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+            </span>
         </label>
 
-        <button type="submit" class="btn" id="loginBtn">Entrar</button>
+        <button type="submit" class="btn login-btn" id="loginBtn"><span class="login-btn-text">Entrar</span><span class="login-spinner" aria-hidden="true"></span></button>
         <div class="form-msg error" id="loginMsg" role="alert"></div>
 
         <p class="footnote login-note">Acesso restrito a usuários cadastrados. Para ter acesso, fale com o administrador.</p>
