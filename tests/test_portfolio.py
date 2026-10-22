@@ -287,6 +287,40 @@ class StrengthTextTest(unittest.TestCase):
         self.assertIn("já perdeu força", faded)
 
 
+class DividendMonthsTest(unittest.TestCase):
+    def test_received_by_month_fills_the_last_twelve_months(self):
+        divs = [{"exDate": "2026-10-05", "total": 10.0}, {"exDate": "2026-10-20", "total": 2.5},
+                {"exDate": "2026-01-10", "total": 4.0}, {"exDate": "2025-10-31", "total": 99.0}]  # fora da janela
+        months = pf.dividends_by_month(divs, "2026-10-22")
+        self.assertEqual(len(months), 12)
+        self.assertEqual(months[0]["month"], "2025-11")
+        self.assertEqual(months[-1], {"month": "2026-10", "total": 12.5})
+        self.assertEqual(next(m for m in months if m["month"] == "2026-01")["total"], 4.0)
+        self.assertEqual(sum(m["total"] for m in months), 16.5)
+
+    def test_receivables_by_payment_month_with_undefined_last(self):
+        rows = [{"paymentDate": "2026-11-10", "total": 5.0, "confirmed": True},
+                {"paymentDate": None, "total": 1.0, "confirmed": False},
+                {"paymentDate": "2026-11-28", "total": 3.0, "confirmed": False},
+                {"paymentDate": "2026-12-01", "total": 2.0, "confirmed": True}]
+        self.assertEqual(pf.receivables_by_month(rows), [
+            {"month": "2026-11", "total": 8.0, "confirmed": 5.0, "expected": 3.0},
+            {"month": "2026-12", "total": 2.0, "confirmed": 2.0, "expected": 0},
+            {"month": None, "total": 1.0, "confirmed": 0, "expected": 1.0}])
+
+
+class AssetTargetRowTest(unittest.TestCase):
+    def test_above_target_flag(self):
+        from marketpressure import portfolio_service as ps
+        row = lambda value, target: ps._asset_target_row(
+            {"key": "X", "label": "X", "value": value, "target": target, "autoTarget": True}, 1000)
+        self.assertTrue(row(300, 25)["above"])          # 30% com meta de 25%
+        self.assertFalse(row(250, 25)["above"])         # exatamente na meta
+        self.assertFalse(row(100, 25)["above"])
+        self.assertAlmostEqual(row(300, 25)["pct"], 30)
+        self.assertFalse(ps._asset_target_row({"key": "X", "label": "X", "value": 0, "target": 0, "autoTarget": True}, 0)["above"])
+
+
 class PatrimonyBarsTest(unittest.TestCase):
     def test_monthly_bars_by_class(self):
         from tests.support import candles

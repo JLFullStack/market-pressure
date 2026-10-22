@@ -29,23 +29,56 @@ const TABS = ['visao', 'aportes', 'proventos', 'metas', 'configuracoes'];
 // Hashes (e valores salvos) das sub-abas antigas, que foram juntadas em "Aportes e lançamentos".
 const TAB_ALIASES = { aportar: 'aportes', lancamentos: 'aportes' };
 const HISTORY_LIMIT = 10; // lançamentos mostrados no histórico antes de "Ver todos"
-// Cores fixas por série, nesta ordem (validadas sobre o fundo #161b22 do painel).
+// Cores fixas por série, nesta ordem (sobre o fundo #0e1527 do painel).
 const SERIES = [
-    { key: 'portfolio', label: 'Carteira', color: '#3987e5' },
-    { key: 'cdi', label: 'CDI', color: '#d95926' },
-    { key: 'bova', label: 'BOVA11', color: '#199e70' }
+    { key: 'portfolio', label: 'Carteira', color: '#5aa2ff' },
+    { key: 'cdi', label: 'CDI', color: '#ff8a5b' },
+    { key: 'bova', label: 'BOVA11', color: '#4ad991' }
 ];
 const PERIODS = ['6M', '1A', '2A', 'Tudo']; // os mesmos do servidor (portfolio.PERIODS)
 const PATRIMONY_PERIODS = ['30D', '1A', '2A', '5A', '10A', 'Tudo']; // os mesmos do servidor (portfolio.PATRIMONY_PERIODS)
 // Barras da evolução do patrimônio: pedaços empilhados (portfolio.patrimony_bars), de baixo para cima.
 const PATRIMONY_SERIES = [
-    { key: 'base', label: 'Valor aplicado', color: '#3987e5' },
-    { key: 'up', label: 'Ganho de capital', color: '#199e70' },
-    { key: 'down', label: 'Perda de capital', color: '#d95926' }
+    { key: 'base', label: 'Valor aplicado', color: '#4f8dff' },
+    { key: 'up', label: 'Ganho de capital', color: '#3ddc97' },
+    { key: 'down', label: 'Perda de capital', color: '#ff7b72' }
 ];
 // Modo "Por classe": uma cor fixa por classe (portfolio.CLASSES); outras usam EXTRA_COLORS.
-const CLASS_COLORS = { 'Ações': '#3987e5', 'Fundos imobiliários': '#199e70', 'ETFs Brasil': '#e3b341', 'Internacionais': '#a371f7', 'Renda fixa': '#8b949e' };
-const EXTRA_COLORS = ['#db61a2', '#d95926', '#56d4dd'];
+const CLASS_COLORS = { 'Ações': '#4f8dff', 'Fundos imobiliários': '#3ddc97', 'ETFs Brasil': '#ffc65c', 'Internacionais': '#a78bfa', 'Renda fixa': '#22d3ee' };
+const EXTRA_COLORS = ['#f472b6', '#ff8a5b', '#94a3b8'];
+const classColor = (name, k = 0) => CLASS_COLORS[name] || EXTRA_COLORS[k % EXTRA_COLORS.length];
+// Visual comum dos gráficos (Chart.js): grade, tooltip escuro e animação de entrada.
+const CHART_GRID = 'rgba(120, 150, 210, 0.1)';
+const CHART_ENTER = { duration: 900, easing: 'easeOutQuart' };
+const chartTooltip = () => ({
+    backgroundColor: 'rgba(10, 16, 32, 0.95)', borderColor: cssVar('--border-strong'), borderWidth: 1,
+    titleColor: cssVar('--text-color'), bodyColor: cssVar('--text-color'), padding: 12, cornerRadius: 10,
+    titleFont: { weight: '700' }, caretSize: 6,
+});
+// Preenchimento em degradê vertical (cor cheia em cima, alpha embaixo) para barras e áreas.
+const verticalGradient = (color, topAlpha = 1, bottomAlpha = 0.45) => (ctx) => {
+    const { chart } = ctx;
+    if (!chart.chartArea) return color;
+    const { top, bottom } = chart.chartArea;
+    const g = chart.ctx.createLinearGradient(0, top, 0, bottom);
+    g.addColorStop(0, hexAlpha(color, topAlpha));
+    g.addColorStop(1, hexAlpha(color, bottomAlpha));
+    return g;
+};
+// Mesmo degradê, na horizontal (barras deitadas): mais transparente à esquerda.
+const horizontalGradient = (color, leftAlpha = 0.5, rightAlpha = 1) => (ctx) => {
+    const { chart } = ctx;
+    if (!chart.chartArea) return color;
+    const { left, right } = chart.chartArea;
+    const g = chart.ctx.createLinearGradient(left, 0, right, 0);
+    g.addColorStop(0, hexAlpha(color, leftAlpha));
+    g.addColorStop(1, hexAlpha(color, rightAlpha));
+    return g;
+};
+const hexAlpha = (hex, a) => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+};
 const PATRIMONY_MODES = { valor: 'Aplicado e ganho', classes: 'Por classe' };
 const APORTE_MODES = { todos: 'Todos os ativos da carteira', escolher: 'Escolher ativos', pullback: 'Pelas regras do pullback' };
 // Indicação da posição (COMPRAR, VENDER, MANTER; portfolio.position_signal: statusKey) → badge.
@@ -54,7 +87,16 @@ const PLAN_BADGE = { sell: 'badge-hot', fixed: 'badge-low', setup: 'badge-ok', w
 const AMOUNT_DELAY_MS = 250; // espera após a digitação do valor do aporte antes de recalcular
 // Rótulo do campo de valor da meta, conforme o tipo.
 const GOAL_TARGET_LABEL = { renda: 'Renda mensal desejada (R$)', patrimonio: 'Patrimônio desejado (R$)' };
-const GOAL_COLORS = { value: '#3987e5', contributed: '#8b949e', goal: '#e3b341' };
+const GOAL_COLORS = { value: '#5aa2ff', contributed: '#a78bfa', goal: '#ffc65c' };
+// Tipo do lançamento no histórico → pílula (compra/aporte entram, venda/resgate saem).
+const ENTRY_PILL = { compra: 'badge-ok', aporte: 'badge-info', venda: 'badge-hot', resgate: 'badge-fill' };
+// Sentido do dinheiro do lançamento (entra na carteira ou sai dela) → cor do ponto e seta da pílula.
+const ENTRY_DIRECTION = { compra: 'in', aporte: 'in', venda: 'out', resgate: 'out', valor: 'update' };
+const ENTRY_ARROW = {
+    in: '<svg class="entry-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg>',
+    out: '<svg class="entry-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7L7 17M15 17H7V9"/></svg>',
+    update: '<svg class="entry-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4"/></svg>',
+};
 
 // ================================================================ Estado
 
@@ -64,12 +106,17 @@ const state = {
     structure: null,     // resposta de /estrutura da carteira atual
     analysis: null,      // resposta de /analise
     plan: null,          // último plano de aporte exibido
-    aporteCharts: [],    // gráficos da calculadora de aporte (destruídos a cada novo plano)
+    aporteCharts: {},    // gráficos da calculadora de aporte por canvas (atualizados no lugar a cada novo plano)
     period: '1A',
     patrimonyPeriod: '1A',
     patrimonyClass: '',  // classe do gráfico de patrimônio ('' = todas)
     patrimonyMode: 'valor', // 'valor' (aplicado e ganho) ou 'classes' (por classe)
     patrimonyChart: null,
+    chartSeq: {},        // por canvas: descarta o gráfico que esperava aparecer na tela e já foi substituído
+    allocationChart: null,
+    dividendChart: null,
+    targetsChart: null,
+    receivables: null,   // última resposta de /proventos (gráfico mês a mês)
     run: 0,
     aporteSeq: 0,        // descarta respostas de aporte fora de ordem
     txSeq: 0,            // idem para a consulta de ticker/preço do formulário
@@ -133,6 +180,7 @@ function writeAportePrefs(id, prefs) {
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
+    observeReveal();
     $('txMarket').innerHTML = Object.entries(MARKETS).map(([k, m]) => `<option value="${k}">${m.label}</option>`).join('');
     $('aporteMode').innerHTML = Object.entries(APORTE_MODES).map(([k, label]) => `<option value="${k}">${label}</option>`).join('');
     try { $('aporteBase').value = localStorage.getItem(MODE_KEY) || 'fechamento'; } catch (e) { /* sem preferência salva */ }
@@ -253,6 +301,7 @@ function renderSelector() {
         `<option value="${p.id}" ${p.id === state.currentId ? 'selected' : ''}>${escapeHTML(p.name)}</option>`).join('');
     const has = state.doc.portfolios.length > 0;
     select.disabled = !has;
+    $('portfolioTitle').innerText = current()?.name || 'Carteira';
     $('renamePortfolioBtn').disabled = $('deletePortfolioBtn').disabled = !has;
 }
 
@@ -373,6 +422,7 @@ async function loadPortfolio(busy) {
     if (a.failed.length) showError(`Dados indisponíveis: ${a.failed.join('; ')}. Os valores desses itens usam o último preço informado.`);
     else hideError();
 
+    $('livePill').hidden = !a.live;
     $('lastUpdate').innerText = `Cotações de ${fmtDate(a.lastDay)}${a.live ? ' (pregão em andamento)' : ''} · atualizado em ${new Date(a.loadedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
     renderKpis(a);
     renderAporte();
@@ -384,6 +434,7 @@ async function loadPortfolio(busy) {
     renderDividends(a);
     $('receivableTotals').innerText = '';
     $('receivablesBody').innerHTML = `<tr><td colspan="8" class="empty-row">Carregando proventos anunciados...</td></tr>`;
+    revealItems($('receivablesBody'));
     busy();
     const result = await receivables;
     if (run !== state.run) return;
@@ -415,7 +466,7 @@ function showTab(name) {
     try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* preferência não salva */ }
     // Um canvas desenhado enquanto a seção estava escondida fica com tamanho zero.
     if (has && (name === 'visao' || name === 'aportes')) {
-        const charts = name === 'visao' ? [state.chart, state.patrimonyChart] : state.aporteCharts;
+        const charts = name === 'visao' ? [state.chart, state.patrimonyChart] : Object.values(state.aporteCharts);
         for (const c of charts) if (c) { c.resize(); c.update('none'); }
     }
     if (has && name === 'metas' && !state.goals) loadGoals();
@@ -447,28 +498,49 @@ function onTabKey(ev) {
     goTab(TABS[(next + TABS.length) % TABS.length], true);
 }
 
+// Cor do cartão pelo sinal do valor (verde, vermelho, ou o tom neutro quando não há valor).
+function toneBySign(card, v, neutral = 'tone-blue') {
+    card.classList.remove('tone-green', 'tone-red', 'tone-blue', 'tone-cyan', 'tone-violet');
+    card.classList.add(v === null || v === undefined ? neutral : v >= 0 ? 'tone-green' : 'tone-red');
+}
+
+// Carteira × CDI × BOVA11 num período: uma barra por série, proporcional ao maior retorno em
+// módulo (as negativas em vermelho), com o valor ao lado.
+function compareBars(r) {
+    if (!r) return '';
+    const rows = SERIES.map(s => ({ ...s, v: r[s.key] }));
+    const max = Math.max(...rows.map(x => Math.abs(x.v)), 0.0001);
+    return `<div class="cmp">${rows.map((x, k) => `<div class="cmp-row">
+            <span class="cmp-label">${x.label}</span>
+            <span class="cmp-track"><i style="--w:${(Math.abs(x.v) / max).toFixed(3)};--c:${x.v < 0 ? 'var(--danger)' : x.color};--k:${k}"></i></span>
+            <span class="cmp-val num ${signClass(x.v)}">${fmtPct(x.v, 2)}</span></div>`).join('')}
+        <div class="small muted">desde ${fmtDate(r.from)}</div></div>`;
+}
+
 function renderKpis(a) {
     const k = a.kpis;
-    const colored = (id, text, v) => { $(id).innerText = text; $(id).className = `kpi-value ${signClass(v)}`; };
-    $('kpiValue').innerText = fmtBRL(k.total);
+    const delta = (id, v) => { $(id).innerText = v === null || v === undefined ? '' : fmtPct(v, 2); $(id).className = `kpi-delta ${signClass(v)}`; };
+    setCount($('kpiValue'), k.total, { format: 'brl' });
     $('kpiValueNote').innerText = `${a.open.length} ativo(s) e ${a.fixed.length} título(s) de renda fixa`;
-    $('kpiInvested').innerText = fmtBRL(k.invested);
-    colored('kpiProfit', `${fmtBRL(k.profit)}${k.profitPct === null ? '' : ` (${fmtPct(k.profitPct, 2)})`}`, k.profit);
+    const months = a.patrimony?.groups.find(g => g.key === '')?.bars.slice(-24).map(b => b.value) || [];
+    drawSpark($('patrimonySpark'), months, months.length < 2 || months.at(-1) >= months[0]);
+    setCount($('kpiInvested'), k.invested, { format: 'brl' });
+    setCount($('kpiProfit'), k.profit, { format: 'sbrl' });
+    delta('kpiProfitPct', k.profitPct);
+    toneBySign($('kpiProfitCard'), k.profit);
     $('kpiProfitNote').innerText = `Valorização ${fmtBRL(k.unrealized)} · proventos ${fmtBRL(k.dividendsTotal)} · realizado ${fmtBRL(k.realized)}`;
-    $('kpiDividends').innerText = fmtBRL(k.dividendsTotal);
+    setCount($('kpiDividends'), k.dividendsTotal, { format: 'brl' });
     $('kpiDividendsNote').innerText = 'Brutos, estimados pela data-com' + (a.hasForeign ? '; EUA sem os 30% de IR retidos' : '');
-    if (k.day) {
-        colored('kpiDay', `${fmtBRL(k.day.value)} (${fmtPct(k.day.pct, 2)})`, k.day.value);
-        $('kpiDayNote').innerText = `Pregão de ${fmtDate(k.day.date)}`;
-    } else {
-        colored('kpiDay', '—', 0);
-        $('kpiDayNote').innerText = '';
-    }
-    const compare = (r) => r ? `<span class="swatch" style="background:${SERIES[1].color}"></span>CDI ${fmtPct(r.cdi, 2)} · <span class="swatch" style="background:${SERIES[2].color}"></span>BOVA11 ${fmtPct(r.bova, 2)}<br>desde ${fmtDate(r.from)}` : '';
-    colored('kpiTwrAll', k.sinceStart ? fmtPct(k.sinceStart.portfolio, 2) : '—', k.sinceStart?.portfolio || 0);
-    $('kpiTwrAllNote').innerHTML = compare(k.sinceStart);
-    colored('kpiTwr12', k.last12 ? fmtPct(k.last12.portfolio, 2) : '—', k.last12?.portfolio || 0);
-    $('kpiTwr12Note').innerHTML = compare(k.last12);
+    setCount($('kpiDay'), k.day ? k.day.value : null, { format: 'sbrl' });
+    delta('kpiDayPct', k.day ? k.day.pct : null);
+    toneBySign($('kpiDayCard'), k.day ? k.day.value : null);
+    $('kpiDayNote').innerText = k.day ? `Pregão de ${fmtDate(k.day.date)}` : '';
+    setCount($('kpiTwrAll'), k.sinceStart ? k.sinceStart.portfolio : null, { format: 'pct', decimals: 2 });
+    toneBySign($('kpiTwrAllCard'), k.sinceStart ? k.sinceStart.portfolio : null);
+    $('kpiTwrAllNote').innerHTML = compareBars(k.sinceStart);
+    setCount($('kpiTwr12'), k.last12 ? k.last12.portfolio : null, { format: 'pct', decimals: 2 });
+    toneBySign($('kpiTwr12Card'), k.last12 ? k.last12.portfolio : null);
+    $('kpiTwr12Note').innerHTML = compareBars(k.last12);
 }
 
 // ---------------------------------------------------------------- Aporte
@@ -498,6 +570,34 @@ function allocBar(label, pct, target, after = null) {
         <div class="goal" style="left:calc(${w(target)}% - 1px)"></div></div>`;
 }
 
+// Cartões do topo da calculadora: montados uma vez (cada um aparece ao rolar) e depois só os
+// valores mudam, contando do valor anterior para o novo enquanto o aporte é digitado.
+function renderAporteKpis(plan) {
+    const box = $('aporteKpis');
+    if (!$('apKpiTotal')) {
+        const card = (id, label, tone, svg) => `<div class="kpi kpi-card ${tone}" id="${id}Card" data-reveal>
+            <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${svg}</svg></span><span class="kpi-label">${label}</span></div>
+            <div class="kpi-value num" id="${id}">—</div><div class="kpi-note" id="${id}Note"></div></div>`;
+        box.innerHTML = [
+            card('apKpiTotal', 'Patrimônio atual', 'tone-blue', '<rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 6V4h10v2"/>'),
+            card('apKpiEstimated', 'Valor estimado após o aporte', 'tone-cyan', '<path d="M3 17l5-5 4 3 8-8M15 7h5v5"/>'),
+            card('apKpiSuggested', 'Sugestão de aporte', 'tone-violet', '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'),
+        ].join('');
+        observeReveal(box);
+    }
+    setCount($('apKpiTotal'), plan.total, { format: 'brl' });
+    setCount($('apKpiEstimated'), plan.estimated, { format: 'brl' });
+    $('apKpiEstimatedNote').innerText = `aporte de ${fmtBRL(plan.amount)}`;
+    const suggested = $('apKpiSuggested');
+    if (plan.waiting) { setCount(suggested, null); suggested.textContent = 'Aguardar'; }
+    else setCount(suggested, plan.suggested, { format: 'brl' });
+    $('apKpiSuggestedNote').innerText = plan.waiting ? 'nenhum ativo elegível agora'
+        : `efetivo em cotas ${fmtBRL(plan.effective)} · sobra ${fmtBRL(plan.leftover)}`
+          + (plan.unallocated > 0.004 ? ` · sem destino (teto) ${fmtBRL(plan.unallocated)}` : '');
+    $('apKpiSuggestedCard').classList.toggle('tone-red', !!plan.waiting);
+    $('apKpiSuggestedCard').classList.toggle('tone-violet', !plan.waiting);
+}
+
 // Pede ao servidor o plano dos campos do painel e desenha.
 async function renderAporte() {
     const portfolio = current();
@@ -522,14 +622,7 @@ async function renderAporte() {
     $('aporteBaseField').hidden = mode !== 'pullback';
     $('aporteTable').classList.toggle('picking', mode === 'escolher');
 
-    const kpi = (label, value, note = '') => `<div class="kpi"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-note">${note}</div></div>`;
-    $('aporteKpis').innerHTML = [
-        kpi('Patrimônio atual', fmtBRL(plan.total)),
-        kpi('Valor estimado após o aporte', fmtBRL(plan.estimated), `aporte de ${fmtBRL(plan.amount)}`),
-        kpi('Sugestão de aporte', plan.waiting ? 'Aguardar' : fmtBRL(plan.suggested),
-            plan.waiting ? 'nenhum ativo elegível agora' : `efetivo em cotas ${fmtBRL(plan.effective)} · sobra ${fmtBRL(plan.leftover)}`
-                + (plan.unallocated > 0.004 ? ` · sem destino (teto) ${fmtBRL(plan.unallocated)}` : ''))
-    ].join('');
+    renderAporteKpis(plan);
 
     // Explicação do resultado: modo, base da distribuição, redirecionamento e espera.
     const notes = [];
@@ -557,9 +650,11 @@ async function renderAporte() {
     // "Falta para o ideal": acima da meta não é venda, só não recebe aporte.
     const money = (v, above) => above ? '<span class="muted">acima da meta</span>'
         : `<span class="${signClass(Math.round(v * 100))}">${fmtBRL(v)}</span>`;
+    // Cor de cada classe (a mesma da Alocação por classe e de Classes e metas), pela ordem do plano.
+    const colorOf = new Map(plan.classRows.map((c, k) => [c.cls, classColor(c.cls, k)]));
     $('aporteClassBody').innerHTML = plan.classRows.map(c => `
         <tr>
-            <td><strong>${escapeHTML(c.cls)}</strong></td>
+            <td class="nowrap"><span class="swatch-box" style="background:${colorOf.get(c.cls)}"></span><strong>${escapeHTML(c.cls)}</strong></td>
             <td class="r nowrap">${fmtBRL(c.value)}</td>
             <td class="r nowrap">${fmtNum(c.pct, 2)}%</td>
             <td class="r nowrap">${fmtNum(c.target, 2)}%</td>
@@ -571,8 +666,9 @@ async function renderAporte() {
         <tr class="total-row"><td><strong>Total</strong></td><td class="r nowrap"><strong>${fmtBRL(plan.total)}</strong></td><td class="r">100%</td>
             <td class="r nowrap">${fmtNum(plan.targetSum, 2)}%</td><td class="r nowrap"><strong>${fmtBRL(plan.estimated)}</strong></td>
             <td class="r nowrap">${fmtBRL(plan.gap)}</td><td class="r nowrap"><strong>${fmtBRL(plan.suggested)}</strong></td><td></td></tr>`;
+    revealItems($('aporteClassBody'));
 
-    const assetRow = (r) => {
+    const assetRow = (r, color) => {
         const candidate = r.status.key === 'candidate'; // ativo novo das sugestões do Screener
         const pick = `<td class="c pick"><input type="checkbox" data-pick="${escapeHTML(r.key)}" ${selected.has(r.key) || candidate ? 'checked' : ''} ${r.status.key === 'sell' || candidate ? 'disabled' : ''}
             aria-label="Incluir ${escapeHTML(r.label)} no aporte"></td>`;
@@ -596,7 +692,8 @@ async function renderAporte() {
         return `
         <tr>
             ${pick}
-            <td><strong>${escapeHTML(r.label)}</strong>${priority}${native}</td>
+            <td><div class="asset"><span class="avatar solo" style="--a1:${color}" aria-hidden="true">${escapeHTML(r.label.slice(0, 2).toUpperCase())}</span>
+                <div class="asset-text"><strong>${escapeHTML(r.label)}</strong>${priority}${native}</div></div></td>
             <td><span class="badge ${PLAN_BADGE[r.status.key]}">${escapeHTML(r.status.label)}</span></td>
             <td class="r nowrap">${fmtBRL(r.value)}</td>
             <td class="r nowrap">${fmtNum(r.pct, 2)}%</td>
@@ -609,8 +706,9 @@ async function renderAporte() {
         </tr>`;
     };
     const groups = plan.classRows.filter(c => c.members.length).map(c => `
-        <tr class="group-row"><td colspan="11"><span class="sticky-label"><strong>${escapeHTML(c.cls)}</strong> <span class="small muted">meta ${fmtNum(c.target, 2)}% · ${c.members.length} ativo(s)</span></span></td></tr>
-        ${c.members.map(assetRow).join('')}
+        <tr class="group-row"><td colspan="11"><span class="sticky-label"><span class="swatch-box" style="background:${colorOf.get(c.cls)}"></span><strong>${escapeHTML(c.cls)}</strong>
+            <span class="target-chip">meta ${fmtNum(c.target, 2)}%</span> <span class="small muted">${c.members.length} ativo(s)</span></span></td></tr>
+        ${c.members.map(r => assetRow(r, colorOf.get(c.cls))).join('')}
         <tr class="total-row">
             <td class="pick"></td><td><strong>Total ${escapeHTML(c.cls)}</strong></td><td></td>
             <td class="r nowrap"><strong>${fmtBRL(c.value)}</strong></td><td class="r nowrap">${fmtNum(c.pct, 2)}%</td>
@@ -620,6 +718,7 @@ async function renderAporte() {
         </tr>`);
     $('aporteAssetsBody').innerHTML = groups.length ? groups.join('')
         : `<tr><td colspan="11" class="empty-row">Nenhum ativo com posição.</td></tr>`;
+    revealItems($('aporteAssetsBody'));
 
     // "Registrar compras sugeridas": só com ao menos um ativo cotado elegível com cotas > 0.
     $('aporteRegisterBtn').hidden = !plan.canRegister;
@@ -654,6 +753,7 @@ function renderCandidates(plan) {
                 </span>
             </label>`).join('')}</div></div>`;
     }).join('');
+    revealItems(box, '.cand');
 }
 
 function onCandidateChange(ev) {
@@ -670,16 +770,35 @@ function onCandidateChange(ev) {
 
 // ---------------------------------------------------------------- Gráficos do aporte
 
-function destroyAporteCharts() {
-    for (const c of state.aporteCharts) c.destroy();
-    state.aporteCharts = [];
-    if ($('chartTip')) $('chartTip').hidden = true;
+// Gráficos da calculadora: cada um é criado quando aparece na tela (whenVisible, com a animação de
+// entrada) e depois atualizado no lugar a cada novo plano, então barras e fatias deslizam até os
+// valores novos enquanto o valor do aporte é digitado.
+const APORTE_ANIMATION = { duration: 700, easing: 'easeOutQuart' };
+function aporteChart(canvasId, config) {
+    config.options.animation = APORTE_ANIMATION;
+    const chart = state.aporteCharts[canvasId];
+    if (chart) {
+        chart.data = config.data;
+        chart.options = config.options;
+        chart.update();
+        return;
+    }
+    whenVisible(canvasId, () => {
+        state.aporteCharts[canvasId]?.destroy();
+        state.aporteCharts[canvasId] = new Chart($(canvasId), config);
+    });
+}
+
+function dropAporteChart(canvasId) {
+    if (state.aporteCharts[canvasId] && $('chartTip')) $('chartTip').hidden = true; // tooltip flutuante das roscas
+    state.aporteCharts[canvasId]?.destroy();
+    delete state.aporteCharts[canvasId];
+    whenVisible(canvasId, () => {}); // cancela uma criação que esperava aparecer
 }
 
 const pctTick = (v) => `${fmtNum(v, 0)}%`;
-const chartTheme = () => ({ text: cssVar('--text-color'), muted: cssVar('--text-muted'), grid: 'rgba(139, 148, 158, 0.12)' });
-const tooltipStyle = (t) => ({ backgroundColor: cssVar('--panel-bg'), borderColor: cssVar('--border-color'), borderWidth: 1, titleColor: t.text, bodyColor: t.text, padding: 10 });
-const classColor = (name, k) => CLASS_COLORS[name] || EXTRA_COLORS[k % EXTRA_COLORS.length];
+const chartTheme = () => ({ text: cssVar('--text-color'), muted: cssVar('--text-muted'), grid: CHART_GRID });
+const tooltipStyle = () => chartTooltip();
 
 // Tooltip em HTML (position: fixed) para gráficos pequenos demais para o tooltip do canvas:
 // "Classe: 12,34%", preso dentro da tela. Some ao rolar a página.
@@ -714,27 +833,29 @@ function floatingTooltip({ chart, tooltip }) {
 }
 
 // Gráficos A (classe: atual × após × meta), D (roscas) e B (por ativo). Tudo vem do plano.
+const APORTE_CHART_IDS = ['aporteClassChart', 'aporteDonutNow', 'aporteDonutAfter', 'aporteDonutTarget', 'aporteAssetChart'];
+
 function renderAporteCharts(plan) {
-    destroyAporteCharts();
     const show = plan.amount > 0 && !plan.waiting && plan.total + plan.amount > 0;
     $('aporteChartsBlock').hidden = !show;
-    if (!show) return;
+    if (!show) { APORTE_CHART_IDS.forEach(dropAporteChart); return; }
     const t = chartTheme();
     const classes = plan.classRows.filter(c => c.target > 0 || c.value > 0 || c.effective > 0);
     const labels = classes.map(c => c.cls);
 
-    state.aporteCharts.push(new Chart($('aporteClassChart'), {
+    aporteChart('aporteClassChart', {
         type: 'bar',
         data: {
             labels,
             datasets: [
-                { label: 'Atual', data: classes.map(c => c.pct), backgroundColor: '#8b949e' },
-                { label: 'Após o aporte', data: classes.map(c => c.pctAfter), backgroundColor: '#3987e5' },
-                { label: 'Meta', data: classes.map(c => c.target), backgroundColor: '#e3b341' }
+                ...[['Atual', 'pct', '#94a3b8'], ['Após o aporte', 'pctAfter', '#5aa2ff'], ['Meta', 'target', '#ffc65c']].map(([label, key, color]) => ({
+                    label, data: classes.map(c => c[key]), backgroundColor: horizontalGradient(color, 0.45, 1), hoverBackgroundColor: color,
+                    borderRadius: 6, borderSkipped: false, maxBarThickness: 16, categoryPercentage: 0.7, barPercentage: 0.85
+                }))
             ]
         },
         options: {
-            indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: false,
+            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
             plugins: {
                 legend: { labels: { color: t.text, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12 } },
                 tooltip: { ...tooltipStyle(t), callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtNum(ctx.raw)}%` } }
@@ -744,41 +865,41 @@ function renderAporteCharts(plan) {
                 y: { ticks: { color: t.text }, grid: { display: false }, border: { color: t.grid } }
             }
         }
-    }));
+    });
 
-    const donut = (canvas, values) => {
-        if (!values.some(v => v > 0)) return;
-        state.aporteCharts.push(new Chart(canvas, {
+    const donut = (canvasId, values) => {
+        if (!values.some(v => v > 0)) { dropAporteChart(canvasId); return; }
+        aporteChart(canvasId, {
             type: 'doughnut',
-            data: { labels, datasets: [{ data: values, backgroundColor: classes.map((c, k) => classColor(c.cls, k)), borderColor: cssVar('--panel-bg'), borderWidth: 2 }] },
+            data: { labels, datasets: [{ data: values, backgroundColor: classes.map((c, k) => classColor(c.cls, k)), borderColor: cssVar('--panel-bg'), borderWidth: 3, hoverOffset: 6, borderRadius: 4 }] },
             options: {
-                responsive: true, maintainAspectRatio: false, animation: false, cutout: '58%',
+                responsive: true, maintainAspectRatio: false, cutout: '68%', layout: { padding: 6 },
                 // A rosca é pequena (no celular, ~100 px): o tooltip vai fora do canvas, sem ser cortado.
                 plugins: { legend: { display: false }, tooltip: { enabled: false, external: floatingTooltip } }
             }
-        }));
+        });
     };
-    donut($('aporteDonutNow'), classes.map(c => c.pct));
-    donut($('aporteDonutAfter'), classes.map(c => c.pctAfter));
-    donut($('aporteDonutTarget'), classes.map(c => c.target));
+    donut('aporteDonutNow', classes.map(c => c.pct));
+    donut('aporteDonutAfter', classes.map(c => c.pctAfter));
+    donut('aporteDonutTarget', classes.map(c => c.target));
     $('aporteDonutLegend').innerHTML = classes.map((c, k) =>
         `<span class="nowrap"><span class="swatch-box" style="background:${classColor(c.cls, k)}"></span>${escapeHTML(c.cls)}</span>`).join('');
 
     // Por ativo: saldo atual + aporte + o que ainda falta para o ideal, empilhados.
     const assets = plan.classRows.flatMap(c => c.members).filter(r => r.value > 0 || r.effective > 0 || r.gapAfter > 0.004);
     $('aporteAssetWrap').style.height = `${Math.max(200, assets.length * 30 + 80)}px`;
-    state.aporteCharts.push(new Chart($('aporteAssetChart'), {
+    aporteChart('aporteAssetChart', {
         type: 'bar',
         data: {
             labels: assets.map(r => r.label),
             datasets: [
-                { label: 'Saldo atual', data: assets.map(r => r.value), backgroundColor: '#3987e5', stack: 'a' },
-                { label: 'Aporte', data: assets.map(r => r.effective), backgroundColor: '#199e70', stack: 'a' },
-                { label: 'Ainda falta para o ideal', data: assets.map(r => r.gapAfter), backgroundColor: 'rgba(139, 148, 158, 0.35)', stack: 'a' }
-            ]
+                { label: 'Saldo atual', data: assets.map(r => r.value), backgroundColor: horizontalGradient('#4f8dff', 0.55, 1), hoverBackgroundColor: '#4f8dff' },
+                { label: 'Aporte', data: assets.map(r => r.effective), backgroundColor: horizontalGradient('#3ddc97', 0.6, 1), hoverBackgroundColor: '#3ddc97' },
+                { label: 'Ainda falta para o ideal', data: assets.map(r => r.gapAfter), backgroundColor: 'rgba(148, 163, 184, 0.16)', hoverBackgroundColor: 'rgba(148, 163, 184, 0.3)' }
+            ].map(d => ({ ...d, stack: 'a', borderRadius: 5, borderSkipped: false, maxBarThickness: 18, borderWidth: 0 }))
         },
         options: {
-            indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: false,
+            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
             // Barras deitadas: o toque escolhe o ativo pela posição vertical (axis 'y').
             interaction: { mode: 'index', axis: 'y', intersect: false },
             plugins: {
@@ -790,7 +911,7 @@ function renderAporteCharts(plan) {
                 y: { stacked: true, ticks: { color: t.text }, grid: { display: false }, border: { color: t.grid } }
             }
         }
-    }));
+    });
 }
 
 // Plano de vários aportes (gráfico C e a tabela mês a mês), por classe.
@@ -798,21 +919,26 @@ function renderAportePath(plan) {
     const path = plan.path;
     const show = !!path && !plan.waiting;
     $('aportePathBlock').hidden = !show;
-    if (!show) return;
+    if (!show) { dropAporteChart('aportePathChart'); return; }
     const t = chartTheme();
     const classes = plan.classRows.filter(c => c.target > 0 || c.value > 0);
     const steps = [path.start, ...path.months];
     const labels = ['Hoje', ...path.months.map(m => `${m.n}º`)];
     $('aportePathSummary').innerText = path.summary;
+    // Sem aportes até o equilíbrio (as classes já estão na meta): o gráfico teria só o ponto
+    // "Hoje"; fica só a frase e a tabela.
+    $('aportePathChart').parentElement.hidden = !path.months.length;
+    if (!path.months.length) dropAporteChart('aportePathChart');
     const lines = classes.flatMap((c, k) => [
-        { label: c.cls, data: steps.map(s => s.pct[c.cls]), borderColor: classColor(c.cls, k), backgroundColor: classColor(c.cls, k), borderWidth: 2, pointRadius: 0, tension: 0 },
-        { label: `${c.cls} (meta)`, data: steps.map(() => c.target), borderColor: classColor(c.cls, k), borderWidth: 1, borderDash: [4, 4], pointRadius: 0 }
+        { label: c.cls, data: steps.map(s => s.pct[c.cls]), borderColor: classColor(c.cls, k), backgroundColor: classColor(c.cls, k), borderWidth: 2.5,
+          pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: cssVar('--panel-bg'), pointBorderWidth: 2, tension: 0.25 },
+        { label: `${c.cls} (meta)`, data: steps.map(() => c.target), borderColor: hexAlpha(classColor(c.cls, k), 0.6), borderWidth: 1.2, borderDash: [5, 4], pointRadius: 0 }
     ]);
-    state.aporteCharts.push(new Chart($('aportePathChart'), {
+    if (path.months.length) aporteChart('aportePathChart', {
         type: 'line',
         data: { labels, datasets: lines },
         options: {
-            responsive: true, maintainAspectRatio: false, animation: false,
+            responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { labels: { color: t.text, usePointStyle: true, pointStyle: 'line', boxWidth: 24, filter: (item) => !item.text.endsWith('(meta)') } },
@@ -829,12 +955,13 @@ function renderAportePath(plan) {
                 y: { beginAtZero: true, ticks: { color: t.muted, callback: pctTick }, grid: { color: t.grid }, border: { display: false } }
             }
         }
-    }));
+    });
     $('aportePathHead').innerHTML = `<tr><th>Aporte</th>${classes.map(c => `<th class="r">${escapeHTML(c.cls)}</th>`).join('')}<th class="r">Maior desvio da meta</th></tr>`;
     $('aportePathBody').innerHTML = path.months.length ? path.months.map(m => `<tr><td>${m.n}º</td>${classes.map(c =>
         `<td class="r nowrap">${fmtBRL(m.parts[c.cls] || 0)}<div class="small muted">${fmtNum(m.pct[c.cls])}%</div></td>`).join('')}
         <td class="r nowrap">${fmtNum(m.deviation, 1)} p.p.</td></tr>`).join('')
         : `<tr><td colspan="${classes.length + 2}" class="empty-row">Nenhum aporte necessário para equilibrar.</td></tr>`;
+    revealItems($('aportePathBody'));
 }
 
 // Histórico de aportes: os 12 meses mais recentes com lançamentos, por classe.
@@ -843,6 +970,7 @@ function renderAporteHistory(plan) {
     $('aporteHistoryBlock').hidden = !rows.length;
     $('aporteHistoryBody').innerHTML = rows.map(h => {
         const parts = Object.entries(h.byClass).map(([c, v]) => `<span class="nowrap">${escapeHTML(c)} <span class="${signClass(v)}">${signedBRL(v)}</span></span>`).join(' · ');
+    revealItems($('aporteHistoryBody'));
         const adherence = h.adherence === null ? '<span class="muted">—</span>'
             : `${fmtNum(h.adherence, 0)}%${h.above.length ? `<div class="small muted">acima da meta: ${h.above.map(escapeHTML).join(', ')}</div>` : ''}`;
         return `<tr><td class="nowrap">${fmtMonth(h.month)}</td><td class="r nowrap ${signClass(h.total)}">${signedBRL(h.total)}</td><td>${parts}</td><td class="r">${adherence}</td></tr>`;
@@ -856,7 +984,7 @@ function setAporteCollapsed(collapsed) {
     $('aporteToggle').setAttribute('aria-expanded', String(!collapsed));
     $('aporteToggle').innerText = collapsed ? 'Expandir' : 'Recolher';
     try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) { /* preferência não salva */ }
-    if (!collapsed) for (const c of state.aporteCharts) { c.resize(); c.update('none'); } // desenhados enquanto escondidos
+    if (!collapsed) for (const c of Object.values(state.aporteCharts)) { c.resize(); c.update('none'); } // desenhados enquanto escondidos
 }
 
 // ---------------------------------------------------------------- Registrar compras sugeridas
@@ -971,7 +1099,7 @@ function targetField(r, prefix) {
     return `<label class="sr-only" for="${id}">Meta de ${escapeHTML(r.label)} (% do patrimônio)</label>
             <input type="number" class="select target-input" id="${id}" data-target-key="${escapeHTML(r.key)}" min="0" max="100" step="0.01"
                 value="${r.autoTarget ? '' : r.target}" placeholder="${fmtNum(r.target, 2)}">
-            <div class="small muted">${r.autoTarget ? 'automática' : 'fixada'}</div>`;
+            <div class="small"><span class="target-mode ${r.autoTarget ? 'auto' : 'fixed'}">${r.autoTarget ? 'automática' : 'fixada'}</span></div>`;
 }
 
 // Checkbox de "escolher ativos" (só preferência local) ou meta fixada de um ativo (salva),
@@ -1015,6 +1143,15 @@ const crosshairPlugin = {
 
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+// Cria o gráfico do canvas quando o painel dele aparece na tela (onReveal, em core.js), para a
+// animação de entrada acontecer à vista. Um novo pedido para o mesmo canvas antes disso
+// substitui o anterior (cada canvas tem a sua contagem: os gráficos não se cancelam entre si).
+function whenVisible(canvasId, draw) {
+    const seq = (state.chartSeq[canvasId] || 0) + 1;
+    state.chartSeq[canvasId] = seq;
+    onReveal($(canvasId), () => { if (state.chartSeq[canvasId] === seq) draw(); });
+}
+
 // Mês "2026-10" → "out/26".
 const fmtMonth = (m) => `${new Date(+m.slice(0, 4), +m.slice(5, 7) - 1, 1).toLocaleString('pt-BR', { month: 'short' }).replace('.', '')}/${m.slice(2, 4)}`;
 const fmtCompactBRL = (v) => `R$ ${v.toLocaleString('pt-BR', { notation: 'compact', maximumFractionDigits: 1 })}`;
@@ -1053,9 +1190,8 @@ function renderPatrimony() {
     if (typeof Chart === 'undefined') return;
 
     const flowLabel = period.daily ? 'Aportes líquidos no dia' : 'Aportes líquidos no mês';
-    const classColor = (g, k) => CLASS_COLORS[g.key] || EXTRA_COLORS[k % EXTRA_COLORS.length];
     const series = byClass
-        ? classes.map((g, k) => ({ label: g.label, color: classColor(g, k), data: barsOf(g).map(b => b.value) }))
+        ? classes.map((g, k) => ({ label: g.label, color: classColor(g.key, k), data: barsOf(g).map(b => b.value) }))
         : PATRIMONY_SERIES.map(s => ({ ...s, data: bars.map(b => b[s.key]) }));
     const classBars = classes.map(barsOf);
     const tooltipLines = (i) => {
@@ -1073,18 +1209,22 @@ function renderPatrimony() {
         lines.push(` ${flowLabel}: ${signedBRL(b.flow)}`);
         return lines;
     };
-    const text = cssVar('--text-color'), muted = cssVar('--text-muted'), grid = 'rgba(139, 148, 158, 0.12)';
+    const text = cssVar('--text-color'), muted = cssVar('--text-muted'), grid = CHART_GRID;
+    // Criado quando o painel aparece na tela (a animação de entrada acontece à vista); um novo
+    // desenho antes disso substitui o que estava esperando.
+    whenVisible('patrimonyChart', () => {
+    state.patrimonyChart?.destroy();
     state.patrimonyChart = new Chart($('patrimonyChart'), {
         type: 'bar',
         data: {
             labels,
             datasets: series.map(s => ({
-                label: s.label, data: s.data, backgroundColor: s.color, hoverBackgroundColor: s.color, borderRadius: 2,
-                maxBarThickness: 36, stack: 'patrimonio'
+                label: s.label, data: s.data, backgroundColor: verticalGradient(s.color, 0.95, 0.55), hoverBackgroundColor: s.color,
+                borderRadius: 5, borderSkipped: false, maxBarThickness: 36, stack: 'patrimonio'
             }))
         },
         options: {
-            responsive: true, maintainAspectRatio: false, animation: false,
+            responsive: true, maintainAspectRatio: false, animation: CHART_ENTER,
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: {
@@ -1095,8 +1235,7 @@ function renderPatrimony() {
                     }
                 },
                 tooltip: {
-                    backgroundColor: cssVar('--panel-bg'), borderColor: cssVar('--border-color'), borderWidth: 1,
-                    titleColor: text, bodyColor: text, padding: 10, displayColors: false,
+                    ...chartTooltip(), displayColors: false,
                     filter: (item) => item.datasetIndex === 0, // um bloco por barra, montado abaixo
                     callbacks: { label: (ctx) => tooltipLines(ctx.dataIndex) }
                 }
@@ -1106,6 +1245,7 @@ function renderPatrimony() {
                 y: { stacked: true, beginAtZero: true, ticks: { color: muted, callback: (v) => fmtCompactBRL(v) }, grid: { color: grid }, border: { display: false } }
             }
         }
+    });
     });
 }
 
@@ -1124,7 +1264,7 @@ function renderPatrimonySummary(s, classes) {
         .filter(c => c.s.endValue > 0.004 || Math.abs(c.s.gain) > 0.004);
     if (shown.length) {
         html += `<p class="patrimony-classes"><span class="muted">Valorização por classe no período:</span> ${shown.map(({ g, k, s: cs }) =>
-            `<span class="nowrap"><span class="swatch-box" style="background:${CLASS_COLORS[g.key] || EXTRA_COLORS[k % EXTRA_COLORS.length]}"></span>${escapeHTML(g.label)} <strong class="${signClass(cs.gain)}">${signedBRL(cs.gain)}</strong></span>`
+            `<span class="nowrap"><span class="swatch-box" style="background:${classColor(g.key, k)}"></span>${escapeHTML(g.label)} <strong class="${signClass(cs.gain)}">${signedBRL(cs.gain)}</strong></span>`
         ).join(' · ')}</p>`;
     }
     $('patrimonySummary').innerHTML = html;
@@ -1152,10 +1292,13 @@ function renderChart() {
         note.innerText = 'Gráfico indisponível (não foi possível carregar o Chart.js). ' + note.innerText;
         return;
     }
-    const text = cssVar('--text-color'), muted = cssVar('--text-muted'), grid = 'rgba(139, 148, 158, 0.12)';
+    const text = cssVar('--text-color'), muted = cssVar('--text-muted'), grid = CHART_GRID;
+    // A carteira em destaque (linha mais grossa com área em degradê); CDI e BOVA11 tracejados.
     const datasets = SERIES.map((s, k) => ({
-        label: s.label, data: data[k], borderColor: s.color, backgroundColor: s.color,
-        borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 6, tension: 0
+        label: s.label, data: data[k], borderColor: s.color, backgroundColor: k === 0 ? verticalGradient(s.color, 0.28, 0) : s.color,
+        fill: k === 0 ? 'origin' : false, borderDash: k === 0 ? [] : [5, 4],
+        borderWidth: k === 0 ? 2.5 : 1.6, pointRadius: 0, pointHoverRadius: 5, pointHoverBorderWidth: 2,
+        pointHoverBackgroundColor: cssVar('--panel-bg'), pointHitRadius: 6, tension: 0.15
     }));
     const xLabels = labels.map(d => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}`);
     if (state.chart) {
@@ -1164,18 +1307,19 @@ function renderChart() {
         state.chart.update();
         return;
     }
+    whenVisible('returnChart', () => {
+    if (state.chart) return;
     state.chart = new Chart($('returnChart'), {
         type: 'line',
         data: { labels: xLabels, datasets },
         plugins: [crosshairPlugin],
         options: {
-            responsive: true, maintainAspectRatio: false, animation: false,
+            responsive: true, maintainAspectRatio: false, animation: { duration: 1100, easing: 'easeOutCubic' },
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { labels: { color: text, usePointStyle: true, pointStyle: 'line', boxWidth: 24 } },
                 tooltip: {
-                    backgroundColor: cssVar('--panel-bg'), borderColor: cssVar('--border-color'), borderWidth: 1,
-                    titleColor: text, bodyColor: text, padding: 10, usePointStyle: true,
+                    ...chartTooltip(), usePointStyle: true,
                     callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtPct(ctx.parsed.y, 2)}` }
                 }
             },
@@ -1185,15 +1329,16 @@ function renderChart() {
             }
         }
     });
+    });
 }
 
 // ---------------------------------------------------------------- Alocação e classes
 
 // Visão geral: alocação por classe só para leitura (a edição fica em Configurações).
 function renderAllocation(a) {
-    $('allocationViewBody').innerHTML = a.allocation.map(r => `
+    $('allocationViewBody').innerHTML = a.allocation.map((r, k) => `
         <tr>
-            <td><strong>${escapeHTML(r.cls)}</strong></td>
+            <td class="nowrap"><span class="swatch-box" style="background:${classColor(r.cls, k)}"></span><strong>${escapeHTML(r.cls)}</strong></td>
             <td class="r nowrap">${fmtBRL(r.value)}</td>
             <td class="r nowrap">${fmtNum(r.pct)}%</td>
             <td class="r nowrap">${fmtNum(r.target)}%</td>
@@ -1203,8 +1348,40 @@ function renderAllocation(a) {
         </tr>`).join('') + `
         <tr><td><strong>Total</strong></td><td class="r nowrap"><strong>${fmtBRL(a.kpis.total)}</strong></td><td class="r">100%</td>
             <td class="r nowrap"><strong>${fmtNum(a.targetSum)}%</strong></td><td colspan="3"></td></tr>`;
+    revealItems($('allocationViewBody'));
     $('allocationNote').innerHTML = (a.targetsOff ? `<span class="warn-text">As metas somam ${fmtNum(a.targetSum)}%, não 100%.</span> ` : '')
         + 'Barra: preenchimento = % atual; traço = % meta.';
+    renderAllocationDonut(a);
+}
+
+// Rosca da alocação: anel de fora = % de hoje, anel de dentro = % meta, uma cor por classe; o
+// patrimônio total no meio.
+function renderAllocationDonut(a) {
+    setCount($('allocationTotal'), a.kpis.total, { format: 'brl' });
+    if (typeof Chart === 'undefined') return;
+    const rows = a.allocation;
+    const colors = rows.map((r, k) => classColor(r.cls, k));
+    whenVisible('allocationDonut', () => {
+        state.allocationChart?.destroy();
+        state.allocationChart = new Chart($('allocationDonut'), {
+            type: 'doughnut',
+            data: {
+                labels: rows.map(r => r.cls),
+                datasets: [
+                    { label: 'Hoje', data: rows.map(r => r.pct), backgroundColor: colors, borderColor: cssVar('--panel-bg'), borderWidth: 3, hoverOffset: 8, weight: 1.4 },
+                    { label: 'Meta', data: rows.map(r => r.target), backgroundColor: colors.map(c => hexAlpha(c, 0.4)), borderColor: cssVar('--panel-bg'), borderWidth: 2, weight: 0.8 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, cutout: '58%',
+                animation: { animateRotate: true, animateScale: false, duration: 1100, easing: 'easeOutQuart' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { ...chartTooltip(), callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtNum(ctx.parsed)}%` } }
+                }
+            }
+        });
+    });
 }
 
 // Configurações: as classes fixas (as mesmas da aba Configurações do site), com a meta editável, o
@@ -1214,13 +1391,15 @@ function renderClassConfig(st) {
     const classes = st?.classes || [];
     $('allocationBody').innerHTML = classes.map((c, k) => `
         <tr>
-            <td class="nowrap"><strong>${escapeHTML(c.name)}</strong></td>
+            <td class="nowrap"><span class="swatch-box" style="background:${classColor(c.name, k)}"></span><strong>${escapeHTML(c.name)}</strong></td>
             <td class="r nowrap"><label class="sr-only" for="target-${k}">Meta de ${escapeHTML(c.name)} (%)</label>
                 <input type="number" class="select target-input" id="target-${k}" data-class="${escapeHTML(c.name)}" min="0" max="100" step="0.5" value="${c.target}"></td>
-            <td class="small">${c.members.length ? escapeHTML(c.members.join(', ')) : '<span class="muted">vazia</span>'}</td>
-            <td class="small muted">${escapeHTML(c.rule || '')}</td>
+            <td class="small" data-label="Ativos e títulos">${c.members.length ? `<span class="member-chips">${c.members.map(m => `<span class="member-chip">${escapeHTML(m)}</span>`).join('')}</span>` : '<span class="muted">vazia</span>'}</td>
+            <td class="small muted" data-label="Regra de venda">${escapeHTML(c.rule || '')}</td>
         </tr>`).join('') + `
         <tr><td><strong>Total</strong></td><td class="r nowrap"><strong>${fmtNum(st?.targetSum || 0)}%</strong></td><td colspan="2"></td></tr>`;
+    revealItems($('allocationBody'));
+    renderTargetsDonut(st);
     const warn = $('targetsWarning');
     const off = !!st?.targetsOff;
     warn.style.color = off ? 'var(--warning)' : 'var(--text-muted)';
@@ -1228,22 +1407,62 @@ function renderClassConfig(st) {
         : 'A meta é salva na carteira ao editar.';
 }
 
+// Configurações: rosca das metas das classes (a soma, que deve dar 100%, no meio).
+function renderTargetsDonut(st) {
+    const classes = (st?.classes || []).filter(c => c.target > 0);
+    $('targetsTotal').innerText = st ? `${fmtNum(st.targetSum)}%` : '—';
+    $('targetsTotal').className = `num ${st?.targetsOff ? 'warn-text' : ''}`;
+    if (typeof Chart === 'undefined') return;
+    whenVisible('targetsDonut', () => {
+        state.targetsChart?.destroy();
+        state.targetsChart = null;
+        if (!classes.length) return;
+        state.targetsChart = new Chart($('targetsDonut'), {
+            type: 'doughnut',
+            data: {
+                labels: classes.map(c => c.name),
+                datasets: [{ data: classes.map(c => c.target), backgroundColor: classes.map((c, k) => classColor(c.name, k)),
+                             borderColor: cssVar('--panel-bg'), borderWidth: 3, hoverOffset: 8 }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, cutout: '64%',
+                animation: { animateRotate: true, animateScale: false, duration: 1000, easing: 'easeOutQuart' },
+                plugins: { legend: { display: false },
+                           tooltip: { ...chartTooltip(), callbacks: { label: (ctx) => ` ${ctx.label}: ${fmtNum(ctx.parsed)}%` } } }
+            }
+        });
+    });
+}
+
 // Configurações: meta de cada ativo com posição, agrupada por classe (mesmo cálculo do Aporte).
 function renderAssetTargets(a) {
     if (!a) {
         $('assetTargetsBody').innerHTML = '<tr><td colspan="3" class="empty-row">Registre uma operação para definir a meta de cada ativo.</td></tr>';
+        revealItems($('assetTargetsBody'));
         $('assetTargetsWarnings').innerHTML = '';
         return;
     }
     const { groups, warnings } = a.assetTargets;
-    $('assetTargetsBody').innerHTML = groups.map(g =>
-        `<tr class="group-row"><td colspan="3"><strong>${escapeHTML(g.cls)}</strong> <span class="small muted">meta da classe ${fmtNum(g.target, 2)}%</span></td></tr>`
+    $('assetTargetsBody').innerHTML = groups.map(g => {
+        const k = Math.max(0, a.allocation.findIndex(r => r.cls === g.cls));
+        const color = classColor(g.cls, k);
+        // Escala das barras: o maior % (atual ou meta) da classe enche a barra.
+        const scale = Math.max(...g.members.flatMap(i => [i.pct, i.target]), 0.01);
+        return `<tr class="group-row"><td colspan="3"><span class="sticky-label"><span class="swatch-box" style="background:${color}"></span><strong>${escapeHTML(g.cls)}</strong>
+            <span class="target-chip">meta da classe ${fmtNum(g.target, 2)}%</span></span></td></tr>`
         + g.members.map(i => `
         <tr>
-            <td><strong>${escapeHTML(i.label)}</strong></td>
-            <td class="r nowrap">${fmtNum(i.pct, 2)}%</td>
+            <td><div class="asset"><span class="avatar solo" style="--a1:${color}" aria-hidden="true">${escapeHTML(i.label.slice(0, 2).toUpperCase())}</span>
+                <div class="asset-text"><strong>${escapeHTML(i.label)}</strong></div></div></td>
+            <td class="r nowrap"><div class="target-cmp">
+                <span class="num ${i.above ? 'warn-text' : ''}">${fmtNum(i.pct, 2)}%</span>
+                <span class="target-bar${i.above ? ' above' : ''}" role="img" aria-label="${escapeHTML(i.label)}: ${fmtNum(i.pct, 2)}% atual, meta ${fmtNum(i.target, 2)}%${i.above ? ', acima da meta' : ''}">
+                    <i style="--w:${(i.pct / scale).toFixed(3)}"></i><b style="left:calc(${(i.target / scale * 100).toFixed(2)}% - 1px)"></b></span>
+                <span class="small ${i.above ? 'warn-text' : 'muted'}">${i.above ? 'acima da meta' : 'abaixo ou na meta'}</span></div></td>
             <td class="r nowrap">${targetField(i, 'cfg-tg')}</td>
-        </tr>`).join('')).join('') || '<tr><td colspan="3" class="empty-row">Nenhum ativo com posição.</td></tr>';
+        </tr>`).join('');
+    }).join('') || '<tr><td colspan="3" class="empty-row">Nenhum ativo com posição.</td></tr>';
+    revealItems($('assetTargetsBody'));
     $('assetTargetsWarnings').innerHTML = warnings.map(w => `<span class="warn-text">${escapeHTML(w)}</span>`).join('<br>');
 }
 
@@ -1267,37 +1486,45 @@ async function submitMove(ev) {
 
 const tradingViewSymbol = (ticker, market) => market === 'us' ? ticker : market === 'crypto' ? `${ticker}USD` : `BMFBOVESPA:${ticker}`;
 
+// Peso na carteira como barra, proporcional à maior posição (a maior enche a barra).
+const weightCell = (w, max) => `<div class="weight"><span class="num">${fmtNum(w)}%</span><span class="weight-bar"><i style="--w:${(max ? w / max : 0).toFixed(3)}"></i></span></div>`;
+const deltaPill = (v) => v === null || v === undefined ? '—' : `<span class="delta-pill ${signClass(v)}">${fmtPct(v, 2)}</span>`;
+
 function renderPositions(a) {
+    const maxWeight = Math.max(0, ...a.open.map(p => p.weight), ...a.fixed.map(f => f.weight));
+    const classIndex = (cls) => Math.max(0, a.allocation.findIndex(r => r.cls === cls));
+    const avatar = (label, cls) => `<span class="avatar solo" style="--a1:${classColor(cls, classIndex(cls))}" aria-hidden="true">${escapeHTML(label.slice(0, 2).toUpperCase())}</span>`;
     const rows = a.open.map(p => `
-        <tr>
-            <td><a href="https://br.tradingview.com/chart/?symbol=${encodeURIComponent(tradingViewSymbol(p.ticker, p.market))}" target="_blank" rel="noopener" class="ticker-link">${p.ticker}</a>
+        <tr data-reveal>
+            <td><div class="asset">${avatar(p.ticker, p.cls)}<div class="asset-text"><a href="https://br.tradingview.com/chart/?symbol=${encodeURIComponent(tradingViewSymbol(p.ticker, p.market))}" target="_blank" rel="noopener" class="ticker-link">${p.ticker}</a>
                 ${p.market === 'crypto' ? '' : `<a href="backtest.html?ticker=${encodeURIComponent(p.ticker)}&market=${p.market}" class="inline-link small" aria-label="Backtest de ${p.ticker}">backtest</a>`}
-                <div class="small muted">${escapeHTML(p.cls)}${p.market === 'b3' ? '' : ` · ${MARKETS[p.market].label}`}</div></td>
+                <div class="small muted">${escapeHTML(p.cls)}${p.market === 'b3' ? '' : ` · ${MARKETS[p.market].label}`}</div></div></div></td>
             <td class="r nowrap">${fmtQty(p.quantity)}</td>
             <td class="r nowrap">${fmtBRL(p.avgPrice)}</td>
             <td class="r nowrap">${fmtBRL(p.price)}${p.hasQuote ? '' : '<div class="small muted">sem cotação</div>'}${p.market !== 'b3' && p.hasQuote ? `<div class="small muted">${fmtMoney(p.priceNative, p.currency)} × ${fmtNum(p.fx, 4)}</div>` : ''}</td>
             <td class="r nowrap ${signClass(p.dayChange)}">${p.dayChange === null ? '—' : fmtPct(p.dayChange, 2)}</td>
             <td class="r nowrap">${fmtBRL(p.value)}</td>
             <td class="r nowrap ${signClass(p.profit)}">${fmtBRL(p.profit)}</td>
-            <td class="r nowrap ${signClass(p.profit)}">${p.returnPct === null ? '—' : fmtPct(p.returnPct, 2)}</td>
+            <td class="r nowrap">${deltaPill(p.returnPct)}</td>
             <td class="r nowrap">${fmtBRL(p.dividends)}</td>
-            <td class="r nowrap">${fmtNum(p.weight)}%</td>
+            <td class="r nowrap">${weightCell(p.weight, maxWeight)}</td>
             <td class="c">${p.status ? signalBadge(p.status, p.statusReason, STATUS_BADGE[p.statusKey] || 'badge-low') : '<span class="small muted">—</span>'}
                 ${p.partial ? `<div class="small muted nowrap">${fmtQty(p.partial.quantity)} ${p.partial.quantity === 1 ? 'cota' : 'cotas'} de ${p.partial.lots} compra(s)</div>` : ''}</td>
         </tr>`);
     const fixedRows = a.fixed.map(f => `
-        <tr class="fi-section">
-            <td><strong>${escapeHTML(f.name)}</strong><div class="small muted">${escapeHTML(f.cls)}</div></td>
+        <tr class="fi-section" data-reveal>
+            <td><div class="asset">${avatar(f.name, f.cls)}<div class="asset-text"><strong>${escapeHTML(f.name)}</strong><div class="small muted">${escapeHTML(f.cls)}</div></div></div></td>
             <td colspan="4" class="small muted">Investido líquido ${fmtBRL(f.invested)} · valor atualizado em ${fmtDate(f.lastUpdate)}</td>
             <td class="r nowrap">${fmtBRL(f.value)}</td>
             <td class="r nowrap ${signClass(f.profit)}">${fmtBRL(f.profit)}</td>
-            <td class="r nowrap ${signClass(f.profit)}">${f.returnPct === null ? '—' : fmtPct(f.returnPct, 2)}</td>
+            <td class="r nowrap">${deltaPill(f.returnPct)}</td>
             <td class="r muted">—</td>
-            <td class="r nowrap">${fmtNum(f.weight)}%</td>
+            <td class="r nowrap">${weightCell(f.weight, maxWeight)}</td>
             <td class="c"><span class="small muted">—</span></td>
         </tr>`);
     $('positionsBody').innerHTML = rows.length || fixedRows.length ? [...rows, ...fixedRows].join('')
         : `<tr><td colspan="11" class="empty-row">Nenhuma posição aberta.</td></tr>`;
+    revealItems($('positionsBody'));
 }
 
 // Histórico de lançamentos (já em ordem do mais recente, vindo da estrutura da carteira).
@@ -1312,18 +1539,28 @@ function renderHistory(st) {
     toggle.setAttribute('aria-expanded', String(state.historyAll));
     toggle.innerText = state.historyAll ? 'Ver menos' : `Ver todos (${rows.length})`;
     const shown = state.historyAll ? rows : rows.slice(0, HISTORY_LIMIT);
-    $('historyBody').innerHTML = shown.length ? shown.map(r => `
-        <tr>
-            <td class="nowrap">${fmtDate(r.date)}</td>
-            <td><strong>${escapeHTML(r.asset)}</strong></td>
-            <td>${r.type}</td>
+    // Classe de cada ativo/título (para a cor do avatar), pela estrutura da carteira.
+    const classOf = new Map();
+    (st?.classes || []).forEach((c, k) => c.members.forEach(m => classOf.set(m, [c.name, k])));
+    $('historyBody').innerHTML = shown.length ? shown.map(r => {
+        const kind = r.type.toLowerCase().split(' ')[0];
+        const [cls, k] = classOf.get(r.asset) || ['', 0];
+        return `
+        <tr class="tl-row tl-${ENTRY_DIRECTION[kind] || 'other'}">
+            <td class="nowrap"><div class="tl"><span class="tl-dot" aria-hidden="true"></span>
+                <div><strong>${r.date.slice(8, 10)}/${r.date.slice(5, 7)}</strong><div class="small muted">${r.date.slice(0, 4)}</div></div></div></td>
+            <td><div class="asset"><span class="avatar solo" style="--a1:${classColor(cls, k)}" aria-hidden="true">${escapeHTML(r.asset.slice(0, 2).toUpperCase())}</span>
+                <div class="asset-text"><strong>${escapeHTML(r.asset)}</strong>${cls ? `<div class="small muted">${escapeHTML(cls)}</div>` : ''}</div></div></td>
+            <td><span class="badge entry-pill ${ENTRY_PILL[kind] || 'badge-low'}">${ENTRY_ARROW[ENTRY_DIRECTION[kind]] || ''}${r.type}</span></td>
             <td class="r nowrap">${r.qty}</td>
             <td class="r nowrap">${r.price}</td>
-            <td class="r nowrap">${r.total}</td>
-            <td class="c"><button type="button" class="link-btn" data-kind="${r.kind}" data-id="${escapeHTML(r.id)}" ${r.item ? `data-item="${escapeHTML(r.item)}"` : ''}
-                aria-label="Excluir ${r.type.toLowerCase()} de ${escapeHTML(r.asset)} em ${fmtDate(r.date)}">Excluir</button></td>
-        </tr>`).join('')
+            <td class="r nowrap"><strong>${r.total}</strong></td>
+            <td class="c"><button type="button" class="icon-btn icon-danger" data-kind="${r.kind}" data-id="${escapeHTML(r.id)}" ${r.item ? `data-item="${escapeHTML(r.item)}"` : ''}
+                title="Excluir" aria-label="Excluir ${r.type.toLowerCase()} de ${escapeHTML(r.asset)} em ${fmtDate(r.date)}"><svg viewBox="0 0 24 24" aria-hidden="true"><g class="lid"><path d="M4 7h16M9 7V4h6v3"/></g><path d="M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button></td>
+        </tr>`;
+    }).join('')
         : `<tr><td colspan="7" class="empty-row">Nenhum lançamento.</td></tr>`;
+    revealItems($('historyBody'));
 }
 
 async function onHistoryClick(ev) {
@@ -1334,7 +1571,76 @@ async function onHistoryClick(ev) {
     if (res.error && !res.saveFailed) alert(res.error);
 }
 
+// Proventos mês a mês: os recebidos nos últimos 12 meses (data-ex) e, à direita, os anunciados a
+// receber por mês de pagamento (confirmados e previstos empilhados; "A definir" por último).
+function renderDividendChart() {
+    const a = state.analysis;
+    if (!a || typeof Chart === 'undefined') return;
+    const received = a.dividendMonths || [];
+    const future = state.receivables?.months || [];
+    const keys = received.map(m => m.month);
+    for (const m of future) if (!keys.includes(m.month)) keys.push(m.month);
+    const label = (k) => k ? fmtMonth(k) : 'A definir';
+    const pick = (list, field) => keys.map(k => list.find(m => m.month === k)?.[field] ?? null);
+    const series = [
+        { label: 'Recebidos', data: pick(received, 'total'), color: '#4ad991' },
+        { label: 'A receber · confirmados', data: pick(future, 'confirmed'), color: '#22d3ee' },
+        { label: 'A receber · previstos', data: pick(future, 'expected'), color: '#9b7bff' },
+    ];
+    // Sem nenhum provento no período: uma frase no lugar de um eixo vazio.
+    const any = series.some(x => x.data.some(v => v > 0));
+    $('dividendChart').parentElement.hidden = !any;
+    $('dividendChartEmpty').hidden = any;
+    whenVisible('dividendChart', () => {
+        state.dividendChart?.destroy();
+        state.dividendChart = null;
+        if (!any) return;
+        state.dividendChart = new Chart($('dividendChart'), {
+            type: 'bar',
+            data: {
+                labels: keys.map(label),
+                datasets: series.map(x => ({
+                    label: x.label, data: x.data, backgroundColor: verticalGradient(x.color, 0.95, 0.5), hoverBackgroundColor: x.color,
+                    borderRadius: 5, borderSkipped: false, maxBarThickness: 34, stack: 'proventos'
+                }))
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: CHART_ENTER,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: cssVar('--text-color'), usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12,
+                                        filter: (item, d) => d.datasets[item.datasetIndex].data.some(v => v > 0) } },
+                    tooltip: { ...chartTooltip(), filter: (item) => item.parsed.y > 0,
+                               callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtBRL(ctx.parsed.y)}` } }
+                },
+                scales: {
+                    x: { stacked: true, ticks: { color: cssVar('--text-muted'), maxRotation: 0, autoSkip: true }, grid: { display: false }, border: { color: CHART_GRID } },
+                    y: { stacked: true, beginAtZero: true, ticks: { color: cssVar('--text-muted'), callback: (v) => fmtCompactBRL(v) }, grid: { color: CHART_GRID }, border: { display: false } }
+                }
+            }
+        });
+    });
+}
+
+// "Quem mais pagou": barras dos ativos com mais proventos recebidos (proporcionais ao maior).
+const DIVIDEND_RANKING = 8;
+function renderDividendRanking(a) {
+    const top = a.dividendTotals.slice(0, DIVIDEND_RANKING);
+    const max = top.length ? top[0][1] : 0;
+    $('dividendRanking').innerHTML = top.length ? top.map(([t, v], k) => `<div class="rank-bar" style="--k:${k}">
+            <span class="rank-bar-label">${escapeHTML(t)}</span>
+            <span class="rank-bar-track"><i style="--w:${(max ? v / max : 0).toFixed(3)}"></i></span>
+            <span class="rank-bar-val num">${fmtBRL(v)}</span></div>`).join('')
+        : '<p class="small muted">Nenhum provento recebido ainda.</p>';
+}
+
 function renderDividends(a) {
+    setCount($('divYear'), a.dividendYear, { format: 'brl' });
+    $('divYearNote').innerText = 'pela data-ex, brutos';
+    setCount($('divTotal'), a.kpis.dividendsTotal, { format: 'brl' });
+    $('divTotalNote').innerText = `${a.dividends.length} pagamento(s) desde a primeira compra`;
+    renderDividendRanking(a);
+    renderDividendChart();
     $('dividendTotals').innerHTML = a.dividendTotals.length
         ? `Total por ativo: ${a.dividendTotals.map(([t, v]) => `<strong>${t}</strong> ${fmtBRL(v)}`).join(' · ')} · <strong>Total ${fmtBRL(a.kpis.dividendsTotal)}</strong>`
         : '';
@@ -1347,13 +1653,20 @@ function renderDividends(a) {
             <td class="r nowrap">${fmtBRL(d.total)}</td>
         </tr>`).join('')
         : `<tr><td colspan="5" class="empty-row">Nenhum provento no período das posições.</td></tr>`;
+    revealItems($('dividendsBody'));
 }
 
 // Proventos anunciados e ainda não pagos (já ordenados por data de pagamento, a definir por último).
 function renderReceivables(result) {
+    state.receivables = result.ok ? result.r : null;
+    setCount($('divToReceive'), result.ok ? result.r.total : null, { format: 'brl' });
+    $('divToReceiveNote').innerText = !result.ok ? 'proventos anunciados indisponíveis'
+        : result.r.rows.length ? `${fmtBRL(result.r.net)} líquido estimado` : 'nenhum anunciado';
+    renderDividendChart();
     if (!result.ok) {
         $('receivableTotals').innerHTML = `<span class="neg">Proventos anunciados indisponíveis (${escapeHTML(result.e.message)}).</span>`;
         $('receivablesBody').innerHTML = `<tr><td colspan="8" class="empty-row">Nenhum provento anunciado a receber.</td></tr>`;
+        revealItems($('receivablesBody'));
         return;
     }
     const r = result.r, rows = r.rows;
@@ -1376,6 +1689,7 @@ function renderReceivables(result) {
             <td>${d.confirmed ? '<span class="badge badge-ok">Confirmado</span>' : '<span class="badge badge-fill">Previsto</span>'}</td>
         </tr>`).join('')
         : `<tr><td colspan="8" class="empty-row">Nenhum provento anunciado a receber.</td></tr>`;
+    revealItems($('receivablesBody'));
 }
 
 // ---------------------------------------------------------------- Formulários
@@ -1514,6 +1828,8 @@ function renderGoals(res) {
     $('goalsWarning').style.display = res.warning ? 'block' : 'none';
     $('goalsList').innerHTML = res.goals.length ? res.goals.map(g => goalCard(g, true)).join('')
         : '<div class="panel"><p class="muted">Nenhuma meta cadastrada. Preencha o formulário acima — por exemplo, a renda mensal que quer ter para se aposentar.</p></div>';
+    observeReveal($('goalsList'));
+    $('goalsList').querySelectorAll('tbody').forEach(tb => revealItems(tb));
     for (const g of res.goals) drawGoalChart(g, `goalChart-${g.id}`);
 }
 
@@ -1521,8 +1837,35 @@ const money0 = (v) => `R$ ${fmtNum(v, 0)}`;
 const rate = (v, d = 2) => `${fmtNum(v, d)}%`;
 const monthYear = (iso) => `${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
+// value: o texto do valor, ou { n, f } para um valor em reais que conta ao aparecer (f = formato
+// do contador: brl0 sem centavos, brl com centavos).
 function goalKpi(label, value, note = '') {
-    return `<div class="kpi"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-note">${note}</div></div>`;
+    const shown = typeof value === 'object'
+        ? `<div class="kpi-value num" data-count="${value.n}" data-format="${value.f}">${COUNT_FORMAT[value.f](0)}</div>`
+        : `<div class="kpi-value num">${value}</div>`;
+    return `<div class="kpi goal-kpi" data-reveal><div class="kpi-label">${label}</div>${shown}<div class="kpi-note">${note}</div></div>`;
+}
+
+// Anel de progresso da meta (0 a 100%), desenhado ao aparecer, com o % no meio.
+const goalRing = (pct) => `<span class="ring goal-ring" style="--off:${(100 - Math.max(0, Math.min(100, pct))).toFixed(1)}" role="img" aria-label="${fmtNum(pct, 1)}% da meta alcançado">
+    <svg viewBox="0 0 44 44" aria-hidden="true"><circle class="ring-track" cx="22" cy="22" r="18"/><circle class="ring-val" cx="22" cy="22" r="18" pathLength="100"/></svg>
+    <span class="ring-num num">${fmtNum(pct, pct >= 99.95 ? 0 : 1)}%</span></span>`;
+
+// Linha da tabela ano a ano: o ano em pílula, os juros em verde, o patrimônio com a barra da
+// composição (aportado × juros, proporção para o desenho) e o % da meta com barra de progresso.
+function yearlyRow(y) {
+    const share = (v) => (y.value > 0 ? Math.max(0, Math.min(1, v / y.value)) : 0).toFixed(3);
+    return `<tr class="${y.progress >= 100 ? 'yearly-reached' : ''}">
+        <td class="r"><span class="year-pill">${y.year}</span></td>
+        <td class="nowrap muted">${monthYear(y.date)}</td>
+        <td class="r nowrap">${money0(y.contributed)}</td>
+        <td class="r nowrap ${signClass(y.interest)}">${y.interest > 0 ? '+' : ''}${money0(y.interest)}</td>
+        <td class="r nowrap"><strong class="yearly-value">${money0(y.value)}</strong>
+            <span class="mix-bar" aria-hidden="true"><i style="--w:${share(y.contributed)};background:${GOAL_COLORS.contributed}"></i><i style="--w:${share(y.interest)};background:#4ad991"></i></span></td>
+        <td class="r nowrap">${fmtBRL(y.income)}</td>
+        <td class="r nowrap"><span class="goal-pct"><span class="num">${fmtNum(y.progress, 1)}%</span>
+            <span class="goal-pct-bar"><i style="--w:${(Math.max(0, Math.min(100, y.progress)) / 100).toFixed(3)}"></i></span></span></td>
+    </tr>`;
 }
 
 // Cartão de uma meta (saved = tem botões de editar e excluir; a prévia não tem).
@@ -1533,36 +1876,36 @@ function goalCard(g, saved) {
         : `Patrimônio de ${fmtBRL(g.target)}`;
     const start = g.usePortfolio ? 'patrimônio atual da carteira' : 'patrimônio inicial informado';
     const kpis = [
-        goalKpi('Patrimônio necessário', money0(r.goalValue),
+        goalKpi('Patrimônio necessário', { n: r.goalValue, f: 'brl0' },
             g.kind === 'renda' ? `para ${fmtBRL(g.target)}/mês com ${rate(g.withdrawal, 1)} ao ano`
                 : `renda possível: ${fmtBRL(r.income)}/mês (${rate(g.withdrawal, 1)} a.a.)`),
-        goalKpi('Patrimônio de partida', money0(r.current), `${start} · rende ${fmtBRL(r.incomeNow)}/mês hoje`),
-        goalKpi('Falta acumular', money0(r.missing), `${fmtNum(r.progress, 1)}% da meta já alcançado`),
+        goalKpi('Patrimônio de partida', { n: r.current, f: 'brl0' }, `${start} · rende ${fmtBRL(r.incomeNow)}/mês hoje`),
+        goalKpi('Falta acumular', { n: r.missing, f: 'brl0' }, `${fmtNum(r.progress, 1)}% da meta já alcançado`),
         goalKpi('Tempo para alcançar', reach ? escapeHTML(reach.text) : '+100 anos',
             reach ? (reach.months ? `previsão: ${monthYear(reach.date)}` : 'meta já alcançada') : 'não alcança no ritmo atual'),
-        goalKpi('Aporte mensal', fmtBRL(g.monthly), g.adjust ? 'corrigido pela inflação todo ano' : 'valor fixo (perde poder de compra)'),
+        goalKpi('Aporte mensal', { n: g.monthly, f: 'brl' }, g.adjust ? 'corrigido pela inflação todo ano' : 'valor fixo (perde poder de compra)'),
         goalKpi('Rentabilidade real', `${rate(r.rates.realYear)} a.a.`,
             `${rate(r.rates.realMonth, 3)} a.m. · nominal ${rate(r.rates.nominalYear)} a.a. (${rate(r.rates.nominalMonth, 3)} a.m.) · inflação ${rate(r.rates.inflationYear)} a.a.`),
-        reach ? goalKpi('Total aportado até a meta', money0(reach.contributed + r.current),
+        reach ? goalKpi('Total aportado até a meta', { n: reach.contributed + r.current, f: 'brl0' },
             `aportes ${money0(reach.contributed)} + partida ${money0(r.current)} · aportes nominais ${money0(reach.nominalContributed)}`) : '',
-        reach ? goalKpi('Juros compostos', money0(reach.interest), `${fmtNum(reach.interestShare, 1)}% do patrimônio na meta vem dos juros`) : '',
+        reach ? goalKpi('Juros compostos', { n: reach.interest, f: 'brl0' }, `${fmtNum(reach.interestShare, 1)}% do patrimônio na meta vem dos juros`) : '',
         goalKpi('Renda passiva na meta', `${fmtBRL(r.income)}/mês`, `juros reais de um mês na meta: ${fmtBRL(r.monthlyInterestAtGoal)}`),
         goalKpi('Ponto de virada', r.turningPoint ? escapeHTML(r.turningPoint.text) : '—',
             r.turningPoint ? `em ${monthYear(r.turningPoint.date)} os juros do mês passam o aporte` : 'os juros do mês não passam o aporte no horizonte'),
-        reach && reach.months ? goalKpi('Valor nominal na data', money0(reach.nominalValue), 'o patrimônio necessário corrigido pela inflação até lá') : ''
+        reach && reach.months ? goalKpi('Valor nominal na data', { n: reach.nominalValue, f: 'brl0' }, 'o patrimônio necessário corrigido pela inflação até lá') : ''
     ].join('');
-    const milestones = r.milestones.map(m => `<span class="goal-chip${m.reached ? ' done' : ''}">${m.pct}% · ${escapeHTML(m.text)}${m.date && m.months ? ` (${monthYear(m.date)})` : ''}</span>`).join('');
+    const milestones = r.milestones.map(m => `<span class="goal-chip${m.reached ? ' done' : ''}" data-reveal>${m.pct}% · ${escapeHTML(m.text)}${m.date && m.months ? ` (${monthYear(m.date)})` : ''}</span>`).join('');
     const scen = r.scenarios;
     const scenarios = `<table class="goal-scenarios"><thead><tr><th>Aporte mensal</th>${scen.rates.map(x => `<th class="r">${rate(x, 1)} a.a.</th>`).join('')}</tr></thead>
         <tbody>${scen.rows.map(row => `<tr><td class="nowrap">${fmtBRL(row.monthly)}</td>${row.cells.map(c => `<td class="r nowrap${c.current ? ' goal-current' : ''}">${escapeHTML(c.text)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     const yearly = `<table class="sticky-first"><thead><tr><th class="r">Ano</th><th>Data</th><th class="r">Aportado (com a partida)</th><th class="r">Juros</th><th class="r">Patrimônio</th><th class="r">Renda possível/mês</th><th class="r">% da meta</th></tr></thead>
-        <tbody>${r.yearly.map(y => `<tr><td class="r">${y.year}</td><td class="nowrap">${monthYear(y.date)}</td><td class="r nowrap">${money0(y.contributed)}</td>
-        <td class="r nowrap">${money0(y.interest)}</td><td class="r nowrap"><strong>${money0(y.value)}</strong></td><td class="r nowrap">${fmtBRL(y.income)}</td><td class="r nowrap">${fmtNum(y.progress, 1)}%</td></tr>`).join('')}</tbody></table>`;
+        <tbody>${r.yearly.map(yearlyRow).join('')}</tbody></table>
+        <div class="bt-legend"><span><span class="swatch-dot" style="background:${GOAL_COLORS.contributed}"></span>aportado</span><span><span class="swatch-dot" style="background:#4ad991"></span>juros</span><span class="muted">barra sob o patrimônio: de onde ele vem · linhas em verde: meta já alcançada</span></div>`;
     const actions = saved ? `<div class="batch-buttons"><button type="button" class="btn-secondary" data-goal-edit="${escapeHTML(g.id)}">Editar</button>
         <button type="button" class="btn-secondary" data-goal-delete="${escapeHTML(g.id)}">Excluir</button></div>` : '<span class="badge badge-info">Prévia, não salva</span>';
-    return `<div class="panel goal-card">
-        <div class="panel-head"><div><h2>${escapeHTML(g.name)}</h2><div class="small muted">${escapeHTML(g.kindLabel)} · ${head}</div></div>${actions}</div>
-        <p class="goal-summary">${escapeHTML(r.summary)}</p>
+    return `<div class="panel goal-card" data-reveal>
+        <div class="panel-head"><div class="goal-head">${goalRing(r.progress)}<div><h2>${escapeHTML(g.name)}</h2><div class="small muted">${escapeHTML(g.kindLabel)} · ${head}</div></div></div>${actions}</div>
+        <p class="goal-summary" data-reveal>${escapeHTML(r.summary)}</p>
         <div class="goal-progress" role="img" aria-label="${fmtNum(r.progress, 1)}% da meta alcançado"><div style="width:${Math.max(0, Math.min(100, r.progress))}%"></div></div>
         <div class="small muted">${fmtNum(r.progress, 1)}% · ${fmtBRL(r.current)} de ${fmtBRL(r.goalValue)}</div>
         ${by ? `<p class="goal-bydate ${by.onTrack ? 'pos' : 'warn-text'}">${escapeHTML(by.summary)}</p>` : ''}
@@ -1570,10 +1913,12 @@ function goalCard(g, saved) {
         <div class="kpis goal-kpis">${kpis}</div>
         ${goalTracking(g)}
         ${goalProjections(r.projections)}
-        <h3>Marcos</h3><div class="goal-chips">${milestones}</div>
-        <h3>Evolução do patrimônio (valores de hoje)</h3>
-        <div class="chart-wrap goal-chart"><canvas id="goalChart-${escapeHTML(g.id)}" role="img" aria-label="Patrimônio projetado, valor aportado e meta, ano a ano"></canvas></div>
-        <h3>Tempo para alcançar em outros cenários</h3>
+        <h3 data-reveal>Marcos</h3><div class="goal-chips">${milestones}</div>
+        <div class="chart-card" data-reveal>
+            <div class="chart-card-head"><h3>Evolução do patrimônio</h3><span class="small muted">valores de hoje, ano a ano</span></div>
+            <div class="chart-wrap goal-chart" data-reveal="late"><canvas id="goalChart-${escapeHTML(g.id)}" role="img" aria-label="Patrimônio projetado, valor aportado e meta, ano a ano"></canvas></div>
+        </div>
+        <h3 data-reveal>Tempo para alcançar em outros cenários</h3>
         <div class="table-container">${scenarios}</div>
         <details class="goal-details"><summary>Tabela ano a ano</summary><div class="table-container">${yearly}</div></details>
     </div>`;
@@ -1583,22 +1928,25 @@ function goalCard(g, saved) {
 function goalTracking(g) {
     const t = g.result.tracking;
     if (!t) return '';
-    if (!t.started) return `<h3>Realizado × planejado</h3><p class="small muted">${escapeHTML(t.summary)}</p>`;
-    return `<h3>Realizado × planejado <span class="small muted">desde ${fmtDate(t.created)}</span></h3>
+    if (!t.started) return `<h3 data-reveal>Realizado × planejado</h3><p class="small muted">${escapeHTML(t.summary)}</p>`;
+    return `<h3 data-reveal>Realizado × planejado <span class="small muted">desde ${fmtDate(t.created)}</span></h3>
         <div class="kpis goal-kpis">
-            ${goalKpi('Planejado para hoje', fmtBRL(t.planned), `partindo de ${fmtBRL(t.startValue)} em ${fmtDate(t.created)}`)}
-            ${goalKpi('Patrimônio real', fmtBRL(t.actual), 'carteira com as cotações de agora')}
+            ${goalKpi('Planejado para hoje', { n: t.planned, f: 'brl' }, `partindo de ${fmtBRL(t.startValue)} em ${fmtDate(t.created)}`)}
+            ${goalKpi('Patrimônio real', { n: t.actual, f: 'brl' }, 'carteira com as cotações de agora')}
             ${goalKpi(t.ahead ? 'À frente do plano' : 'Atrás do plano', `<span class="${t.ahead ? 'pos' : 'neg'}">${fmtBRL(Math.abs(t.diff))}</span>`,
                 t.diffPct === null ? '' : `${fmtPct(t.diffPct, 1)} em relação ao planejado`)}
         </div>
         <p class="goal-bydate ${t.ahead ? 'pos' : 'warn-text'}">${escapeHTML(t.summary)}</p>
-        <div class="chart-wrap goal-chart goal-chart-small"><canvas id="goalTrack-${escapeHTML(g.id)}" role="img" aria-label="Patrimônio real da carteira e o planejado pela meta, mês a mês"></canvas></div>`;
+        <div class="chart-card" data-reveal>
+            <div class="chart-card-head"><h3>Patrimônio real × planejado</h3><span class="small muted">desde a criação da meta</span></div>
+            <div class="chart-wrap goal-chart goal-chart-small" data-reveal="late"><canvas id="goalTrack-${escapeHTML(g.id)}" role="img" aria-label="Patrimônio real da carteira e o planejado pela meta, mês a mês"></canvas></div>
+        </div>`;
 }
 
 // Tempo para alcançar pelo plano e pelos dados reais da carteira (aporte médio, rentabilidade).
 function goalProjections(rows) {
     if (!rows || rows.length < 2) return '';
-    return `<h3>Previsão pelo plano e pelos dados reais da carteira</h3>
+    return `<h3 data-reveal>Previsão pelo plano e pelos dados reais da carteira</h3>
         <div class="table-container"><table>
             <thead><tr><th>Cenário</th><th class="r">Aporte mensal</th><th class="r">Rentabilidade</th><th class="r">Tempo para alcançar</th><th class="r">Previsão</th></tr></thead>
             <tbody>${rows.map(p => `<tr><td><strong>${escapeHTML(p.label)}</strong><div class="small muted">${escapeHTML(p.note)}</div></td>
@@ -1607,53 +1955,65 @@ function goalProjections(rows) {
         </table></div>`;
 }
 
+// Linha principal dos gráficos das metas: como a da carteira na Rentabilidade acumulada.
+const GOAL_LINE = { borderWidth: 2.6, pointRadius: 0, pointHoverRadius: 5, pointHoverBorderWidth: 2, pointHitRadius: 8, tension: 0.25 };
+
+// Eixos e legenda comuns aos gráficos das metas (tema escuro novo).
+const goalChartOptions = (yTick) => ({
+    responsive: true, maintainAspectRatio: false, animation: { duration: 1100, easing: 'easeOutCubic' },
+    interaction: { mode: 'index', intersect: false },
+    layout: { padding: { top: 4, right: 6 } },
+    plugins: { legend: { labels: { color: cssVar('--text-color'), usePointStyle: true, pointStyle: 'line', boxWidth: 24, padding: 16 } },
+               tooltip: { ...chartTooltip(), callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtBRL(ctx.parsed.y)}` } } },
+    scales: { x: { ticks: { color: cssVar('--text-muted'), maxTicksLimit: 12, maxRotation: 0 }, grid: { display: false }, border: { color: CHART_GRID } },
+              y: { ticks: { color: cssVar('--text-muted'), callback: yTick }, grid: { color: CHART_GRID }, border: { display: false } } }
+});
+
 function drawTrackingChart(g) {
     const t = g.result.tracking;
-    const canvas = $(`goalTrack-${g.id}`);
-    if (!t?.started || !canvas || typeof Chart === 'undefined') return;
-    state.goalCharts.push(new Chart(canvas, {
-        type: 'line',
-        data: {
-            labels: t.chart.labels.map(fmtDate),
-            datasets: [
-                { label: 'Patrimônio real', data: t.chart.actual, borderColor: GOAL_COLORS.value, borderWidth: 2, pointRadius: 2 },
-                { label: 'Planejado', data: t.chart.planned, borderColor: GOAL_COLORS.goal, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 }
-            ]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { labels: { color: '#c9d1d9', boxWidth: 12 } },
-                       tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtBRL(ctx.parsed.y)}` } } },
-            scales: { x: { ticks: { color: '#8b949e', maxTicksLimit: 12 }, grid: { color: '#21262d' } },
-                      y: { ticks: { color: '#8b949e', callback: (v) => fmtBRL(v) }, grid: { color: '#21262d' } } }
-        }
-    }));
+    const id = `goalTrack-${g.id}`;
+    if (!t?.started || !$(id) || typeof Chart === 'undefined') return;
+    whenVisible(id, () => {
+        if (!$(id)) return;
+        state.goalCharts.push(new Chart($(id), {
+            type: 'line',
+            plugins: [crosshairPlugin],
+            data: {
+                labels: t.chart.labels.map(fmtDate),
+                datasets: [
+                    { label: 'Patrimônio real', data: t.chart.actual, borderColor: GOAL_COLORS.value, backgroundColor: verticalGradient(GOAL_COLORS.value, 0.4, 0.02),
+                      fill: 'start', ...GOAL_LINE },
+                    { label: 'Planejado', data: t.chart.planned, borderColor: GOAL_COLORS.goal, borderDash: [6, 4], borderWidth: 1.8, pointRadius: 0,
+                      pointHoverRadius: 4, pointHoverBackgroundColor: cssVar('--panel-bg'), tension: 0.15 }
+                ]
+            },
+            options: goalChartOptions((v) => fmtCompactBRL(v))
+        }));
+    });
 }
 
 function drawGoalChart(g, canvasId) {
     drawTrackingChart(g);
-    const canvas = $(canvasId);
-    if (!canvas || typeof Chart === 'undefined') return;
+    if (!$(canvasId) || typeof Chart === 'undefined') return;
     const y = g.result.yearly;
-    const chart = new Chart(canvas, {
-        type: 'line',
-        data: {
-            labels: y.map(p => p.date.slice(0, 4)),
-            datasets: [
-                { label: 'Patrimônio', data: y.map(p => p.value), borderColor: GOAL_COLORS.value, backgroundColor: 'rgba(57, 135, 229, 0.15)', fill: true, borderWidth: 2, pointRadius: 0 },
-                { label: 'Aportado (com a partida)', data: y.map(p => p.contributed), borderColor: GOAL_COLORS.contributed, borderWidth: 2, pointRadius: 0 },
-                { label: 'Meta', data: y.map(() => g.result.goalValue), borderColor: GOAL_COLORS.goal, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 }
-            ]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { labels: { color: '#c9d1d9', boxWidth: 12 } },
-                       tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtBRL(ctx.parsed.y)}` } } },
-            scales: { x: { ticks: { color: '#8b949e', maxTicksLimit: 12 }, grid: { color: '#21262d' } },
-                      y: { ticks: { color: '#8b949e', callback: (v) => `R$ ${fmtNum(v / 1000, 0)} mil` }, grid: { color: '#21262d' } } }
-        }
+    whenVisible(canvasId, () => {
+        if (!$(canvasId)) return;
+        state.goalCharts.push(new Chart($(canvasId), {
+            type: 'line',
+            plugins: [crosshairPlugin],
+            data: {
+                labels: y.map(p => p.date.slice(0, 4)),
+                datasets: [
+                    { label: 'Patrimônio', data: y.map(p => p.value), borderColor: GOAL_COLORS.value, backgroundColor: verticalGradient(GOAL_COLORS.value, 0.42, 0.02),
+                      fill: 'origin', ...GOAL_LINE },
+                    { label: 'Aportado (com a partida)', data: y.map(p => p.contributed), borderColor: GOAL_COLORS.contributed,
+                      backgroundColor: verticalGradient(GOAL_COLORS.contributed, 0.16, 0), fill: 'origin', ...GOAL_LINE, borderWidth: 1.8 },
+                    { label: 'Meta', data: y.map(() => g.result.goalValue), borderColor: GOAL_COLORS.goal, borderDash: [6, 4], borderWidth: 1.8, pointRadius: 0, pointHoverRadius: 0 }
+                ]
+            },
+            options: goalChartOptions((v) => `R$ ${fmtNum(v / 1000, 0)} mil`)
+        }));
     });
-    state.goalCharts.push(chart);
 }
 
 // Campos do formulário como digitados (o servidor valida e converte).
@@ -1673,7 +2033,7 @@ function updateGoalForm() {
 function resetGoalForm() {
     state.editingGoal = null;
     $('goalForm').reset();
-    $('goalFormTitle').innerText = '🎯 Nova meta';
+    $('goalFormTitle').innerText = 'Nova meta';
     $('goalSaveBtn').innerText = 'Salvar meta';
     $('goalCancelBtn').hidden = true;
     $('goalPreview').hidden = true;
@@ -1695,7 +2055,7 @@ function fillGoalForm(g) {
     $('goalInflation').value = g.inflation;
     $('goalDate').value = g.targetDate || '';
     $('goalAdjust').checked = g.adjust;
-    $('goalFormTitle').innerText = `✏️ Editar meta "${g.name}"`;
+    $('goalFormTitle').innerText = `Editar meta "${g.name}"`;
     $('goalSaveBtn').innerText = 'Salvar alterações';
     $('goalCancelBtn').hidden = false;
     setMsg('goalMsg', '');
@@ -1731,6 +2091,8 @@ async function previewGoal() {
     const box = $('goalPreview');
     box.hidden = false;
     box.innerHTML = goalCard(res.goal, false);
+    observeReveal(box);
+    box.querySelectorAll('tbody').forEach(tb => revealItems(tb));
     drawGoalChart(res.goal, `goalChart-${res.goal.id}`);
 }
 

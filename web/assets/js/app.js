@@ -375,16 +375,3 @@ async function renderBova(mode) {
         note.innerText = `BOVA11 indisponível (${e.message})`;
     }
 }
-
-// Minigráfico de área dos fechamentos do BOVA11 no período do KPI (bova_kpi: spark), verde na
-// alta e vermelho na queda; a linha se desenha da esquerda para a direita (CSS: spark-line).
-function drawSpark(svg, closes, up) {
-    if (!closes || closes.length < 2) { svg.innerHTML = ''; return; }
-    const min = Math.min(...closes), span = (Math.max(...closes) - min) || 1;
-    const pts = closes.map((c, k) => `${(k / (closes.length - 1) * 200).toFixed(1)},${(45 - (c - min) / span * 41).toFixed(1)}`);
-    const color = up ? 'var(--success)' : 'var(--danger)';
-    svg.innerHTML = `<defs><linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" style="stop-color: ${color}; stop-opacity: 0.35"/><stop offset="1" style="stop-color: ${color}; stop-opacity: 0"/></linearGradient></defs>
-        <path class="spark-area" d="M0,48 L${pts.join(' L')} L200,48 Z" fill="url(#sparkFill)"/>
-        <path class="spark-line" d="M${pts.join(' L')}" pathLength="100" style="stroke: ${color}"/>`;
-}

@@ -356,6 +356,41 @@ def dividends_received(transactions, ticker, hist):
     return out
 
 
+DIVIDEND_MONTHS = 12  # meses do gráfico de proventos recebidos
+
+
+def _month_keys(end_month, months):
+    """Os months meses "AAAA-MM" terminando em end_month, do mais antigo ao mais novo."""
+    y, m = int(end_month[:4]), int(end_month[5:7])
+    index = y * 12 + m - 1
+    return [f"{k // 12:04d}-{k % 12 + 1:02d}" for k in range(index - months + 1, index + 1)]
+
+
+def dividends_by_month(dividends, today, months=DIVIDEND_MONTHS):
+    """Proventos recebidos por mês da data-ex nos últimos months meses até o de today, com os
+    meses sem provento zerados: [{month: "AAAA-MM", total}] (gráfico da sub-aba Proventos)."""
+    keys = _month_keys(today[:7], months)
+    totals = {k: [] for k in keys}
+    for d in dividends:
+        k = d["exDate"][:7]
+        if k in totals:
+            totals[k].append(d["total"])
+    return [{"month": k, "total": add_up(totals[k])} for k in keys]
+
+
+def receivables_by_month(rows):
+    """Proventos a receber por mês de pagamento, em ordem, com a data a definir por último
+    (month None): [{month, total, confirmed, expected}] (confirmado = data-com já passou)."""
+    groups = {}
+    for r in rows:
+        groups.setdefault(r["paymentDate"][:7] if r["paymentDate"] else None, []).append(r)
+    order = sorted(k for k in groups if k) + ([None] if None in groups else [])
+    return [{"month": k,
+             "total": add_up(r["total"] for r in groups[k]),
+             "confirmed": add_up(r["total"] for r in groups[k] if r["confirmed"]),
+             "expected": add_up(r["total"] for r in groups[k] if not r["confirmed"])} for k in order]
+
+
 def dividends_to_receive(transactions, ticker, events, today=None):
     """Proventos a receber de um ticker da B3 (events de /api/proventos: rate por cota, comDate,
     paymentDate nulo = a definir). Entram os ainda não pagos (pagamento hoje ou depois, ou a

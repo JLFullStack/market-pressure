@@ -16,8 +16,8 @@ from . import strategy as st
 from .core import add_up, day_of, fmt_date, session_in_progress, today_iso
 from .portfolio import (APORTE_MODES, BENCHMARK, CLASS_GROUP, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
                         analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_history,
-                        contribution_items, contribution_path, contribution_plan, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
-                        market_of, net_flows, normalize_ticker, open_lots, parse_number, patrimony_bars, period_start,
+                        contribution_items, contribution_path, contribution_plan, dividends_by_month, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
+                        market_of, net_flows, normalize_ticker, open_lots, parse_number, patrimony_bars, period_start, receivables_by_month,
                         rebase_series,
                         suggest_class, targets_off, tx_flow)
 
@@ -197,9 +197,19 @@ def _asset_target_groups(portfolio, analysis):
         members = sorted((i for i in items if i["cls"] == c["name"]), key=lambda i: -i["value"])
         if members:
             groups.append({"cls": c["name"], "target": c["target"], "members": [
-                {"key": i["key"], "label": i["label"], "pct": i["value"] / total * 100 if total else 0,
-                 "target": i["target"], "autoTarget": i["autoTarget"]} for i in members]})
+                _asset_target_row(i, total) for i in members]})
     return {"groups": groups, "warnings": warnings}
+
+
+ABOVE_TARGET_TOLERANCE = 0.005  # p.p.: abaixo disso o ativo está na meta
+
+
+def _asset_target_row(i, total):
+    """Uma linha da Meta por ativo: % atual, meta (fixada ou automática) e se o ativo já passou
+    dela (above: a barra da página fica laranja; não é sinal de venda, só não recebe aporte)."""
+    pct = i["value"] / total * 100 if total else 0
+    return {"key": i["key"], "label": i["label"], "pct": pct, "target": i["target"],
+            "autoTarget": i["autoTarget"], "above": pct > i["target"] + ABOVE_TARGET_TOLERANCE}
 
 
 def analysis_payload(portfolio):
@@ -211,6 +221,8 @@ def analysis_payload(portfolio):
         "fixed": [{k: v for k, v in f.items() if k != "entries"} for f in a["fixed"]],
         "dividends": a["dividends"],
         "dividendTotals": sorted(a["divByTicker"].items(), key=lambda kv: -kv[1]),
+        "dividendMonths": (months := dividends_by_month(a["dividends"], today_iso())),
+        "dividendYear": add_up(m["total"] for m in months),
         "allocation": a["allocation"], "targetSum": a["targetSum"], "targetsOff": targets_off(a["targetSum"]),
         "kpis": a["kpis"], "hasForeign": a["hasForeign"],
         "chart": _chart(series), "patrimony": patrimony_bars(series), "lastDay": series["dates"][-1] if series else None,
@@ -254,7 +266,7 @@ def receivables(portfolio):
         except Exception as err:
             failed.append(f"{t} ({err})")
     rows.sort(key=lambda r: (r["paymentDate"] or "9999-99-99", r["ticker"]))
-    return {"rows": rows, "failed": failed, "total": add_up(r["total"] for r in rows),
+    return {"rows": rows, "failed": failed, "months": receivables_by_month(rows), "total": add_up(r["total"] for r in rows),
             "net": add_up(r["net"] for r in rows), "expected": add_up(r["total"] for r in rows if not r["confirmed"]),
             "jcpTax": JCP_TAX}
 

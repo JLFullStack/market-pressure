@@ -40,27 +40,43 @@
         </div>
     </header>
 
-    <div class="panel">
+    <!-- Degradê compartilhado pelos anéis de progresso das metas (carteira.js: goalRing). -->
+    <svg width="0" height="0" class="sr-only" aria-hidden="true" focusable="false">
+        <defs>
+            <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#3b82ff"/><stop offset="0.55" stop-color="#22d3ee"/><stop offset="1" stop-color="#9b7bff"/>
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <section class="panel hero" data-reveal>
+        <div class="hero-aurora" aria-hidden="true"></div>
         <div class="header-panel">
-            <div>
-                <h1>💼 Carteira</h1>
+            <div class="hero-title">
+                <div class="eyebrow">Carteira · B3, EUA e cripto <span class="live-pill" id="livePill" hidden><span class="live-dot" aria-hidden="true"></span>Pregão ao vivo</span></div>
+                <h1 id="portfolioTitle">Carteira</h1>
                 <div class="subtitle" id="lastUpdate">Posições, proventos e rentabilidade comparada ao CDI e ao BOVA11</div>
             </div>
-            <div class="controls">
-                <label class="toggle" for="portfolioSelect">Carteira:</label>
-                <select id="portfolioSelect" class="select"></select>
-                <button type="button" class="btn-secondary" id="newPortfolioBtn">Nova carteira</button>
-                <button type="button" class="btn-secondary" id="renamePortfolioBtn">Renomear</button>
-                <button type="button" class="btn-secondary" id="deletePortfolioBtn">Excluir</button>
-                <button type="button" class="btn" id="refreshBtn">Atualizar cotações</button>
+            <div class="hero-actions">
                 <span class="copy-wrap" data-needs-entries hidden><button type="button" class="btn-analyze copy-analysis" id="analyzePortfolioBtn">ANALISAR CARTEIRA</button> <span class="tip" tabindex="0" data-tip="Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente que fala de forma simples e entrega todos os dados da carteira (patrimônio, rentabilidade contra CDI e BOVA11, alocação contra as metas, proventos) e de cada ativo (situação, compras abertas, médias, ranking do Screener, sua estratégia de venda) para um diagnóstico da carteira e um veredito por ativo: manter, aumentar, reduzir ou vender." aria-label="Ajuda: Copia um texto pronto para colar numa IA (ChatGPT, Claude, Gemini...): pede a ela o papel de um analista experiente que fala de forma simples e entrega todos os dados da carteira (patrimônio, rentabilidade contra CDI e BOVA11, alocação contra as metas, proventos) e de cada ativo (situação, compras abertas, médias, ranking do Screener, sua estratégia de venda) para um diagnóstico da carteira e um veredito por ativo: manter, aumentar, reduzir ou vender.">?</span></span>
+                <button type="button" class="btn btn-icon" id="refreshBtn">
+                    <svg class="refresh-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16m0 4v-4h-4"/></svg>
+                    <span>Atualizar cotações</span>
+                </button>
             </div>
         </div>
-    </div>
+        <div class="controls toolbar">
+            <label class="toggle" for="portfolioSelect">Carteira:</label>
+            <select id="portfolioSelect" class="select"></select>
+            <button type="button" class="btn-secondary btn-ghost" id="newPortfolioBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova carteira</button>
+            <button type="button" class="btn-secondary btn-ghost" id="renamePortfolioBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg>Renomear</button>
+            <button type="button" class="btn-secondary btn-ghost btn-danger" id="deletePortfolioBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>Excluir</button>
+        </div>
+    </section>
 
     <div id="errorBanner" class="banner" role="alert"></div>
 
-    <div class="panel" id="emptyState" hidden>
+    <div class="panel" data-reveal id="emptyState" hidden>
         <h2>Comece sua carteira</h2>
         <p class="muted" id="emptyText">Crie uma carteira para registrar suas operações, acompanhar a rentabilidade e comparar com o CDI e o BOVA11.</p>
         <button type="button" class="btn" id="emptyCreateBtn">Criar carteira</button>
@@ -77,57 +93,58 @@
 
     <!-- ============================================================ Visão geral -->
     <section id="panel-visao" role="tabpanel" aria-labelledby="tab-visao" tabindex="0" hidden>
-        <div class="panel" id="firstOpPanel" data-no-entries>
+        <div class="panel" data-reveal id="firstOpPanel" data-no-entries>
             <h2>Carteira sem lançamentos</h2>
             <p class="muted" id="firstOpText">Registre uma compra ou um título de renda fixa para ver o resumo, a rentabilidade e a alocação.</p>
             <button type="button" class="btn" id="firstOpBtn">Lançar primeira operação</button>
         </div>
 
         <div id="portfolioContent" data-needs-entries>
-            <div class="panel">
-                <h2>📈 Resumo</h2>
-                <div class="kpis">
-                    <div class="kpi">
-                        <div class="kpi-label">Patrimônio atual</div>
-                        <div class="kpi-value" id="kpiValue">—</div>
+            <div class="panel" data-reveal>
+                <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 16l4-5 3 3 5-7"/></svg></span><h2>Resumo</h2></div>
+                <div class="kpis kpi-cards kpi-cards-portfolio">
+                    <div class="kpi kpi-card tone-blue kpi-hero" data-reveal>
+                        <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 6V4h10v2"/></svg></span><span class="kpi-label">Patrimônio atual</span></div>
+                        <div class="kpi-value num" id="kpiValue">—</div>
                         <div class="kpi-note" id="kpiValueNote"></div>
+                        <svg class="spark" id="patrimonySpark" viewBox="0 0 200 48" preserveAspectRatio="none" aria-hidden="true"></svg>
                     </div>
-                    <div class="kpi">
-                        <div class="kpi-label">Total investido</div>
-                        <div class="kpi-value" id="kpiInvested">—</div>
+                    <div class="kpi kpi-card tone-cyan" data-reveal>
+                        <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v18M7 8h7a3 3 0 0 1 0 6H8"/></svg></span><span class="kpi-label">Total investido</span></div>
+                        <div class="kpi-value num" id="kpiInvested">—</div>
                         <div class="kpi-note">Aportes menos vendas e resgates</div>
                     </div>
-                    <div class="kpi">
-                        <div class="kpi-label">Lucro total</div>
-                        <div class="kpi-value" id="kpiProfit">—</div>
+                    <div class="kpi kpi-card tone-green" data-reveal id="kpiProfitCard">
+                        <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 8-8M15 7h5v5"/></svg></span><span class="kpi-label">Lucro total</span></div>
+                        <div class="kpi-value num"><span id="kpiProfit">—</span> <span class="kpi-delta" id="kpiProfitPct"></span></div>
                         <div class="kpi-note" id="kpiProfitNote"></div>
                     </div>
-                    <div class="kpi">
-                        <div class="kpi-label">Proventos recebidos</div>
-                        <div class="kpi-value" id="kpiDividends">—</div>
+                    <div class="kpi kpi-card tone-violet" data-reveal>
+                        <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.5 10.5h4a1.5 1.5 0 0 1 0 3h-3"/></svg></span><span class="kpi-label">Proventos recebidos</span></div>
+                        <div class="kpi-value num" id="kpiDividends">—</div>
                         <div class="kpi-note" id="kpiDividendsNote"></div>
                     </div>
-                    <div class="kpi">
-                        <div class="kpi-label">Variação do dia</div>
-                        <div class="kpi-value" id="kpiDay">—</div>
+                    <div class="kpi kpi-card tone-green" data-reveal id="kpiDayCard">
+                        <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg></span><span class="kpi-label">Variação do dia</span></div>
+                        <div class="kpi-value num"><span id="kpiDay">—</span> <span class="kpi-delta" id="kpiDayPct"></span></div>
                         <div class="kpi-note" id="kpiDayNote"></div>
                     </div>
-                    <div class="kpi">
-                        <div class="kpi-label">Rentabilidade desde o início</div>
-                        <div class="kpi-value" id="kpiTwrAll">—</div>
+                    <div class="kpi kpi-card tone-blue" data-reveal id="kpiTwrAllCard">
+                        <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 16l4-5 3 3 5-7"/></svg></span><span class="kpi-label">Rentabilidade desde o início</span></div>
+                        <div class="kpi-value num" id="kpiTwrAll">—</div>
                         <div class="kpi-compare" id="kpiTwrAllNote"></div>
                     </div>
-                    <div class="kpi">
-                        <div class="kpi-label">Rentabilidade em 12 meses</div>
-                        <div class="kpi-value" id="kpiTwr12">—</div>
+                    <div class="kpi kpi-card tone-blue" data-reveal id="kpiTwr12Card">
+                        <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span><span class="kpi-label">Rentabilidade em 12 meses</span></div>
+                        <div class="kpi-value num" id="kpiTwr12">—</div>
                         <div class="kpi-compare" id="kpiTwr12Note"></div>
                     </div>
                 </div>
             </div>
 
-            <div class="panel">
+            <div class="panel" data-reveal>
                 <div class="panel-head">
-                    <h2>Evolução do patrimônio</h2>
+                    <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 20V10M10 20V5M15 20v-7M20 20V8"/></svg></span><h2>Evolução do patrimônio</h2></div>
                     <div class="chart-filters">
                         <div class="seg" role="group" aria-label="Modo do gráfico de patrimônio" id="patrimonyModes"></div>
                         <select class="select" id="patrimonyClass" aria-label="Classe de ativos"></select>
@@ -135,7 +152,7 @@
                     </div>
                 </div>
                 <div id="patrimonySummary"></div>
-                <div class="chart-wrap">
+                <div class="chart-wrap" data-reveal="late">
                     <canvas id="patrimonyChart" role="img" aria-label="Patrimônio mês a mês: valor aplicado e ganho de capital"></canvas>
                 </div>
                 <ul class="notes">
@@ -147,22 +164,28 @@
                 </ul>
             </div>
 
-            <div class="panel">
+            <div class="panel" data-reveal>
                 <div class="panel-head">
-                    <h2>Rentabilidade acumulada</h2>
+                    <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 8-8M15 7h5v5"/></svg></span><h2>Rentabilidade acumulada</h2></div>
                     <div class="seg" role="group" aria-label="Período do gráfico" id="periodButtons"></div>
                 </div>
-                <div class="chart-wrap">
+                <div class="chart-wrap" data-reveal="late">
                     <canvas id="returnChart" role="img" aria-label="Rentabilidade acumulada da carteira, do CDI e do BOVA11"></canvas>
                 </div>
                 <p class="small muted" id="chartNote"></p>
             </div>
 
-            <div class="panel">
+            <div class="panel" data-reveal>
                 <div class="panel-head">
-                    <h2>Alocação por classe</h2>
+                    <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg></span><h2>Alocação por classe</h2></div>
                     <a href="#configuracoes" class="inline-link small">Editar metas e classes dos ativos</a>
                 </div>
+                <div class="alloc-grid">
+                <figure class="alloc-donut">
+                    <div class="donut-box" data-reveal="late"><canvas id="allocationDonut" role="img" aria-label="Alocação atual (anel externo) e meta (anel interno) por classe"></canvas>
+                        <div class="donut-center"><span class="small muted">Patrimônio</span><strong class="num" id="allocationTotal">—</strong></div></div>
+                    <figcaption class="small muted">Anel de fora: hoje · anel de dentro: meta</figcaption>
+                </figure>
                 <div class="table-container">
                     <table class="sticky-first">
                         <thead>
@@ -179,11 +202,12 @@
                         <tbody id="allocationViewBody"></tbody>
                     </table>
                 </div>
+                </div>
                 <p class="small muted" id="allocationNote"></p>
             </div>
 
-            <div class="panel">
-                <h2>Posições</h2>
+            <div class="panel" data-reveal>
+                <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></span><h2>Posições</h2></div>
                 <div class="table-container">
                     <table class="sticky-first">
                         <thead>
@@ -215,7 +239,7 @@
             </div>
         </div>
 
-        <details class="panel method">
+        <details class="panel method" data-reveal>
             <summary>Metodologia <span class="muted">como os valores da carteira são calculados</span></summary>
             <dl class="method-list">
                 <div>
@@ -254,13 +278,13 @@
 
     <!-- ============================================================ Aportes e lançamentos -->
     <section id="panel-aportes" role="tabpanel" aria-labelledby="tab-aportes" tabindex="0" hidden>
-        <div class="panel" data-no-entries>
-            <h2>💰 Calculadora de aporte</h2>
+        <div class="panel" data-reveal data-no-entries>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/></svg></span><h2>Calculadora de aporte</h2></div>
             <p class="muted">A calculadora usa as posições da carteira e aparece depois do primeiro lançamento. <a href="#lancamentos" class="inline-link">Registre a primeira operação</a> em "Nova operação", abaixo.</p>
         </div>
-        <div class="panel" id="aportePanel" data-needs-entries>
+        <div class="panel" data-reveal id="aportePanel" data-needs-entries>
             <div class="panel-head">
-                <h2 id="aporteTitle">💰 Calculadora de aporte</h2>
+                <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/></svg></span><h2 id="aporteTitle">Calculadora de aporte</h2></div>
                 <button type="button" class="btn-secondary" id="aporteToggle" aria-expanded="true" aria-controls="aporteBody">Recolher</button>
             </div>
             <div id="aporteBody">
@@ -293,7 +317,7 @@
                 <label class="toggle"><input type="checkbox" id="aporteAdvice" checked> Seguir a Indicação do Screener (prioridade pesa 1,5x)</label>
                 <label class="toggle"><input type="checkbox" id="aporteReuse" checked> Reaproveitar a sobra em cotas</label>
             </div>
-            <div class="kpis aporte-kpis" id="aporteKpis"></div>
+            <div class="kpis kpi-cards aporte-kpis" id="aporteKpis"></div>
             <div class="aporte-note" id="aporteNote" role="status" aria-live="polite"></div>
 
             <h3>Resumo por classe</h3>
@@ -382,28 +406,28 @@
                 <div class="aporte-charts">
                     <div class="aporte-chart">
                         <h4>Por classe: atual, após o aporte e meta</h4>
-                        <div class="chart-wrap chart-small"><canvas id="aporteClassChart" role="img" aria-label="Percentual de cada classe hoje, após o aporte e a meta"></canvas></div>
+                        <div class="chart-wrap chart-small" data-reveal="late"><canvas id="aporteClassChart" role="img" aria-label="Percentual de cada classe hoje, após o aporte e a meta"></canvas></div>
                     </div>
                     <div class="aporte-chart">
                         <h4>Composição da carteira</h4>
                         <div class="donuts">
-                            <figure><div class="donut-wrap"><canvas id="aporteDonutNow" role="img" aria-label="Composição atual por classe"></canvas></div><figcaption>Atual</figcaption></figure>
-                            <figure><div class="donut-wrap"><canvas id="aporteDonutAfter" role="img" aria-label="Composição após o aporte por classe"></canvas></div><figcaption>Após o aporte</figcaption></figure>
-                            <figure><div class="donut-wrap"><canvas id="aporteDonutTarget" role="img" aria-label="Metas por classe"></canvas></div><figcaption>Meta</figcaption></figure>
+                            <figure><div class="donut-wrap" data-reveal="late"><canvas id="aporteDonutNow" role="img" aria-label="Composição atual por classe"></canvas></div><figcaption>Atual</figcaption></figure>
+                            <figure><div class="donut-wrap" data-reveal="late"><canvas id="aporteDonutAfter" role="img" aria-label="Composição após o aporte por classe"></canvas></div><figcaption>Após o aporte</figcaption></figure>
+                            <figure><div class="donut-wrap" data-reveal="late"><canvas id="aporteDonutTarget" role="img" aria-label="Metas por classe"></canvas></div><figcaption>Meta</figcaption></figure>
                         </div>
                         <div class="donut-legend small" id="aporteDonutLegend"></div>
                     </div>
                 </div>
                 <div class="aporte-chart">
                     <h4>Para onde vai o aporte, por ativo</h4>
-                    <div class="chart-wrap" id="aporteAssetWrap"><canvas id="aporteAssetChart" role="img" aria-label="Saldo atual, aporte e o que ainda falta para o valor ideal de cada ativo"></canvas></div>
+                    <div class="chart-wrap" id="aporteAssetWrap" data-reveal="late"><canvas id="aporteAssetChart" role="img" aria-label="Saldo atual, aporte e o que ainda falta para o valor ideal de cada ativo"></canvas></div>
                 </div>
             </div>
 
             <div id="aportePathBlock" hidden>
                 <h3>Plano de vários aportes</h3>
                 <p class="aporte-note" id="aportePathSummary"></p>
-                <div class="chart-wrap chart-small"><canvas id="aportePathChart" role="img" aria-label="Percentual de cada classe ao longo dos próximos aportes"></canvas></div>
+                <div class="chart-wrap chart-small" data-reveal="late"><canvas id="aportePathChart" role="img" aria-label="Percentual de cada classe ao longo dos próximos aportes"></canvas></div>
                 <details class="aporte-details">
                     <summary>Quanto vai para cada classe em cada mês</summary>
                     <div class="table-container">
@@ -453,8 +477,8 @@
             </div>
         </div>
 
-        <div class="panel" id="operationsPanel">
-            <h2>Nova operação</h2>
+        <div class="panel" data-reveal id="operationsPanel">
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span><h2>Nova operação</h2></div>
             <form id="txForm" novalidate>
                 <div class="form-grid">
                     <label class="field">Ativo
@@ -495,7 +519,7 @@
             </form>
 
             <div class="subpanel">
-                <h2>Renda fixa</h2>
+                <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10l9-6 9 6M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/></svg></span><h2>Renda fixa</h2></div>
                 <form id="fiNewForm" novalidate>
                     <div class="form-grid">
                         <label class="field">Nome do título
@@ -532,10 +556,10 @@
             </div>
         </div>
 
-        <div class="panel" id="historyPanel">
-            <h2>Histórico de lançamentos</h2>
+        <div class="panel" data-reveal id="historyPanel">
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><h2>Histórico de lançamentos</h2></div>
             <div class="table-container">
-                <table>
+                <table class="history-table">
                     <thead>
                         <tr>
                             <th>Data</th>
@@ -556,12 +580,36 @@
 
     <!-- ============================================================ Proventos -->
     <section id="panel-proventos" role="tabpanel" aria-labelledby="tab-proventos" tabindex="0" hidden>
-        <div class="panel" data-no-entries>
-            <h2>Proventos recebidos</h2>
+        <div class="panel" data-reveal data-no-entries>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c-.5-1-1.5-1.5-2.5-1.5-1.4 0-2.5.8-2.5 2s1.1 1.6 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 6.5v1.5M12 16v1.5"/></svg></span><h2>Proventos recebidos</h2></div>
             <p class="muted">Os proventos aparecem depois do primeiro lançamento de um ativo.</p>
         </div>
-        <div class="panel" data-needs-entries>
-            <h2>Proventos a receber</h2>
+        <div class="panel" data-reveal data-needs-entries>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 20V10M10 20V5M15 20v-7M20 20V8"/></svg></span><h2>Proventos mês a mês</h2></div>
+            <div class="kpis kpi-cards dividend-kpis">
+                <div class="kpi kpi-card tone-green" data-reveal>
+                    <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><span class="kpi-label">Recebidos em 12 meses</span></div>
+                    <div class="kpi-value num" id="divYear">—</div>
+                    <div class="kpi-note" id="divYearNote"></div>
+                </div>
+                <div class="kpi kpi-card tone-cyan" data-reveal>
+                    <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span><span class="kpi-label">A receber</span></div>
+                    <div class="kpi-value num" id="divToReceive">—</div>
+                    <div class="kpi-note" id="divToReceiveNote">Carregando proventos anunciados...</div>
+                </div>
+                <div class="kpi kpi-card tone-violet" data-reveal>
+                    <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c-.5-1-1.5-1.5-2.5-1.5-1.4 0-2.5.8-2.5 2s1.1 1.6 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 6.5v1.5M12 16v1.5"/></svg></span><span class="kpi-label">Recebidos no total</span></div>
+                    <div class="kpi-value num" id="divTotal">—</div>
+                    <div class="kpi-note" id="divTotalNote"></div>
+                </div>
+            </div>
+            <div class="chart-wrap chart-small" data-reveal="late"><canvas id="dividendChart" role="img" aria-label="Proventos recebidos por mês nos últimos 12 meses e os anunciados a receber por mês de pagamento"></canvas></div>
+            <p class="empty-chart small muted" id="dividendChartEmpty" hidden>Nenhum provento recebido nos últimos 12 meses nem anunciado a receber.</p>
+            <h3>Quem mais pagou</h3>
+            <div class="rank-bars" id="dividendRanking"></div>
+        </div>
+        <div class="panel" data-reveal data-needs-entries>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span><h2>Proventos a receber</h2></div>
             <p class="small muted" id="receivableTotals"></p>
             <div class="table-container">
                 <table>
@@ -586,8 +634,8 @@
                 <li><strong>Previsto:</strong> a data-com é hoje ou futura e a quantidade é a atual, então só vale se o ativo for mantido até lá.</li>
             </ul>
         </div>
-        <div class="panel" data-needs-entries>
-            <h2>Proventos recebidos</h2>
+        <div class="panel" data-reveal data-needs-entries>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c-.5-1-1.5-1.5-2.5-1.5-1.4 0-2.5.8-2.5 2s1.1 1.6 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 6.5v1.5M12 16v1.5"/></svg></span><h2>Proventos recebidos</h2></div>
             <p class="small muted" id="dividendTotals"></p>
             <div class="table-container">
                 <table>
@@ -613,45 +661,62 @@
 
     <!-- ============================================================ Metas -->
     <section id="panel-metas" role="tabpanel" aria-labelledby="tab-metas" tabindex="0" hidden>
-        <div class="panel" id="goalFormPanel">
-            <h2 id="goalFormTitle">🎯 Nova meta</h2>
+        <div class="panel" data-reveal id="goalFormPanel">
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><h2 id="goalFormTitle">Nova meta</h2></div>
             <form id="goalForm" novalidate>
-                <div class="form-grid">
-                    <label class="field">Nome da meta
-                        <input type="text" id="goalName" class="select" maxlength="60" placeholder="Ex.: Aposentadoria" autocomplete="off" required>
-                    </label>
-                    <label class="field">Tipo
-                        <select id="goalKind" class="select">
-                            <option value="renda">Renda mensal (viver de renda)</option>
-                            <option value="patrimonio">Patrimônio (valor acumulado)</option>
-                        </select>
-                    </label>
-                    <label class="field"><span id="goalTargetLabel">Renda mensal desejada (R$)</span>
-                        <input type="number" id="goalTarget" class="select" min="0" step="100" inputmode="decimal" placeholder="Ex.: 10000" required>
-                    </label>
-                    <label class="field">Taxa de retirada (% ao ano)
-                        <input type="number" id="goalWithdrawal" class="select" min="0.5" max="20" step="0.5" value="4" inputmode="decimal" aria-describedby="goalWithdrawalHint">
-                        <span class="field-hint" id="goalWithdrawalHint">% do patrimônio retirado por ano (4% é o usual)</span>
-                    </label>
-                    <label class="field">Patrimônio inicial (R$)
-                        <input type="number" id="goalInitial" class="select" min="0" step="100" value="0" inputmode="decimal">
-                    </label>
-                    <label class="field">Aporte mensal (R$)
-                        <input type="number" id="goalMonthly" class="select" min="0" step="100" inputmode="decimal" placeholder="Ex.: 2000">
-                    </label>
-                    <label class="field">Rentabilidade esperada (% ao ano)
-                        <input type="number" id="goalRate" class="select" min="-19" max="100" step="0.5" value="10" inputmode="decimal">
-                    </label>
-                    <label class="field">Inflação esperada (% ao ano)
-                        <input type="number" id="goalInflation" class="select" min="0" max="50" step="0.5" value="4" inputmode="decimal">
-                    </label>
-                    <label class="field">Data alvo (opcional)
-                        <input type="date" id="goalDate" class="select">
-                    </label>
-                </div>
-                <div class="goal-checks">
-                    <label class="toggle"><input type="checkbox" id="goalUsePortfolio"> Partir do patrimônio atual desta carteira</label>
-                    <label class="toggle"><input type="checkbox" id="goalAdjust" checked> Corrigir o aporte pela inflação todo ano</label>
+                <div class="bt-groups goal-groups">
+                    <fieldset class="bt-group">
+                        <legend>A meta</legend>
+                        <div class="bt-fields">
+                            <label class="field">Nome da meta
+                                <input type="text" id="goalName" class="select" maxlength="60" placeholder="Ex.: Aposentadoria" autocomplete="off" required>
+                            </label>
+                            <label class="field">Tipo
+                                <select id="goalKind" class="select">
+                                    <option value="renda">Renda mensal</option>
+                                    <option value="patrimonio">Patrimônio acumulado</option>
+                                </select>
+                            </label>
+                            <label class="field"><span id="goalTargetLabel">Renda mensal desejada (R$)</span>
+                                <input type="number" id="goalTarget" class="select" min="0" step="100" inputmode="decimal" placeholder="Ex.: 10000" required>
+                            </label>
+                            <label class="field">Taxa de retirada (% a.a.)
+                                <input type="number" id="goalWithdrawal" class="select" min="0.5" max="20" step="0.5" value="4" inputmode="decimal" aria-describedby="goalWithdrawalHint">
+                                <span class="field-hint" id="goalWithdrawalHint">% do patrimônio retirado por ano (4% é o usual)</span>
+                            </label>
+                            <label class="field">Data alvo (opcional)
+                                <input type="date" id="goalDate" class="select">
+                            </label>
+                        </div>
+                    </fieldset>
+                    <fieldset class="bt-group">
+                        <legend>Partida e aportes</legend>
+                        <div class="bt-fields">
+                            <label class="field">Patrimônio inicial (R$)
+                                <input type="number" id="goalInitial" class="select" min="0" step="100" value="0" inputmode="decimal">
+                            </label>
+                            <label class="field">Aporte mensal (R$)
+                                <input type="number" id="goalMonthly" class="select" min="0" step="100" inputmode="decimal" placeholder="Ex.: 2000">
+                            </label>
+                        </div>
+                        <div class="bt-checks">
+                            <label class="toggle"><input type="checkbox" id="goalUsePortfolio"> Partir do patrimônio atual desta carteira</label>
+                            <label class="toggle"><input type="checkbox" id="goalAdjust" checked> Corrigir o aporte pela inflação todo ano</label>
+                        </div>
+                    </fieldset>
+                    <fieldset class="bt-group">
+                        <legend>Premissas</legend>
+                        <div class="bt-fields">
+                            <label class="field">Rentabilidade (% a.a.)
+                                <input type="number" id="goalRate" class="select" min="-19" max="100" step="0.5" value="10" inputmode="decimal" aria-describedby="goalRateHint">
+                                <span class="field-hint" id="goalRateHint">esperada, nominal</span>
+                            </label>
+                            <label class="field">Inflação (% a.a.)
+                                <input type="number" id="goalInflation" class="select" min="0" max="50" step="0.5" value="4" inputmode="decimal" aria-describedby="goalInflationHint">
+                                <span class="field-hint" id="goalInflationHint">esperada</span>
+                            </label>
+                        </div>
+                    </fieldset>
                 </div>
                 <div class="batch-buttons">
                     <button type="submit" class="btn" id="goalSaveBtn">Salvar meta</button>
@@ -666,7 +731,7 @@
         <p class="banner" id="goalsWarning" role="status"></p>
         <div id="goalsList"></div>
 
-        <details class="panel method">
+        <details class="panel method" data-reveal>
             <summary>Como as metas são calculadas</summary>
             <dl class="method-list">
                 <div>
@@ -692,10 +757,16 @@
 
     <!-- ============================================================ Configurações -->
     <section id="panel-configuracoes" role="tabpanel" aria-labelledby="tab-configuracoes" tabindex="0" hidden>
-        <div class="panel">
-            <h2>Classes e metas</h2>
+        <div class="panel" data-reveal>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg></span><h2>Classes e metas</h2></div>
+            <div class="alloc-grid">
+            <figure class="alloc-donut">
+                <div class="donut-box" data-reveal="late"><canvas id="targetsDonut" role="img" aria-label="Meta de cada classe, em % do patrimônio"></canvas>
+                    <div class="donut-center"><span class="small muted">Soma das metas</span><strong class="num" id="targetsTotal">—</strong></div></div>
+                <figcaption class="small muted">Meta de cada classe</figcaption>
+            </figure>
             <div class="table-container">
-                <table>
+                <table class="class-config">
                     <thead>
                         <tr>
                             <th>Classe</th>
@@ -706,6 +777,7 @@
                     </thead>
                     <tbody id="allocationBody"></tbody>
                 </table>
+            </div>
             </div>
             <p class="small" id="targetsWarning" role="status"></p>
             <ul class="notes">
@@ -727,8 +799,8 @@
             <div class="form-msg" id="classMsg" role="status" aria-live="polite"></div>
         </div>
 
-        <div class="panel">
-            <h2>Meta por ativo</h2>
+        <div class="panel" data-reveal>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></span><h2>Meta por ativo</h2></div>
             <div class="table-container">
                 <table>
                     <thead>
