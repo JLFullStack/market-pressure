@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MarketPressure — Garrafa de Gás B3</title>
     <link rel="stylesheet" href="assets/css/styles.css">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
 <body>
 
@@ -39,79 +40,104 @@
         </div>
     </header>
 
-    <div class="panel">
+    <!-- Degradê compartilhado pelos anéis de Score (app.js: scoreRing). -->
+    <svg width="0" height="0" class="sr-only" aria-hidden="true" focusable="false">
+        <defs>
+            <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#3b82ff"/><stop offset="0.55" stop-color="#22d3ee"/><stop offset="1" stop-color="#9b7bff"/>
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <section class="panel hero" data-reveal>
+        <div class="hero-aurora" aria-hidden="true"></div>
         <div class="header-panel">
-            <div>
-                <h1>📊 Dashboard Premium V2: Matriz de Pressão e Assertividade — Top 20 B3 por tipo de ativo</h1>
-                <div class="subtitle" id="lastUpdate">Screening quantitativo "Garrafa de Gás" sobre o universo líquido da B3</div>
+            <div class="hero-title">
+                <div class="eyebrow">Screener B3 · Garrafa de Gás <span class="live-pill" id="livePill" hidden><span class="live-dot" aria-hidden="true"></span>Pregão ao vivo</span></div>
+                <h1>Matriz de Pressão e Assertividade</h1>
+                <div class="subtitle" id="lastUpdate">Screening quantitativo "Garrafa de Gás" sobre o universo líquido da B3 — Top 20 por tipo de ativo</div>
             </div>
-            <div class="controls">
-                <label class="toggle">Base:
-                    <select id="baseMode" class="select">
-                        <option value="fechamento">Último fechamento</option>
-                        <option value="intradiario">Intradiário</option>
-                    </select>
-                </label>
-                <label class="toggle">Liquidez mínima:
-                    <select id="liquidity" class="select" title="Volume financeiro médio por pregão (últimos 20 pregões) que o ativo precisa ter para entrar no ranking. Regra prática: cada compra sua deve ser no máximo ~1% desse volume. Para aportes de R$ 2 mil e carteiras de até ~R$ 200 mil, R$ 2 mi por dia é o recomendado; Padrão = R$ 5 mi (fundos R$ 3 mi), mais conservador.">
-                        <option value="padrao">Padrão (R$ 5 mi; fundos R$ 3 mi)</option>
-                        <option value="10">R$ 10 mi por dia</option>
-                        <option value="5">R$ 5 mi por dia</option>
-                        <option value="3">R$ 3 mi por dia</option>
-                        <option value="2">R$ 2 mi por dia (recomendado até ~R$ 200 mil)</option>
-                        <option value="1">R$ 1 mi por dia</option>
-                    </select>
-                </label>
-                <label class="toggle"><input type="checkbox" id="requireCandle"> Exigir candle de rejeição</label>
+            <div class="hero-actions">
                 <span class="status-badge" id="modeIndicator">Aguardando</span>
-                <button class="btn" id="refreshBtn" onclick="runScan(true)">Forçar Atualização</button>
+                <button class="btn btn-icon" id="refreshBtn" onclick="runScan(true)">
+                    <svg class="refresh-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16m0 4v-4h-4"/></svg>
+                    <span>Forçar atualização</span>
+                </button>
             </div>
         </div>
+        <div class="controls toolbar">
+            <label class="toggle">Base:
+                <select id="baseMode" class="select">
+                    <option value="fechamento">Último fechamento</option>
+                    <option value="intradiario">Intradiário</option>
+                </select>
+            </label>
+            <label class="toggle">Liquidez mínima:
+                <select id="liquidity" class="select" title="Volume financeiro médio por pregão (últimos 20 pregões) que o ativo precisa ter para entrar no ranking. Regra prática: cada compra sua deve ser no máximo ~1% desse volume. Para aportes de R$ 2 mil e carteiras de até ~R$ 200 mil, R$ 2 mi por dia é o recomendado; Padrão = R$ 5 mi (fundos R$ 3 mi), mais conservador.">
+                    <option value="padrao">Padrão (R$ 5 mi; fundos R$ 3 mi)</option>
+                    <option value="10">R$ 10 mi por dia</option>
+                    <option value="5">R$ 5 mi por dia</option>
+                    <option value="3">R$ 3 mi por dia</option>
+                    <option value="2">R$ 2 mi por dia (recomendado até ~R$ 200 mil)</option>
+                    <option value="1">R$ 1 mi por dia</option>
+                </select>
+            </label>
+            <label class="toggle switch"><input type="checkbox" id="requireCandle"><span class="switch-track" aria-hidden="true"></span> Exigir candle de rejeição</label>
+        </div>
         <div class="progress" id="progress"><div class="progress-bar" id="progressBar"></div></div>
-    </div>
+    </section>
 
     <div id="errorBanner" class="banner"></div>
 
-    <div class="panel">
-        <h2>📈 Painel Macro e Resumo Executivo</h2>
-        <div class="kpis">
-            <div class="kpi">
-                <div class="kpi-label">Ativos escaneados</div>
-                <div class="kpi-value" id="kpiScanned">—</div>
+    <section class="panel" data-reveal>
+        <div class="panel-title">
+            <span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 16l4-5 3 3 5-7"/></svg></span>
+            <h2>Painel macro</h2>
+        </div>
+        <div class="kpis kpi-cards">
+            <div class="kpi kpi-card tone-blue">
+                <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></span><span class="kpi-label">Ativos escaneados</span></div>
+                <div class="kpi-value num" id="kpiScanned">—</div>
                 <div class="kpi-note" id="kpiScannedNote"></div>
             </div>
-            <div class="kpi">
-                <div class="kpi-label">Qualificados no setup</div>
-                <div class="kpi-value" id="kpiQualified">—</div>
+            <div class="kpi kpi-card tone-cyan">
+                <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg></span><span class="kpi-label">Qualificados no setup</span></div>
+                <div class="kpi-value num" id="kpiQualified">—</div>
                 <div class="kpi-note" id="kpiQualifiedNote"></div>
             </div>
-            <div class="kpi">
-                <div class="kpi-label">Melhor score composto</div>
+            <div class="kpi kpi-card tone-violet">
+                <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg></span><span class="kpi-label">Melhor score composto</span></div>
                 <div class="kpi-value" id="kpiBest">—</div>
                 <div class="kpi-note" id="kpiBestNote"></div>
             </div>
-            <div class="kpi">
-                <div class="kpi-label">BOVA11 (12 meses)</div>
-                <div class="kpi-value" id="kpiBova">—</div>
+            <div class="kpi kpi-card tone-green" id="kpiBovaCard">
+                <div class="kpi-top"><span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 8-8M15 7h5v5"/></svg></span><span class="kpi-label">BOVA11 (12 meses)</span></div>
+                <div class="kpi-value num" id="kpiBova">—</div>
                 <div class="kpi-note" id="kpiBovaNote"></div>
+                <svg class="spark" id="bovaSpark" viewBox="0 0 200 48" preserveAspectRatio="none" aria-hidden="true"></svg>
             </div>
         </div>
+        <h3 class="section-sub">Amplitude por tipo de ativo <span class="tip" tabindex="0" data-tip="Parcela de cada tipo de ativo em tendência primária de alta (preço, MM20 e MM50 acima de uma MM200 ascendente). As faixas do medidor são os regimes: defensivo, misto e alta. Toque num medidor para ir ao ranking do tipo." aria-label="Ajuda: Parcela de cada tipo de ativo em tendência primária de alta (preço, MM20 e MM50 acima de uma MM200 ascendente). As faixas do medidor são os regimes: defensivo, misto e alta. Toque num medidor para ir ao ranking do tipo.">?</span></h3>
+        <div class="gauges" id="breadthGauges"></div>
         <div class="kpi-note">Setup: MM20 e MM50 acima de uma MM200 ascendente + fechamento até 3% acima da média, pullback próximo dela. Um ranking por tipo de ativo, abaixo.</div>
-    </div>
+    </section>
 
     <!-- Um painel por tipo de ativo (Ações, Fundos, ETFs, BDRs), montado por renderRankings em app.js. -->
     <div id="rankings">
         <div class="panel"><div class="empty-row">Iniciando varredura automatizada do mercado...</div></div>
     </div>
 
-    <div class="panel">
-        <h2>⚠️ Diretrizes de Gerenciamento de Risco Institucional</h2>
+    <section class="panel guidelines-panel" data-reveal>
+        <div class="panel-title">
+            <span class="icon-chip tone-warn" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></span>
+            <h2>Diretrizes de gerenciamento de risco</h2>
+        </div>
         <ul class="guidelines">
             <li><strong>Fator Score Composto:</strong> priorize alocações em ativos cujo Score Composto seja superior a 75.0, mitigando falsos rompimentos.</li>
             <li><strong>Slippage &amp; Execução:</strong> ativos fora do Ibovespa principal exigem ordens do tipo "Stop-Limitada" para blindagem contra gaps de abertura.</li>
             <li><strong>Invalidação Teórica:</strong> fechamento diário abaixo do suporte dinâmico da média anula imediatamente o viés acumulativo da garrafa de gás.</li>
         </ul>
-    </div>
+    </section>
 
     <details class="panel method">
         <summary>Metodologia <span class="muted">como o ranking é montado</span></summary>

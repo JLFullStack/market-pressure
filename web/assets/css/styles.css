@@ -1,14 +1,23 @@
 :root {
-    --bg-color: #0d1117;
-    --panel-bg: #161b22;
-    --border-color: #30363d;
-    --text-color: #c9d1d9;
-    --text-muted: #8b949e;
-    --blue-gas: #1f6feb;
-    --accent: #58a6ff;
+    --bg-color: #070b16;
+    --panel-bg: #0e1527;
+    --panel-raised: #131c33;
+    --border-color: #1f2b46;
+    --border-strong: #2d3d62;
+    --text-color: #dce5f5;
+    --text-muted: #8a99b6;
+    --blue-gas: #2f6bff;
+    --accent: #5aa2ff;
+    --cyan: #22d3ee;
+    --violet: #9b7bff;
     --danger: #ff7b72;
-    --success: #56d364;
-    --warning: #ffa657;
+    --success: #4ad991;
+    --warning: #ffb057;
+    --radius: 14px;
+    --glow: 0 0 0 1px rgba(90, 162, 255, 0.35), 0 10px 32px -10px rgba(47, 107, 255, 0.55);
+    --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px -18px rgba(0, 0, 0, 0.8);
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -16,21 +25,34 @@
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, Inter, Helvetica, Arial, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-color);
     margin: 0;
     padding: 24px;
+    -webkit-font-smoothing: antialiased;
 }
+/* Halos de cor fixos atrás da página (estáticos: não custam nada depois de pintados). */
+body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background:
+        radial-gradient(900px 520px at 8% -8%, rgba(47, 107, 255, 0.16), transparent 70%),
+        radial-gradient(700px 480px at 100% 0%, rgba(155, 123, 255, 0.11), transparent 70%),
+        radial-gradient(800px 600px at 60% 110%, rgba(34, 211, 238, 0.07), transparent 70%);
+}
+.num { font-variant-numeric: tabular-nums; }
+::selection { background: rgba(90, 162, 255, 0.35); }
 
-.container { max-width: 1500px; margin: 0 auto; }
+.container { max-width: 1600px; margin: 0 auto; }
 
 .panel {
     background-color: var(--panel-bg);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--radius);
     padding: 20px;
     margin-bottom: 16px;
+    box-shadow: var(--shadow);
 }
 
 .header-panel {
@@ -41,8 +63,8 @@ body {
     gap: 12px;
 }
 
-h1 { margin: 0; font-size: 22px; }
-h2 { margin: 0 0 14px; font-size: 16px; }
+h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+h2 { margin: 0 0 14px; font-size: 16px; letter-spacing: -0.005em; }
 h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 600; }
 
 .subtitle { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
@@ -62,16 +84,19 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
 .status-badge.warn { background-color: rgba(219, 109, 40, 0.15); color: var(--warning); border-color: rgba(219, 109, 40, 0.3); }
 
 .btn {
-    background-color: var(--blue-gas);
+    background: linear-gradient(135deg, #3b7bff, #2f5bff 55%, #6a5cff);
     color: #fff;
     border: none;
     padding: 10px 20px;
     font-size: 14px;
     font-weight: 600;
-    border-radius: 6px;
+    border-radius: 10px;
     cursor: pointer;
+    box-shadow: 0 6px 18px -8px rgba(47, 107, 255, 0.8);
+    transition: transform 0.15s var(--ease-out), box-shadow 0.2s, filter 0.2s;
 }
-.btn:hover { background-color: #388bfd; }
+.btn:hover { filter: brightness(1.12); box-shadow: 0 8px 24px -8px rgba(47, 107, 255, 0.95); }
+.btn:active, .btn-secondary:active, .btn-accent:active, .btn-analyze:active { transform: scale(0.96); }
 .btn:disabled { opacity: 0.5; cursor: wait; }
 
 .toggle { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; cursor: pointer; }
@@ -80,13 +105,21 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
     background-color: var(--bg-color);
     color: var(--text-color);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 6px 8px;
     font-size: 13px;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
+.select:hover { border-color: var(--border-strong); }
+.select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(90, 162, 255, 0.2); }
 
 .progress { height: 4px; background: var(--border-color); border-radius: 2px; overflow: hidden; margin-top: 12px; display: none; }
-.progress-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+.progress-bar {
+    height: 100%; width: 0; transition: width 0.3s var(--ease-out);
+    background: linear-gradient(90deg, var(--blue-gas), var(--cyan), var(--violet), var(--blue-gas)) 0 0 / 200% 100%;
+    animation: progress-flow 1.6s linear infinite;
+}
+@keyframes progress-flow { to { background-position: -200% 0; } }
 
 /* Spinner com fundo escurecido (busyStart em core.js) */
 .busy-overlay {
@@ -103,7 +136,7 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
     padding: 24px 28px;
     background: var(--panel-bg);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--radius);
     box-shadow: 0 8px 24px rgba(1, 4, 9, 0.5);
     text-align: center;
 }
@@ -111,6 +144,7 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
     width: 40px; height: 40px;
     border: 4px solid var(--border-color);
     border-top-color: var(--accent);
+    border-right-color: var(--violet);
     border-radius: 50%;
     animation: busy-spin 0.8s linear infinite;
 }
@@ -134,7 +168,7 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
 }
 
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-.kpi { border: 1px solid var(--border-color); border-radius: 6px; padding: 14px; }
+.kpi { border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; background: rgba(255, 255, 255, 0.015); }
 .kpi-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
 .kpi-value { font-size: 24px; font-weight: 700; margin-top: 6px; }
 .kpi-note { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
@@ -142,7 +176,9 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
 
 /* position: relative prende os .sr-only (absolutos) da tabela dentro da rolagem; sem ele
    escapam do recorte e alargam a página no celular (a barra de abas de baixo sai da tela). */
-.table-container { position: relative; overflow-x: auto; padding: 0; }
+.table-container { position: relative; overflow-x: auto; overflow-y: hidden; padding: 0; }
+/* overflow-y: hidden: as células que sobem ao aparecer (tr[data-reveal]) não criam uma barra
+   vertical passageira na tabela. */
 
 /* Screener: um painel por tipo de ativo (app.js: rankingPanel). */
 .ranking { padding: 0; overflow: hidden; }
@@ -153,7 +189,7 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
 
 table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
 th {
-    background-color: rgba(48, 54, 61, 0.3);
+    background-color: rgba(70, 96, 150, 0.12);
     color: var(--text-muted);
     font-weight: 600;
     text-transform: uppercase;
@@ -162,7 +198,8 @@ th {
     border-bottom: 1px solid var(--border-color);
 }
 td { padding: 14px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
-tr:hover { background-color: rgba(56, 139, 253, 0.03); }
+tbody tr { transition: background-color 0.15s; }
+tr:hover { background-color: rgba(90, 162, 255, 0.05); }
 .c { text-align: center; }
 /* Rankings do Screener e Operações do Backtest: a posição (ou o nº da operação) repetida acima
    do ticker, mostrada só no celular, onde a 1ª coluna some (.rank-merge, no bloco de colunas
@@ -175,53 +212,99 @@ tr:hover { background-color: rgba(56, 139, 253, 0.03); }
 .ticker-link { color: var(--accent); text-decoration: none; font-weight: 700; }
 .ticker-link:hover { text-decoration: underline; }
 
-.badge { display: inline-block; padding: 4px 8px; font-size: 12px; font-weight: 600; border-radius: 4px; text-transform: uppercase; white-space: nowrap; }
+.badge { display: inline-block; padding: 4px 9px; font-size: 12px; font-weight: 600; border-radius: 999px; text-transform: uppercase; white-space: nowrap; letter-spacing: 0.02em; }
 .badge-hot { background-color: rgba(248, 81, 73, 0.15); color: var(--danger); border: 1px solid rgba(248, 81, 73, 0.3); }
 .badge-fill { background-color: rgba(219, 109, 40, 0.15); color: var(--warning); border: 1px solid rgba(219, 109, 40, 0.3); }
 .badge-low { background-color: rgba(139, 148, 158, 0.15); color: var(--text-muted); border: 1px solid rgba(139, 148, 158, 0.3); }
 .badge-ok { background-color: rgba(46, 160, 67, 0.15); color: var(--success); border: 1px solid rgba(46, 160, 67, 0.3); }
 .badge-info { background-color: rgba(56, 139, 253, 0.15); color: var(--accent); border: 1px solid rgba(56, 139, 253, 0.3); }
 
-/* Barra do app (estilo de app de banco): marca, abas com ícone e rótulo, usuário. No desktop fica
-   no topo; no celular as abas viram uma barra fixa embaixo da tela (ver @media no fim). */
+/* Barra do app: marca, abas em pílula com ícone e rótulo, usuário. Fica presa no topo ao rolar
+   (vidro fosco só aqui). O destaque da aba é um elemento só (.tab-glow, criado por core.js:
+   setupTabGlow) que desliza até a aba sob o mouse e volta para a atual; entre páginas, a
+   transição de visualização do navegador (@view-transition) o leva de uma aba à outra. No
+   celular as abas viram uma barra flutuante embaixo da tela (ver @media no fim). */
 .appbar {
+    position: sticky; top: 12px; z-index: 800;
     display: flex;
-    align-items: stretch;
+    align-items: center;
     gap: 16px;
-    margin-bottom: 16px;
-    padding: 0 16px;
-    background-color: var(--panel-bg);
+    margin-bottom: 18px;
+    padding: 6px 8px 6px 14px;
+    background-color: rgba(14, 21, 39, 0.72);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: 18px;
+    box-shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.8);
+    view-transition-name: appbar;
 }
-.brand { align-self: center; font-weight: 700; font-size: 15px; color: var(--text-color); white-space: nowrap; }
-.tabs { display: flex; gap: 4px; }
+.brand {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 15px; color: var(--text-color); white-space: nowrap; letter-spacing: -0.01em;
+}
+/* Logo: barras subindo num quadrado em degradê, desenhado só em CSS (a marcação é a mesma nas páginas). */
+.brand::before {
+    content: "";
+    width: 30px; height: 30px; flex: none; border-radius: 9px;
+    background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M6 17v-3M10 17V9M14 17v-5M18 17V6'/%3E%3C/svg%3E") center / 18px no-repeat,
+        linear-gradient(135deg, #3b82ff, #22d3ee 55%, #9b7bff);
+    box-shadow: 0 4px 14px -4px rgba(59, 130, 255, 0.8);
+}
+.tabs { position: relative; display: flex; gap: 2px; padding: 4px; border-radius: 14px; background: rgba(255, 255, 255, 0.025); }
 .tab {
     position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 3px;
     min-width: 92px;
-    padding: 10px 12px;
+    padding: 8px 12px;
+    border-radius: 11px;
     color: var(--text-muted);
     text-decoration: none;
     font-weight: 600;
-    font-size: 13px;
+    font-size: 12.5px;
+    transition: color 0.2s;
+    -webkit-tap-highlight-color: transparent;
 }
-.tab-icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.tab::after {
-    content: "";
-    position: absolute;
-    left: 12px; right: 12px; bottom: -1px;
-    height: 3px;
-    border-radius: 3px 3px 0 0;
-    background: transparent;
+.tab-icon {
+    width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    transition: transform 0.3s var(--ease-out);
 }
 .tab:hover { color: var(--text-color); }
-.tab[aria-current="page"] { color: var(--accent); }
-.tab[aria-current="page"]::after { background: var(--accent); }
+.tab:hover .tab-icon { transform: translateY(-2px) scale(1.08); }
+.tab:active .tab-icon { transform: scale(0.9); }
+.tab[aria-current="page"] { color: #fff; }
+.tab[aria-current="page"] .tab-icon { stroke: var(--cyan); filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.55)); }
+/* Sem o .tab-glow (antes do script), a aba atual tem o próprio fundo. */
+.tabs:not(.has-glow) .tab[aria-current="page"] { background: linear-gradient(135deg, rgba(59, 130, 255, 0.28), rgba(155, 123, 255, 0.22)); }
+.tab-glow {
+    position: absolute; z-index: 0; top: 4px; left: 0; bottom: 4px;
+    border-radius: 11px;
+    background: linear-gradient(135deg, rgba(59, 130, 255, 0.3), rgba(155, 123, 255, 0.24));
+    box-shadow: inset 0 0 0 1px rgba(120, 170, 255, 0.28), 0 6px 22px -8px rgba(59, 130, 255, 0.75);
+    pointer-events: none;
+    view-transition-name: tab-glow;
+}
+.tab-glow.moving { transition: transform 0.38s var(--ease-out), width 0.38s var(--ease-out), opacity 0.2s; }
+.tab-glow.hovering { opacity: 0.6; }
+/* Linha brilhante sob a aba atual (desktop) */
+.tab[aria-current="page"]::after {
+    content: "";
+    position: absolute; left: 30%; right: 30%; bottom: 1px; height: 2px; border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+}
+@view-transition { navigation: auto; }
+::view-transition-group(tab-glow) { animation-duration: 0.38s; animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.22s; }
+@media (prefers-reduced-motion: reduce) {
+    @view-transition { navigation: none; }
+    .tab-glow.moving, .tab-icon { transition: none; }
+}
 .tab:focus-visible, .btn:focus-visible, .btn-secondary:focus-visible, .link-btn:focus-visible, .seg button:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -325,17 +408,17 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 .cand-name { color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .warn-text { color: var(--warning); }
 #aportePanel h3 { margin-top: 18px; }
-.group-row td { background-color: rgba(48, 54, 61, 0.3); padding-top: 10px; padding-bottom: 10px; }
+.group-row td { background-color: rgba(70, 96, 150, 0.12); padding-top: 10px; padding-bottom: 10px; }
 .total-row td { border-bottom: 2px solid var(--border-color); }
 #aporteTable .pick { display: none; }
 #aporteTable.picking .pick { display: table-cell; }
 
-.fi-section td { background-color: rgba(48, 54, 61, 0.15); }
+.fi-section td { background-color: rgba(70, 96, 150, 0.07); }
 
 /* Sub-abas da Carteira: mesmo visual da barra do topo, menores. No celular a barra rola
    horizontalmente dentro dela (a página não). O sublinhado é um box-shadow interno porque a
    rolagem cortaria uma borda com margem negativa. */
-.subtabs { position: relative; display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); overflow-x: auto; scrollbar-width: thin; }
+.subtabs { position: relative; display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); overflow-x: auto; }
 .subtab {
     flex: 0 0 auto;
     background: none;
@@ -403,22 +486,35 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 .pager .btn-secondary { padding: 6px 10px; }
 .pager .btn-secondary:disabled { opacity: 0.4; cursor: default; border-color: var(--border-color); color: var(--text-color); }
 .pager-info { font-size: 13px; color: var(--text-muted); padding: 0 4px; }
-/* Voltar ao topo (core.js: setupScrollTop): surge com fade e leve subida depois de rolar. */
+/* Voltar ao topo (core.js: setupScrollTop): surge com fade e leve subida depois de rolar. Botão em
+   degradê com brilho; no hover sobe, o brilho cresce e a seta dá um pulo para cima. */
 .scroll-top {
     position: fixed; right: 20px; bottom: 20px; z-index: 950;
-    width: 44px; height: 44px; border-radius: 50%;
+    width: 46px; height: 46px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    background-color: var(--panel-bg); color: var(--accent);
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 14px rgba(1, 4, 9, 0.5);
+    background: linear-gradient(135deg, #3b82ff, #22d3ee 60%, #9b7bff);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 8px 22px -6px rgba(59, 130, 255, 0.75), 0 0 0 4px rgba(59, 130, 255, 0.12);
     cursor: pointer;
     opacity: 0; visibility: hidden; transform: translateY(12px);
-    transition: opacity 0.25s ease, transform 0.25s ease, visibility 0s linear 0.25s;
+    transition: opacity 0.25s ease, transform 0.25s var(--ease-out), box-shadow 0.25s, filter 0.25s, visibility 0s linear 0.25s;
 }
-.scroll-top.visible { opacity: 1; visibility: visible; transform: none; transition: opacity 0.25s ease, transform 0.25s ease, visibility 0s; }
-.scroll-top:hover { border-color: var(--accent); }
-.scroll-top:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .scroll-top, .scroll-top.visible { transition: none; transform: none; } }
+.scroll-top.visible { opacity: 1; visibility: visible; transform: none; transition: opacity 0.25s ease, transform 0.25s var(--ease-out), box-shadow 0.25s, filter 0.25s, visibility 0s; }
+.scroll-top svg { transition: transform 0.3s var(--ease-out); }
+.scroll-top.visible:hover { transform: translateY(-3px); filter: brightness(1.12); box-shadow: 0 12px 28px -6px rgba(34, 211, 238, 0.8), 0 0 0 6px rgba(34, 211, 238, 0.18); }
+.scroll-top:hover svg { animation: arrow-hop 0.7s var(--ease-out) infinite; }
+.scroll-top.visible:active { transform: scale(0.92); }
+@keyframes arrow-hop { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-4px); } }
+.scroll-top:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+/* Sem o realce quadrado que o navegador desenha ao tocar/clicar (tap highlight e o contorno de
+   foco do clique); o contorno continua para quem navega pelo teclado (:focus-visible). */
+.scroll-top { -webkit-appearance: none; appearance: none; padding: 0; -webkit-tap-highlight-color: transparent; }
+.scroll-top:focus:not(:focus-visible) { outline: none; }
+@media (prefers-reduced-motion: reduce) {
+    .scroll-top, .scroll-top.visible { transition: none; transform: none; }
+    .scroll-top:hover svg { animation: none; }
+}
 .pager-size { margin-left: auto; font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
 
 /* ------------------------------------------------------------ Carteira: sub-aba Metas */
@@ -519,7 +615,7 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 }
 
 /* ------------------------------------------------------------ Login e conta (versão publicada) */
-.tabs-user { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); min-width: 0; }
+.tabs-user { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); min-width: 0; padding-right: 8px; }
 .tabs-user #userName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabs-user .link-btn { color: var(--accent); font-size: 13px; }
 
@@ -533,23 +629,35 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
 
 /* ------------------------------------------------------------ Celular: abas na barra de baixo */
 @media (max-width: 640px) {
-    body { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
-    .appbar { align-items: center; padding: 10px 14px; min-height: 0; }
+    body { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+    /* relative + z-index: as abas (fixas embaixo) ficam dentro da camada da barra; sem ela, os
+       cartões animados (transform) da página seriam desenhados por cima das abas. Sem
+       backdrop-filter aqui: ele prenderia as abas fixas dentro da barra. */
+    .appbar { position: relative; z-index: 900; padding: 10px 14px; min-height: 0; backdrop-filter: none; -webkit-backdrop-filter: none; background-color: var(--panel-bg); }
     .tabs {
         position: fixed;
-        left: 0; right: 0; bottom: 0;
+        left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom));
         z-index: 900;
         gap: 0;
-        padding-bottom: env(safe-area-inset-bottom);
-        background-color: var(--panel-bg);
-        border-top: 1px solid var(--border-color);
-        box-shadow: 0 -4px 16px rgba(1, 4, 9, 0.45);
+        padding: 5px;
+        border-radius: 20px;
+        background-color: rgba(14, 21, 39, 0.82);
+        backdrop-filter: blur(16px) saturate(140%);
+        -webkit-backdrop-filter: blur(16px) saturate(140%);
+        border: 1px solid var(--border-strong);
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 -6px 24px -6px rgba(0, 0, 0, 0.7), 0 14px 34px -8px rgba(0, 0, 0, 0.9);
     }
-    .tab { flex: 1 1 0; min-width: 0; padding: 10px 4px 8px; font-size: 12px; }
+    .tab { flex: 1 1 0; min-width: 0; padding: 8px 2px 7px; font-size: 11px; border-radius: 15px; color: #a9b8d4; }
+    .tab[aria-current="page"] { color: #fff; }
+    .tab-glow {
+        top: 5px; bottom: 5px; border-radius: 15px;
+        background: linear-gradient(135deg, rgba(59, 130, 255, 0.55), rgba(155, 123, 255, 0.45));
+        box-shadow: inset 0 0 0 1px rgba(150, 190, 255, 0.45), 0 6px 18px -6px rgba(59, 130, 255, 0.9);
+    }
+    .tab[aria-current="page"]::after { display: none; }
     /* Acima da barra de abas fixa (~72px de altura). */
-    .scroll-top { right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); }
-    .tab-icon { width: 24px; height: 24px; }
-    .tab::after { top: 0; bottom: auto; left: 0; right: 0; border-radius: 0 0 3px 3px; }
+    .scroll-top { right: 16px; bottom: calc(96px + env(safe-area-inset-bottom)); }
+    .tab-icon { width: 23px; height: 23px; }
 
     /* Selects dos controles ocupam a linha toda e não passam da tela (opções longas, como
        a de liquidez, são cortadas dentro do campo). */
@@ -613,9 +721,9 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
     .rank-merge > tbody > tr > td:first-child:not([colspan]) { display: none; }
     .rank-merge .rank-inline { display: block; }
     .sticky-two > tbody > tr > td:nth-child(2) .small.muted { max-width: calc(26vw - 12px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    :is(.sticky-first, .sticky-two) th { --tint: rgba(48, 54, 61, 0.3); }
-    :is(.sticky-first, .sticky-two) .fi-section td { --tint: rgba(48, 54, 61, 0.15); }
-    :is(.sticky-first, .sticky-two) .group-row td { --tint: rgba(48, 54, 61, 0.3); }
+    :is(.sticky-first, .sticky-two) th { --tint: rgba(70, 96, 150, 0.12); }
+    :is(.sticky-first, .sticky-two) .fi-section td { --tint: rgba(70, 96, 150, 0.07); }
+    :is(.sticky-first, .sticky-two) .group-row td { --tint: rgba(70, 96, 150, 0.12); }
     :is(.sticky-first, .sticky-two) tr:hover td { --tint: rgba(56, 139, 253, 0.03); }
     :is(.sticky-first, .sticky-two) .lot-row.selected td { --tint: rgba(56, 139, 253, 0.1); }
 }
@@ -668,8 +776,240 @@ ul.notes strong { color: var(--text-color); font-weight: 600; }
 .facts .fact-sep { color: var(--text-muted); opacity: 0.6; }
 /* Screener: no celular a justificativa vira um botão que abre a caixa flutuante (app.js). */
 .facts-btn { display: none; }
+/* A lista inteira só quando a tabela cabe com ela (consulta pela largura da própria tabela, não
+   da tela): abaixo disso vira o botão "Justificativa", e a tabela não precisa rolar para o lado no
+   desktop. No celular, sempre o botão. */
+.ranking .table-container { container-type: inline-size; }
+@container (max-width: 1460px) {
+    .facts { display: none; }
+    .facts-btn { display: inline-flex; }
+}
 @media (max-width: 640px) {
     .facts { display: none; }
     .facts-btn { display: inline-flex; }
 }
 .regime-badge { margin-right: 6px; vertical-align: 1px; }
+/* ------------------------------------------------------------ Efeitos comuns */
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+/* Entrada ao rolar (core.js: observeReveal). Só com .js-reveal no <html>: sem o script nada some.
+   fill-mode "backwards" para a animação não prender o transform depois (o hover dos cartões usa). */
+.js-reveal [data-reveal]:not(.in) { opacity: 0; transform: translateY(28px); }
+[data-reveal].in { animation: reveal-in 0.9s var(--ease-out) backwards; animation-delay: var(--stagger, 0s); }
+@keyframes reveal-in { from { opacity: 0; transform: translateY(28px); } }
+@keyframes dash-in { from { stroke-dashoffset: 100; } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes pop { 40% { transform: scale(1.08); } }
+.status-badge { display: inline-flex; align-items: center; gap: 7px; }
+.status-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+.btn-analyze { border-radius: 8px; transition: background-color 0.2s, color 0.2s, border-color 0.2s, transform 0.15s var(--ease-out), box-shadow 0.2s; }
+.btn-analyze:hover { box-shadow: 0 6px 18px -8px rgba(47, 107, 255, 0.9); }
+.btn-analyze.copied, .btn-analyze.copied:disabled { opacity: 1; background-color: rgba(74, 217, 145, 0.14); border-color: var(--success); color: var(--success); animation: pop 0.35s var(--ease-out); }
+.btn-analyze.copy-failed { opacity: 1; border-color: var(--danger); color: var(--danger); }
+.panel-title { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.panel-title h2 { margin: 0; }
+.icon-chip {
+    width: 32px; height: 32px; flex: none; border-radius: 10px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, rgba(59, 130, 255, 0.25), rgba(155, 123, 255, 0.2));
+    color: var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(120, 170, 255, 0.25);
+}
+.icon-chip svg, .kpi-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.icon-chip.tone-warn { background: rgba(255, 176, 87, 0.14); color: var(--warning); box-shadow: inset 0 0 0 1px rgba(255, 176, 87, 0.3); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--border-color); color: var(--text-muted); }
+.chip strong { color: var(--text-color); font-weight: 600; }
+/* Interruptor (checkbox estilizado) */
+.switch { position: relative; }
+.switch > input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.switch-track { position: relative; flex: none; width: 34px; height: 20px; border-radius: 999px; background: var(--border-strong); transition: background 0.25s; }
+.switch-track::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); transition: transform 0.25s var(--ease-out);
+}
+.switch > input:checked + .switch-track { background: linear-gradient(135deg, #3b82ff, #22d3ee); }
+.switch > input:checked + .switch-track::after { transform: translateX(14px); }
+.switch > input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------ Screener */
+.hero {
+    position: relative; overflow: hidden; padding: 24px;
+    background: linear-gradient(135deg, rgba(47, 107, 255, 0.14), rgba(14, 21, 39, 0) 50%), var(--panel-bg);
+    border-color: rgba(90, 162, 255, 0.22);
+}
+.hero > :not(.hero-aurora) { position: relative; }
+/* Brilho que passeia devagar atrás do cabeçalho: só transform (fica na GPU). */
+.hero-aurora {
+    position: absolute; inset: -50%; pointer-events: none; will-change: transform;
+    background:
+        radial-gradient(closest-side, rgba(47, 107, 255, 0.22), transparent) 25% 35% / 45% 45% no-repeat,
+        radial-gradient(closest-side, rgba(155, 123, 255, 0.16), transparent) 75% 55% / 40% 40% no-repeat,
+        radial-gradient(closest-side, rgba(34, 211, 238, 0.10), transparent) 55% 30% / 30% 30% no-repeat;
+    animation: aurora 22s ease-in-out infinite alternate;
+}
+@keyframes aurora { to { transform: translate3d(10%, 6%, 0) rotate(10deg); } }
+.eyebrow { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cyan); }
+.hero h1 {
+    font-size: 28px; line-height: 1.2;
+    background: linear-gradient(90deg, #ffffff, #b9d3ff 55%, #cdbcff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.live-pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; letter-spacing: 0.06em; color: var(--success); background: rgba(74, 217, 145, 0.12); border: 1px solid rgba(74, 217, 145, 0.3); }
+.live-dot { position: relative; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.live-dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: currentColor; animation: live-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@keyframes live-ping { 75%, 100% { transform: scale(2.8); opacity: 0; } }
+.btn-icon { display: inline-flex; align-items: center; gap: 8px; }
+.refresh-icon { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.5s var(--ease-out); }
+.btn-icon:hover .refresh-icon { transform: rotate(180deg); }
+.btn-icon:disabled .refresh-icon { animation: busy-spin 1s linear infinite; }
+.toolbar { margin-top: 18px; padding: 10px 14px; gap: 10px 22px; border-radius: 12px; background: rgba(7, 11, 22, 0.45); border: 1px solid var(--border-color); }
+
+/* KPIs em cartões coloridos (tom por cartão; o do BOVA11 fica verde ou vermelho pelo sinal) */
+.kpi-cards { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.kpi-card {
+    position: relative; overflow: hidden; padding: 16px;
+    border-radius: 14px; border-color: var(--tone-border);
+    background: linear-gradient(160deg, var(--tone-bg), rgba(255, 255, 255, 0.01) 70%);
+    transition: transform 0.25s var(--ease-out), box-shadow 0.25s, border-color 0.25s;
+}
+.kpi-card::before { content: ""; position: absolute; left: 14px; right: 14px; top: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--tone), transparent); }
+.kpi-card:hover { transform: translateY(-3px); border-color: var(--tone); box-shadow: 0 16px 34px -18px var(--tone); }
+.kpi-top { display: flex; align-items: center; gap: 10px; }
+.kpi-icon { width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center; color: var(--tone); background: var(--tone-bg); }
+.kpi-card .kpi-label { letter-spacing: 0.04em; }
+.kpi-card .kpi-value { font-size: 30px; margin-top: 12px; letter-spacing: -0.02em; }
+.in .kpi-card { animation: reveal-in 0.9s var(--ease-out) backwards; animation-delay: 0.15s; }
+.in .kpi-card:nth-child(2) { animation-delay: 0.27s; }
+.in .kpi-card:nth-child(3) { animation-delay: 0.39s; }
+.in .kpi-card:nth-child(4) { animation-delay: 0.51s; }
+.tone-blue { --tone: #5aa2ff; --tone-bg: rgba(59, 130, 255, 0.16); --tone-border: rgba(90, 162, 255, 0.25); }
+.tone-cyan { --tone: #22d3ee; --tone-bg: rgba(34, 211, 238, 0.12); --tone-border: rgba(34, 211, 238, 0.22); }
+.tone-violet { --tone: #9b7bff; --tone-bg: rgba(155, 123, 255, 0.15); --tone-border: rgba(155, 123, 255, 0.25); }
+.tone-green { --tone: #4ad991; --tone-bg: rgba(74, 217, 145, 0.11); --tone-border: rgba(74, 217, 145, 0.22); }
+.tone-red { --tone: #ff7b72; --tone-bg: rgba(255, 123, 114, 0.11); --tone-border: rgba(255, 123, 114, 0.22); }
+.spark { display: block; width: 100%; height: 44px; margin-top: 10px; overflow: visible; }
+.spark-line { fill: none; stroke-width: 1.8; stroke-linejoin: round; stroke-dasharray: 100; stroke-dashoffset: 0; }
+.in .spark-line { animation: dash-in 1.8s var(--ease-out) 0.6s backwards; }
+.in .spark-area { animation: fade-in 1.6s ease-out 0.8s backwards; }
+
+/* Medidores de amplitude por tipo (app.js: renderGauges) */
+.section-sub { margin: 24px 0 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+.gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.gauge-card {
+    display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 12px 12px;
+    border: 1px solid var(--border-color); border-radius: 14px; background: rgba(255, 255, 255, 0.015);
+    color: inherit; text-decoration: none; text-align: center;
+    transition: transform 0.25s var(--ease-out), border-color 0.25s, box-shadow 0.25s;
+}
+.gauge-card:hover { transform: translateY(-3px); border-color: var(--g); box-shadow: 0 16px 32px -20px var(--g); }
+.gauge-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.regime-alta { --g: var(--success); }
+.regime-misto { --g: var(--warning); }
+.regime-defensivo { --g: var(--danger); }
+.regime-none { --g: var(--text-muted); }
+.gauge-wrap { position: relative; width: 100%; max-width: 170px; }
+.gauge { display: block; width: 100%; overflow: visible; }
+.gauge path { fill: none; }
+.gauge-track { stroke: rgba(255, 255, 255, 0.06); stroke-width: 10; stroke-linecap: round; }
+.gauge-band { stroke-width: 2.5; opacity: 0.6; }
+.band-defensivo { stroke: var(--danger); }
+.band-misto { stroke: var(--warning); }
+.band-alta { stroke: var(--success); }
+.gauge-val { stroke: var(--g); stroke-width: 10; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: var(--off); filter: drop-shadow(0 0 5px var(--g)); }
+.js-reveal .gauge-card:not(.in) .gauge-val { stroke-dashoffset: 100; }
+.gauge-card.in .gauge-val { animation: dash-in 1.5s var(--ease-out) backwards; animation-delay: calc(var(--stagger, 0s) + 0.3s); }
+.gauge-num { position: absolute; left: 0; right: 0; bottom: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+.gauge-label { font-weight: 600; }
+
+/* Rankings */
+.ranking { scroll-margin-top: 96px; }
+.ranking-head .panel-title { margin-bottom: 10px; }
+.ranking-head .panel-title .muted { font-weight: 400; }
+/* Cada linha surge sozinha ao entrar na tela: o tr só esmaece (transform em tr não é confiável) e
+   as células sobem. */
+.js-reveal tr[data-reveal]:not(.in) { transform: none; }
+.js-reveal tr[data-reveal]:not(.in) > td { transform: translateY(20px); }
+tr[data-reveal].in { animation: fade-in 0.8s ease-out backwards; animation-delay: var(--stagger, 0s); }
+tr[data-reveal].in > td { animation: rise-in 0.8s var(--ease-out) backwards; animation-delay: var(--stagger, 0s); }
+@keyframes rise-in { from { transform: translateY(20px); } }
+.podium-1 { --medal: #f5c542; }
+.podium-2 { --medal: #c3cbd9; }
+.podium-3 { --medal: #d9915a; }
+.podium { background: linear-gradient(90deg, color-mix(in srgb, var(--medal) 8%, transparent), transparent 45%); }
+.podium > td:first-child { box-shadow: inset 3px 0 0 var(--medal); }
+.asset { display: flex; align-items: center; gap: 10px; }
+.asset-text { min-width: 0; }
+/* Nome ou setor em no máximo duas linhas (nome completo no title): os nomes longos de ETFs
+   esticavam a coluna e a linha. */
+.ranking .asset-text .small.muted { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 170px; }
+.ranking th, .ranking td { padding-left: 10px; padding-right: 10px; }
+.avatar {
+    width: 34px; height: 34px; flex: none; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.02em; color: #fff;
+    background: linear-gradient(135deg, var(--a1), var(--a2));
+    box-shadow: 0 4px 12px -6px var(--a1);
+}
+.av-acoes { --a1: #3b82ff; --a2: #22d3ee; }
+.av-fundos { --a1: #f59e0b; --a2: #f97316; }
+.av-etfs { --a1: #9b7bff; --a2: #ec4899; }
+.av-bdrs { --a1: #10b981; --a2: #22d3ee; }
+.ma-pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.03); }
+/* Anel do Score Composto */
+.ring { position: relative; display: inline-grid; place-items: center; width: 50px; height: 50px; }
+.ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 4; }
+.ring-track { stroke: rgba(255, 255, 255, 0.07); }
+.ring-val { stroke: url(#ringGrad); stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: var(--off); }
+.js-reveal tr[data-reveal]:not(.in) .ring-val { stroke-dashoffset: 100; }
+tr.in .ring-val { animation: dash-in 1.3s var(--ease-out) backwards; animation-delay: calc(var(--stagger, 0s) + 0.3s); }
+.ring-num { font-size: 13px; font-weight: 700; }
+/* Barras dos componentes da pressão (equalizador) */
+.press { display: inline-flex; align-items: center; gap: 8px; }
+.press-num { font-weight: 700; }
+.eq { display: inline-flex; align-items: flex-end; gap: 3px; height: 28px; padding: 3px 4px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); cursor: help; }
+.eq:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.eq i { display: block; width: 5px; height: 100%; border-radius: 2px; background: var(--c); transform: scaleY(var(--v)); transform-origin: bottom; }
+.eq-volume { --c: #5aa2ff; }
+.eq-momentum { --c: #22d3ee; }
+.eq-trend { --c: #9b7bff; }
+.eq-structure { --c: #ffb057; }
+.js-reveal tr[data-reveal]:not(.in) .eq i { transform: scaleY(0); }
+tr.in .eq i { animation: eq-in 1s var(--ease-out) backwards; animation-delay: calc(var(--stagger, 0s) + var(--k, 0) * 90ms + 0.35s); }
+@keyframes eq-in { from { transform: scaleY(0); } }
+.guidelines-panel .guidelines li::marker { color: var(--warning); }
+
+@media (max-width: 640px) {
+    .hero { padding: 18px 16px; }
+    .hero h1 { font-size: 22px; }
+    .kpi-card .kpi-value { font-size: 24px; }
+    .avatar { display: none; }
+    .podium > td:first-child { box-shadow: none; }
+    .gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .gauge-card { padding: 12px 8px 10px; }
+    .gauge-num { font-size: 20px; }
+    .ring { width: 44px; height: 44px; }
+    .ranking { scroll-margin-top: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .hero-aurora, .live-dot::after, .progress-bar { animation: none; }
+    [data-reveal], [data-reveal] * { animation-duration: 0.01ms !important; animation-delay: 0s !important; }
+}
+
+/* ------------------------------------------------------------ Barras de rolagem */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    border: 3px solid transparent; border-radius: 999px; background-clip: padding-box;
+    background-color: #2d3d62;
+}
+::-webkit-scrollbar-thumb:hover { background-color: #4a6aa8; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.table-container::-webkit-scrollbar-thumb { background-image: linear-gradient(90deg, #3b82ff, #22d3ee 60%, #9b7bff); background-color: transparent; }
+/* Firefox (sem ::-webkit-scrollbar): no Chrome e no Edge, scrollbar-color anularia o estilo acima. */
+@supports not selector(::-webkit-scrollbar) {
+    * { scrollbar-width: thin; scrollbar-color: #2d3d62 transparent; }
+    .table-container { scrollbar-color: #3b6fd8 rgba(255, 255, 255, 0.03); }
+}

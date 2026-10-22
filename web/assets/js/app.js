@@ -27,6 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const btn = e.target.closest('button.copy-analysis');
         if (btn) copyAnalysis(btn);
     });
+    observeReveal();
     runScan(false);
 });
 
@@ -117,19 +118,29 @@ function render(scan) {
     document.getElementById('lastUpdate').innerText =
         `${basis} · varredura de ${new Date(scan.timestamp).toLocaleString('pt-BR')} · universo de ${scan.universeSize} ativos da B3 acima do piso de liquidez`;
     document.getElementById('fnUniverse').innerText = scan.universeSize;
+    document.getElementById('livePill').hidden = !scan.liveSession;
 
     renderKpis(scan, view, strict);
+    renderGauges(scan, view, strict);
     renderRankings(scan, view, strict);
     renderBova(mode);
 }
 
-// Tipos de ativo (screener.KINDS): título do painel e nome curto.
+// Tipos de ativo (screener.KINDS): título do painel, ícone, rótulo do medidor e nome curto.
 const KIND_TITLE = {
-    acoes: '🏢 Ações (ON, PN e units)',
-    fundos: '🏬 Fundos listados (FII, Fiagro e FI-Infra)',
-    etfs: '🧺 ETFs de ações',
-    bdrs: '🌎 BDRs',
+    acoes: 'Ações (ON, PN e units)',
+    fundos: 'Fundos listados (FII, Fiagro e FI-Infra)',
+    etfs: 'ETFs de ações',
+    bdrs: 'BDRs',
 };
+const KIND_ICON = {
+    acoes: '<path d="M7 3v18M17 3v18"/><rect x="5" y="7" width="4" height="8" rx="1"/><rect x="15" y="9" width="4" height="7" rx="1"/>',
+    fundos: '<path d="M3 11l9-7 9 7M5 10v11h14V10M9 21v-5h6v5"/>',
+    etfs: '<path d="M12 3l9 5-9 5-9-5zM3 12.5l9 5 9-5M3 16.5l9 5 9-5"/>',
+    bdrs: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+};
+const kindIcon = (kind) => `<span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24">${KIND_ICON[kind]}</svg></span>`;
+const KIND_LABEL = { acoes: 'Ações', fundos: 'Fundos', etfs: 'ETFs', bdrs: 'BDRs' };
 const KIND_SHORT = { acoes: 'ações', fundos: 'fundos', etfs: 'ETFs', bdrs: 'BDRs' };
 const KIND_OF = { acoes: 'das ações', fundos: 'dos fundos', etfs: 'dos ETFs', bdrs: 'dos BDRs' };
 
@@ -142,10 +153,10 @@ const REGIME = {
 function renderKpis(scan, view, strict) {
     const results = view.rankings.map(r => ({ kind: r.kind, result: r[strict ? 'strict' : 'loose'] }));
     const byKind = (fn) => view.rankings.map((r, k) => `${fn(r, results[k].result)} ${KIND_SHORT[r.kind]}`).join(' · ');
-    document.getElementById('kpiScanned').innerText = view.scanned;
+    setCount(document.getElementById('kpiScanned'), view.scanned);
     document.getElementById('kpiScannedNote').innerText = byKind(r => r.scanned) +
         (scan.failures ? ` · ${scan.failures} sem dados suficientes` : '');
-    document.getElementById('kpiQualified').innerText = results.reduce((sum, r) => sum + r.result.qualified, 0);
+    setCount(document.getElementById('kpiQualified'), results.reduce((sum, r) => sum + r.result.qualified, 0));
     document.getElementById('kpiQualifiedNote').innerText = byKind((r, result) => result.qualified);
     const best = results.filter(r => r.result.top.length)
         .map(r => ({ kind: r.kind, a: r.result.top[0] }))
@@ -154,20 +165,62 @@ function renderKpis(scan, view, strict) {
     document.getElementById('kpiBestNote').innerText = best ? `SC ${fmtNum(best.a.score)} · ${KIND_SHORT[best.kind]}` : '';
 }
 
+// ---------------------------------------------------------------- Medidores de amplitude
+
+// Meio círculo de raio r em volta de (GAUGE_CX, GAUGE_CY): 0% à esquerda, 100% à direita, por cima.
+const GAUGE_CX = 60, GAUGE_CY = 60;
+function gaugePoint(v, r) {
+    const a = Math.PI * (1 - v / 100);
+    return `${(GAUGE_CX + r * Math.cos(a)).toFixed(2)} ${(GAUGE_CY - r * Math.sin(a)).toFixed(2)}`;
+}
+const gaugeArc = (from, to, r) => `M ${gaugePoint(from, r)} A ${r} ${r} 0 0 1 ${gaugePoint(to, r)}`;
+
+// Um medidor por tipo: a amplitude (breadth) e as faixas dos regimes (scan.regimeBands, do
+// Python). Cada um é um link para o ranking do tipo.
+function renderGauges(scan, view, strict) {
+    const bands = scan.regimeBands || { misto: 40, alta: 60 };
+    const el = document.getElementById('breadthGauges');
+    el.innerHTML = view.rankings.map((r) => {
+        const result = r[strict ? 'strict' : 'loose'];
+        const regime = REGIME[r.regime];
+        const breadth = r.breadth;
+        const off = breadth === null ? 100 : 100 - breadth;
+        return `<a class="gauge-card regime-${r.regime || 'none'}" href="#ranking-${r.kind}" data-reveal
+                aria-label="${KIND_LABEL[r.kind]}: ${breadth === null ? 'amostra pequena' : `${fmtNum(breadth, 0)}% em tendência de alta, ${regime.label.toLowerCase()}`}. Ir para o ranking.">
+            <div class="gauge-wrap">
+                <svg class="gauge" viewBox="0 0 120 66" aria-hidden="true">
+                    <path class="gauge-band band-defensivo" d="${gaugeArc(0, bands.misto - 1, 57)}"/>
+                    <path class="gauge-band band-misto" d="${gaugeArc(bands.misto + 1, bands.alta - 1, 57)}"/>
+                    <path class="gauge-band band-alta" d="${gaugeArc(bands.alta + 1, 100, 57)}"/>
+                    <path class="gauge-track" d="${gaugeArc(0, 100, 46)}"/>
+                    ${breadth === null ? '' : `<path class="gauge-val" d="${gaugeArc(0, 100, 46)}" pathLength="100" style="--off:${off.toFixed(1)}"/>`}
+                </svg>
+                <span class="gauge-num num"${breadth === null ? '>—' : ` data-count="${breadth}" data-format="pctu" data-decimals="0">0%`}</span>
+            </div>
+            <div class="gauge-label">${KIND_LABEL[r.kind]}</div>
+            ${regime ? `<span class="badge ${regime.badge}">${regime.label}</span>` : '<span class="badge badge-low">Amostra pequena</span>'}
+            <div class="small muted">${result.qualified} no setup · ${r.scanned} com liquidez</div>
+        </a>`;
+    }).join('');
+    observeReveal(el);
+}
+
 function renderRankings(scan, view, strict) {
-    document.getElementById('rankings').innerHTML = view.rankings
+    const el = document.getElementById('rankings');
+    el.innerHTML = view.rankings
         .map(r => rankingPanel(scan, r, r[strict ? 'strict' : 'loose'], strict)).join('');
+    observeReveal(el);
 }
 
 function rankingPanel(scan, r, result, strict) {
     const top = result.top;
     const facts = [
-        `${r.scanned} com liquidez (média acima de R$ ${fmtNum(r.minAvgVolume / 1e6, 0)} mi por pregão)`,
-        `${result.qualified} no setup`,
-        top.length ? `pressão média ${fmtNum(result.avgPressure)}%` : null,
-        top.length ? `acerto médio ${fmtNum(result.avgWinRate)}%` : null,
+        `<strong>${r.scanned}</strong> com liquidez (média acima de R$ ${fmtNum(r.minAvgVolume / 1e6, 0)} mi por pregão)`,
+        `<strong>${result.qualified}</strong> no setup`,
+        top.length ? `pressão média <strong>${fmtNum(result.avgPressure)}%</strong>` : null,
+        top.length ? `acerto médio <strong>${fmtNum(result.avgWinRate)}%</strong>` : null,
         r.duplicates ? `${r.duplicates} ETF(s) que repetem um índice já listado omitidos` : null,
-    ].filter(Boolean).join(' · ');
+    ].filter(Boolean).map(f => `<span class="chip">${f}</span>`).join('');
     const regime = REGIME[r.regime];
     const regimeText = regime
         ? `<span class="badge ${regime.badge} regime-badge">${regime.label}</span> ${regime.text}
@@ -178,10 +231,10 @@ function rankingPanel(scan, r, result, strict) {
         ? `<div class="ranking-note">Apenas ${top.length} ${KIND_SHORT[r.kind]} atendem a todos os critérios hoje.${strict ? ' Desmarque "Exigir candle de rejeição" para ampliar a lista.' : ''}</div>`
         : '';
     return `
-        <section class="panel ranking" aria-labelledby="ranking-${r.kind}">
+        <section class="panel ranking" id="ranking-${r.kind}" aria-labelledby="ranking-title-${r.kind}" data-reveal>
             <div class="ranking-head">
-                <h2 id="ranking-${r.kind}">${KIND_TITLE[r.kind]} — Top ${scan.topN}</h2>
-                <div class="small muted">${facts}</div>
+                <div class="panel-title">${kindIcon(r.kind)}<h2 id="ranking-title-${r.kind}">${KIND_TITLE[r.kind]} <span class="muted">— Top ${scan.topN}</span></h2></div>
+                <div class="chips">${facts}</div>
                 <div class="regime">${regimeText}</div>
                 ${few}
             </div>
@@ -194,7 +247,7 @@ function rankingPanel(scan, r, result, strict) {
                             <th class="c">Score Composto</th>
                             <th class="c">Preço Atual</th>
                             <th class="c">Média Testada</th>
-                            <th class="c">Pressão % ${tip('O "gás" acumulado no pullback (volume, momentum, tendência e estrutura, de 0 a 100). Descreve o padrão; não é probabilidade de acerto.\nO selo abaixo é a mesma pressão em faixas: Cheia a partir de 75%, Quase cheia de 60% a 75%, Enchendo abaixo de 60%.')}</th>
+                            <th class="c">Pressão % ${tip('O "gás" acumulado no pullback (volume, momentum, tendência e estrutura, de 0 a 100). Descreve o padrão; não é probabilidade de acerto.\nO selo abaixo é a mesma pressão em faixas: Cheia a partir de 75%, Quase cheia de 60% a 75%, Enchendo abaixo de 60%.\nAs barrinhas ao lado são os componentes, de 0 a 100: Volume (azul), Momentum (ciano), Tendência (roxo) e Estrutura (laranja). Toque nelas para ver os valores e pesos.')}</th>
                             <th class="c">Histórico (backtest) ${tip('A estratégia aplicada aos ~10 anos de histórico do ativo, com a regra de venda configurada para o tipo dele.\nPrimeira linha: taxa de acerto das compras encerradas (suavizada para 50% com poucas), acertos/compras e o retorno médio por compra.\n3 anos: as compras encerradas nos últimos 3 anos. Nas ações, foi o histórico que melhor separou compras boas de ruins.\nAbertas: compras ainda abertas, pelo preço de hoje (num ativo em alta costumam ser as melhores).')}</th>
                             <th class="c">Indicação</th>
                             <th>Justificativa Quantitativa (Volume &amp; Momentum)</th>
@@ -224,6 +277,24 @@ const justificationList = (parts) => `<dl class="facts">${parts.map(p => `<dt>${
 // Indicação do ranking (screener.advice): só compra ou espera; a venda fica na aba Carteira.
 const ADVICE_BADGE = { comprar: 'badge-ok', aguardar: 'badge-fill' };
 
+// Coluna "Score Composto": anel que se desenha ao aparecer (0 a 100), com o número no meio.
+const scoreRing = (score) => `<span class="ring" style="--off:${(100 - Math.max(0, Math.min(100, score))).toFixed(1)}">
+    <svg viewBox="0 0 44 44" aria-hidden="true"><circle class="ring-track" cx="22" cy="22" r="18"/><circle class="ring-val" cx="22" cy="22" r="18" pathLength="100"/></svg>
+    <span class="ring-num num">${fmtNum(score)}</span></span>`;
+
+// Coluna "Pressão %": o total, as quatro barras dos componentes (screener.pressure_parts, com o
+// peso de cada um no tipo; o motivo abre na caixa flutuante) e o selo da garrafa.
+function pressureCell(a) {
+    const parts = a.pressureParts || [];
+    const detail = parts.map(p => `${p.label}: ${fmtNum(p.value, 0)} de 100 (peso ${fmtNum(p.weight, 0)}%)`).join('\n');
+    const bars = parts.map((p, k) => `<i class="eq-${p.key}" style="--v:${(Math.max(0, Math.min(100, p.value)) / 100).toFixed(3)};--k:${k}"></i>`).join('');
+    const eq = parts.length
+        ? `<span class="eq" tabindex="0" data-tip="${escapeHTML(detail)}" data-tip-title="Componentes da pressão" aria-label="Componentes da pressão: ${escapeHTML(detail.replace(/\n/g, '; '))}">${bars}</span>`
+        : '';
+    return `<div class="press">${eq}<span class="press-num num">${fmtNum(a.pressure, 0)}%</span></div>
+        <div class="small" style="margin-top: 6px;">${BOTTLE_BADGE[a.bottle]}</div>`;
+}
+
 // Coluna "Histórico (backtest)": 10 anos, últimos 3 anos e compras abertas (números do Python).
 function btCell(bt) {
     const avg = v => v === null || v === undefined ? '' : ` · méd. ${fmtPct(v)}`;
@@ -239,15 +310,17 @@ function tableRows(top, kind) {
     }
     const medals = ['🥇', '🥈', '🥉'];
     return top.map((a, index) => `
-        <tr>
+        <tr class="${index < 3 ? `podium podium-${index + 1}` : ''}" data-reveal>
             <td class="c nowrap" style="font-weight: bold;">${medals[index] || ''} ${index + 1}º</td>
-            <td><div class="rank-inline">${medals[index] || ''} ${index + 1}º</div><a href="https://br.tradingview.com/chart/?symbol=BMFBOVESPA:${a.ticker}" target="_blank" rel="noopener" class="ticker-link">${a.ticker}</a>
+            <td><div class="rank-inline">${medals[index] || ''} ${index + 1}º</div>
+                <div class="asset"><span class="avatar av-${kind}" aria-hidden="true">${escapeHTML(a.ticker.slice(0, 2))}</span>
+                <div class="asset-text"><a href="https://br.tradingview.com/chart/?symbol=BMFBOVESPA:${a.ticker}" target="_blank" rel="noopener" class="ticker-link">${a.ticker}</a>
                 <a href="backtest.html?ticker=${encodeURIComponent(a.ticker)}" class="inline-link small" aria-label="Backtest de ${a.ticker}">backtest</a>
-                <div class="small muted">${escapeHTML(a.sector || a.name || '')}</div></td>
-            <td class="c" style="font-weight: bold; color: var(--accent);">${fmtNum(a.score)}</td>
-            <td class="c nowrap">${fmtBRL(a.price)}<div class="small" style="color: ${a.change >= 0 ? 'var(--success)' : 'var(--danger)'};">${a.change >= 0 ? '+' : ''}${fmtNum(a.change, 2)}%</div></td>
-            <td class="c muted">${a.setup.ma.name}</td>
-            <td class="c nowrap"><div style="font-weight: 600;">${fmtNum(a.pressure, 0)}%</div><div class="small" style="margin-top: 4px;">${BOTTLE_BADGE[a.bottle]}</div></td>
+                <div class="small muted" title="${escapeHTML(a.sector || a.name || '')}">${escapeHTML(a.sector || a.name || '')}</div></div></div></td>
+            <td class="c">${scoreRing(a.score)}</td>
+            <td class="c nowrap num">${fmtBRL(a.price)}<div class="small" style="color: ${a.change >= 0 ? 'var(--success)' : 'var(--danger)'};">${a.change >= 0 ? '+' : ''}${fmtNum(a.change, 2)}%</div></td>
+            <td class="c"><span class="ma-pill">${a.setup.ma.name}</span></td>
+            <td class="c nowrap">${pressureCell(a)}</td>
             <td class="c nowrap">${btCell(a.bt)}</td>
             <td class="c">${a.advice ? signalBadge(a.advice.label, a.advice.reason, ADVICE_BADGE[a.advice.action] || 'badge-low') : '—'}</td>
             <td>${justificationList(a.justification)}</td>
@@ -283,16 +356,35 @@ async function copyAnalysis(btn) {
 async function renderBova(mode) {
     const value = document.getElementById('kpiBova');
     const note = document.getElementById('kpiBovaNote');
+    const card = document.getElementById('kpiBovaCard');
+    const spark = document.getElementById('bovaSpark');
     try {
         const b = await apiGet(`/bova?mode=${mode}`);
-        value.innerText = fmtPct(b.change);
+        setCount(value, b.change, { format: 'pct', decimals: 1 });
         value.style.color = b.change >= 0 ? 'var(--success)' : 'var(--danger)';
+        card.classList.toggle('tone-green', b.change >= 0);
+        card.classList.toggle('tone-red', b.change < 0);
+        drawSpark(spark, b.spark, b.change >= 0);
         note.innerText = `${fmtBRL(b.close)} · ` + (b.above.length === 3 ? 'acima das três médias'
             : b.above.length === 0 ? 'abaixo das três médias'
             : `acima de ${b.above.join(' e ')}; abaixo de ${b.below.join(' e ')}`);
     } catch (e) {
-        value.innerText = '—';
+        setCount(value, null);
         value.style.color = '';
+        spark.innerHTML = '';
         note.innerText = `BOVA11 indisponível (${e.message})`;
     }
+}
+
+// Minigráfico de área dos fechamentos do BOVA11 no período do KPI (bova_kpi: spark), verde na
+// alta e vermelho na queda; a linha se desenha da esquerda para a direita (CSS: spark-line).
+function drawSpark(svg, closes, up) {
+    if (!closes || closes.length < 2) { svg.innerHTML = ''; return; }
+    const min = Math.min(...closes), span = (Math.max(...closes) - min) || 1;
+    const pts = closes.map((c, k) => `${(k / (closes.length - 1) * 200).toFixed(1)},${(45 - (c - min) / span * 41).toFixed(1)}`);
+    const color = up ? 'var(--success)' : 'var(--danger)';
+    svg.innerHTML = `<defs><linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" style="stop-color: ${color}; stop-opacity: 0.35"/><stop offset="1" style="stop-color: ${color}; stop-opacity: 0"/></linearGradient></defs>
+        <path class="spark-area" d="M0,48 L${pts.join(' L')} L200,48 Z" fill="url(#sparkFill)"/>
+        <path class="spark-line" d="M${pts.join(' L')}" pathLength="100" style="stroke: ${color}"/>`;
 }

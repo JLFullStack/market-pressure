@@ -31,7 +31,7 @@ const SOURCES = {
 };
 const TABLE_NAME = /^[a-z0-9_]{1,40}$/;
 const MAX_DB_BODY = 4 * 1024 * 1024;
-const PUBLIC = new Set(["/login", "/login.html", "/assets/css/styles.css", "/assets/js/login.js", "/favicon.ico"]);
+const PUBLIC = new Set(["/login", "/login.html", "/assets/css/styles.css", "/assets/js/login.js", "/favicon.ico", "/favicon.svg"]);
 
 export default {
     async fetch(request, env) {

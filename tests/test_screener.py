@@ -22,6 +22,20 @@ class AnalysisTest(unittest.TestCase):
         self.assertTrue(all(p["items"] and all(i[0].isupper() for i in p["items"]) for p in parts))
         bdr = screener.justification({**result, "kind": "bdrs"})
         self.assertEqual(bdr[1]["items"], ["Fora da pressão (BDR: volume do formador de mercado)"])
+        # Barras da coluna Pressão: os quatro componentes com o peso do tipo; o BDR fica sem Volume.
+        stock_parts = screener.pressure_parts(result["pressure"], "acoes")
+        self.assertEqual([p["key"] for p in stock_parts], ["volume", "momentum", "trend", "structure"])
+        self.assertAlmostEqual(sum(p["weight"] for p in stock_parts), 100)
+        self.assertEqual([p["key"] for p in screener.pressure_parts(result["pressure"], "bdrs")],
+                         ["momentum", "trend", "structure"])
+        self.assertEqual(screener.pressure_parts(result["pressure"], None), stock_parts)
+
+    def test_regime_bands(self):
+        bands = screener.REGIME_BANDS
+        self.assertEqual(screener.regime(bands["alta"]), "alta")
+        self.assertEqual(screener.regime(bands["alta"] - 0.1), "misto")
+        self.assertEqual(screener.regime(bands["misto"]), "misto")
+        self.assertEqual(screener.regime(bands["misto"] - 0.1), "defensivo")
 
     def test_backtest_buys_again_only_in_a_new_pullback(self):
         opens = {221: 100, 222: 102, 226: 110, 231: 105, 233: 90}
@@ -155,6 +169,15 @@ class KindsTest(DatabaseTestCase):
         self.assertEqual(by_kind["etfs"]["duplicates"], 1)
         self.assertEqual(by_kind["fundos"]["minAvgVolume"], 3_000_000)
         self.assertIsNone(by_kind["acoes"]["regime"])  # 1 ativo: amostra pequena
+        self.assertEqual(screener.scan_payload(scan)["regimeBands"], screener.REGIME_BANDS)
+        for r in view["rankings"]:  # cada linha do ranking traz os componentes da pressão do seu tipo
+            for row in r["loose"]["top"]:
+                keys = [p["key"] for p in row["pressureParts"]]
+                self.assertEqual("volume" in keys, r["kind"] != "bdrs")
+        # minigráfico do KPI do BOVA11: os fechamentos do período, terminando no fechamento atual
+        bova = screener.bova_kpi("fechamento")
+        self.assertEqual(len(bova["spark"]), screener.CONFIG["bovaLookback"] + 1)
+        self.assertEqual(bova["spark"][-1], bova["close"])
         screener.write_scan(scan)
         saved = screener.read_scan()
         self.assertEqual(screener.scan_payload(saved), screener.scan_payload(scan))

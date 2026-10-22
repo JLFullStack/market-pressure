@@ -294,6 +294,122 @@ function setupScrollTop() {
 }
 document.addEventListener('DOMContentLoaded', () => { setupTips(); keepTipsWithText(); setupScrollTop(); });
 
+// ---------------------------------------------------------------- Efeitos visuais
+
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+// Destaque das abas do topo: um único fundo (.tab-glow) que desliza até a aba sob o mouse e volta
+// para a atual ao sair. Criado já na carga do script (o <nav> vem antes dele na página), para a
+// transição entre páginas (@view-transition, no CSS) encontrá-lo e levá-lo de uma aba à outra.
+function setupTabGlow() {
+    const nav = document.querySelector('nav.tabs');
+    if (!nav || nav.querySelector('.tab-glow')) return;
+    const glow = document.createElement('span');
+    glow.className = 'tab-glow';
+    glow.setAttribute('aria-hidden', 'true');
+    nav.prepend(glow);
+    nav.classList.add('has-glow');
+    const current = () => nav.querySelector('.tab[aria-current="page"]');
+    const place = (tab) => {
+        glow.style.opacity = tab ? '' : '0';
+        if (!tab) return;
+        glow.style.width = `${tab.offsetWidth}px`;
+        glow.style.transform = `translateX(${tab.offsetLeft}px)`;
+    };
+    place(current());
+    requestAnimationFrame(() => requestAnimationFrame(() => glow.classList.add('moving')));
+    nav.addEventListener('pointerover', (e) => {
+        const tab = e.target.closest('.tab');
+        if (!tab || e.pointerType !== 'mouse') return;
+        glow.classList.toggle('hovering', tab !== current());
+        place(tab);
+    });
+    nav.addEventListener('pointerleave', () => { glow.classList.remove('hovering'); place(current()); });
+    nav.addEventListener('click', (e) => {
+        const tab = e.target.closest('.tab');
+        if (tab) { glow.classList.remove('hovering'); place(tab); }
+    });
+    // Fontes carregadas, aba "Conta" que aparece com o login, barra que muda no celular.
+    if (window.ResizeObserver) new ResizeObserver(() => place(current())).observe(nav);
+}
+setupTabGlow();
+
+// Entrada ao rolar: elementos com data-reveal ficam ocultos (só com a classe js-reveal no <html>,
+// para nada sumir se o script falhar) e ganham a classe .in quando entram na tela, uma vez. O .in
+// também dispara as animações de dentro (anéis, barras, medidores) e os contadores [data-count].
+document.documentElement.classList.add('js-reveal');
+let revealObserver = null;
+
+function revealNow(el) {
+    el.classList.add('in');
+    if (el.matches('[data-count]')) countUp(el);
+    el.querySelectorAll('[data-count]').forEach(countUp);
+}
+
+// O bloco só aparece quando já subiu REVEAL_MARGIN acima do rodapé da tela (senão a animação
+// acontece fora da vista, colada no rodapé). Os que entram juntos (cartões, linhas) aparecem em
+// sequência: cada um recebe --stagger, o atraso usado pelas animações dele e de dentro dele.
+const REVEAL_MARGIN = '0px 0px -20% 0px';
+const REVEAL_STAGGER_MS = 90;
+
+function observeReveal(root = document) {
+    const els = root.querySelectorAll('[data-reveal]:not(.in)');
+    if (!window.IntersectionObserver || REDUCED_MOTION.matches) { els.forEach(revealNow); return; }
+    revealObserver = revealObserver || new IntersectionObserver((entries) => {
+        entries.filter(entry => entry.isIntersecting).forEach((entry, k) => {
+            revealObserver.unobserve(entry.target);
+            entry.target.style.setProperty('--stagger', `${k * REVEAL_STAGGER_MS}ms`);
+            revealNow(entry.target);
+        });
+    }, { rootMargin: REVEAL_MARGIN });
+    els.forEach(el => revealObserver.observe(el));
+}
+
+// Contador: o número sobe do valor mostrado antes (0 na primeira vez) até data-count, em
+// COUNT_MS. data-format: "int" (padrão), "num" (data-decimals casas), "pct" (com sinal) ou
+// "pctu" (sem sinal); data-suffix é acrescentado ao fim.
+const COUNT_MS = 900;
+const COUNT_FORMAT = {
+    int: (v) => fmtNum(v, 0),
+    num: (v, d) => fmtNum(v, d),
+    pct: (v, d) => fmtPct(v, d),
+    pctu: (v, d) => `${fmtNum(v, d)}%`,
+};
+
+function countUp(el) {
+    const target = Number(el.dataset.count);
+    if (!Number.isFinite(target)) return;
+    const format = COUNT_FORMAT[el.dataset.format || 'int'];
+    const decimals = Number(el.dataset.decimals || 1);
+    const suffix = el.dataset.suffix || '';
+    const show = (v) => { el.textContent = format(v, decimals) + suffix; };
+    const from = Number.isFinite(el._shown) ? el._shown : 0;
+    el._shown = target;
+    cancelAnimationFrame(el._frame);
+    if (REDUCED_MOTION.matches || from === target) { show(target); return; }
+    const start = performance.now();
+    const step = (now) => {
+        const t = Math.min(1, (now - start) / COUNT_MS);
+        show(from + (target - from) * (1 - Math.pow(1 - t, 3)));
+        if (t < 1) el._frame = requestAnimationFrame(step);
+    };
+    el._frame = requestAnimationFrame(step);
+}
+
+// Atualiza um contador: anima já se o bloco dele estiver visível; senão, ao aparecer.
+function setCount(el, value, options = {}) {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+        delete el.dataset.count;
+        el._shown = undefined;
+        el.textContent = '—';
+        return;
+    }
+    el.dataset.count = value;
+    for (const [k, v] of Object.entries(options)) el.dataset[k] = v;
+    const box = el.closest('[data-reveal]');
+    if (!box || box.classList.contains('in')) countUp(el);
+}
+
 // ---------------------------------------------------------------- Copiar texto para IA
 
 // Botões que copiam um texto montado no servidor (as análises para IA do Screener e da Carteira).
@@ -324,9 +440,11 @@ async function copyServerText(btn, textPromise, title, doneText = 'COPIADA ✓')
         }
     }
     btn.textContent = done;
+    if (done !== label) btn.classList.add(done === 'ERRO' ? 'copy-failed' : 'copied');
     setTimeout(() => {
         btn.textContent = label;
         btn.disabled = false;
+        btn.classList.remove('copied', 'copy-failed');
     }, 2000);
     if (error) throw error;
 }

@@ -505,9 +505,26 @@ def bottle_state(p):
     return "cheia" if p >= 75 else "quase" if p >= 60 else "enchendo"
 
 
+# Amplitude mínima (% do tipo em tendência primária de alta) de cada regime; também desenha as
+# faixas do medidor de amplitude da página.
+REGIME_BANDS = {"misto": 40, "alta": 60}
+
+
 def regime(breadth):
     """Regime do mercado pela parcela do universo em tendência primária de alta."""
-    return "alta" if breadth >= 60 else "misto" if breadth >= 40 else "defensivo"
+    return ("alta" if breadth >= REGIME_BANDS["alta"]
+            else "misto" if breadth >= REGIME_BANDS["misto"] else "defensivo")
+
+
+PRESSURE_PARTS = (("volume", "Volume"), ("momentum", "Momentum"), ("trend", "Tendência"), ("structure", "Estrutura"))
+
+
+def pressure_parts(p, kind):
+    """Os quatro componentes da pressão (0–100) com o peso de cada um no tipo do ativo, para as
+    barras da coluna Pressão; um componente com peso 0 (Volume dos BDRs) fica de fora."""
+    w = CONFIG["pressureWeights"].get(kind or "acoes", CONFIG["pressureWeights"]["default"])
+    return [{"key": k, "label": label, "value": p[k], "weight": w[k] * 100}
+            for k, label in PRESSURE_PARTS if w[k]]
 
 
 def justification(a):
@@ -554,6 +571,7 @@ def ranking_view(analyses, strict, kinds=None, benchmark6m=None):
     top = [{k: a.get(k) for k in ("ticker", "name", "sector", "price", "change", "setup", "bt", "score",
                                   "mm200Slope", "return12m", "return6m")}
            | {"benchmark6m": benchmark6m, "pressure": a["pressure"]["total"], "bottle": bottle_state(a["pressure"]["total"]),
+              "pressureParts": pressure_parts(a["pressure"], a.get("kind")),
               "justification": justification(a)} for a in ranking[:CONFIG["topN"]]]
     return {
         "qualified": len(ranking),
@@ -726,6 +744,7 @@ def scan_payload(scan, liquidity="padrao", kinds=None):
         "failures": len(failures),
         "apiErrors": sum(1 for f in failures if f["reason"] != "histórico insuficiente"),
         "liveSession": any(a["fechamento"]["date"] != a["intradiario"]["date"] for a in scan["analyses"]),
+        "regimeBands": REGIME_BANDS,
         "views": views(scan, liquidity, kinds),
     }
 
@@ -1137,7 +1156,8 @@ def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False,
 
 def bova_kpi(mode):
     """Variação do BOVA11 nos últimos bovaLookback pregões e posição do fechamento frente às
-    três médias, na base escolhida (na base "fechamento", sem o candle do pregão em andamento)."""
+    três médias, na base escolhida (na base "fechamento", sem o candle do pregão em andamento),
+    e os fechamentos do período (spark: o minigráfico do KPI)."""
     candles = market_data.history("BOVA11")["candles"]
     if mode == "fechamento":
         candles = closed_candles(candles)
@@ -1146,10 +1166,12 @@ def bova_kpi(mode):
     ind = compute_indicators(candles)
     i = len(candles) - 1
     c = ind["closes"][i]
-    past = ind["closes"][max(0, i - CONFIG["bovaLookback"])]
+    start = max(0, i - CONFIG["bovaLookback"])
+    past = ind["closes"][start]
     mas = ("MM20", "MM50", "MM200")
     return {
         "close": c,
+        "spark": ind["closes"][start:i + 1],
         "change": (c / past - 1) * 100,
         "above": [n for n in mas if c > ind[n.lower()][i]],
         "below": [n for n in mas if c <= ind[n.lower()][i]],
