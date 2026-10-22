@@ -11,7 +11,7 @@ import math
 import re
 from datetime import date
 
-from . import ai_prompt
+from . import ai_prompt, aporte
 from . import backtest_prompt as bp
 from . import goals as gl
 from . import market_data, screener
@@ -292,9 +292,8 @@ def get_receivables(req):
 
 @route("POST", f"/api/carteira/{PORTFOLIO_ID}/aporte")
 def post_contribution(req):
-    body = req.json_object()
-    return svc.contribution(portfolio_of(req, needs_entries=True), body.get("amount"), body.get("mode"),
-                            body.get("base"), body.get("selected"))
+    """Calculadora de aporte: {amount, mode, base, selected, candidates, cap, advice, maxAssets, reuse}."""
+    return aporte.plan(portfolio_of(req, needs_entries=True), req.json_object())
 
 
 @route("POST", "/api/backtest/carteira")

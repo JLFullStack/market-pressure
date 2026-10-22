@@ -199,6 +199,83 @@ class EntryFilterAporteTest(unittest.TestCase):
         self.assertFalse(rows["WEAK3"]["eligible"])
         self.assertIn("tendência fraca", rows["WEAK3"]["excluded"])
 
+    def test_rebalances_by_contribution_only(self):
+        # Ações acima da meta (com um ativo abaixo do ideal), Internacionais abaixo: o aporte vai
+        # todo para Internacionais, sem tratar o excesso de Ações como venda.
+        classes = [{"name": "Ações", "target": 50}, {"name": "Internacionais", "target": 50}]
+        item = lambda key, cls, value, target: {"key": key, "label": key, "cls": cls, "value": value, "kind": "quote",
+                                                "market": "b3", "priceBRL": 10, "sell": False, "target": target,
+                                                "fixedTarget": None, "setup": None}
+        items = [item("BIG3", "Ações", 700, 25), item("SMALL3", "Ações", 100, 25), item("IVVB11", "Internacionais", 200, 50)]
+        plan = pf.contribution_plan(classes, items, 1000, 200, "todos")
+        rows = {r["key"]: r for r in plan["rows"]}
+        self.assertEqual((rows["IVVB11"]["suggestion"], rows["SMALL3"]["suggestion"]), (200, 0))
+        self.assertTrue(rows["BIG3"]["above"])
+        self.assertEqual(plan["basis"], "falta")
+
+    @staticmethod
+    def _item(key, cls, value, target, price=10, **extra):
+        return {"key": key, "label": key, "cls": cls, "value": value, "kind": "quote", "market": "b3", "priceBRL": price,
+                "sell": False, "target": target, "fixedTarget": None, "setup": None, **extra}
+
+    def test_cap_per_buy_leaves_the_rest_unallocated(self):
+        classes = [{"name": "Ações", "target": 100}]
+        items = [self._item("A3", "Ações", 500, 50), self._item("B3", "Ações", 500, 50)]
+        opts = pf.contribution_options({"cap": "10", "reuse": False}, 1.5)
+        plan = pf.contribution_plan(classes, items, 1000, 1000, "todos", options=opts)
+        rows = {r["key"]: r for r in plan["rows"]}
+        self.assertEqual((rows["A3"]["suggestion"], rows["B3"]["suggestion"]), (200, 200))  # 10% de 2.000
+        self.assertEqual(plan["unallocated"], 600)
+        # Com prioridade, o teto e o peso são 1,5x.
+        items[0]["priority"] = True
+        plan = pf.contribution_plan(classes, items, 1000, 1000, "todos", options=opts)
+        self.assertEqual({r["key"]: r["suggestion"] for r in plan["rows"]}, {"A3": 300, "B3": 200})
+
+    def test_max_assets_keeps_the_ones_that_get_more(self):
+        classes = [{"name": "Ações", "target": 100}]
+        items = [self._item("A3", "Ações", 100, 34), self._item("B3", "Ações", 300, 33), self._item("C3", "Ações", 320, 33)]
+        opts = pf.contribution_options({"cap": "0", "maxAssets": "1", "reuse": False}, 1.5)
+        plan = pf.contribution_plan(classes, items, 720, 280, "todos", options=opts)
+        rows = {r["key"]: r for r in plan["rows"]}
+        self.assertEqual(rows["A3"]["suggestion"], 280)
+        self.assertFalse(rows["B3"]["eligible"])
+
+    def test_reuses_the_leftover_in_whole_shares(self):
+        classes = [{"name": "Ações", "target": 100}]
+        items = [self._item("A3", "Ações", 0, 50, price=30), self._item("B3", "Ações", 0, 50, price=7)]
+        plan = pf.contribution_plan(classes, items, 0, 100, "todos",
+                                    options=pf.contribution_options({"cap": "0"}, 1.5))
+        rows = {r["key"]: r for r in plan["rows"]}
+        # 50 para cada: 1 cota de A3 (sobra 20) e 7 de B3 (sobra 1); a sobra compra mais cotas de B3.
+        self.assertLessEqual(plan["effective"], 100)
+        self.assertLess(100 - plan["effective"], 7)
+        self.assertGreater(sum(r["extraShares"] for r in plan["rows"]), 0)
+
+    def test_candidate_from_screener_is_eligible_in_any_mode(self):
+        classes = [{"name": "Ações", "target": 50}, {"name": "Internacionais", "target": 50}]
+        items = [self._item("PETR4", "Ações", 1000, 50),
+                 self._item("AAPL34", "Internacionais", 0, 50, candidate=True,
+                            setup={"ok": True, "ma": {"name": "MM20"}, "wait": []})]
+        plan = pf.contribution_plan(classes, items, 1000, 500, "escolher", selected=[])
+        rows = {r["key"]: r for r in plan["rows"]}
+        self.assertEqual(rows["AAPL34"]["suggestion"], 500)
+        self.assertEqual(rows["AAPL34"]["status"]["key"], "candidate")
+
+    def test_path_until_classes_reach_target(self):
+        rows = [{"cls": "Ações", "value": 1000, "target": 50}, {"cls": "Internacionais", "value": 0, "target": 50}]
+        path = pf.contribution_path(rows, 500)
+        self.assertEqual(path["reached"], 2)  # 1.000/500 no 1º mês, 1.000/1.000 no 2º
+        self.assertLessEqual(path["months"][-1]["deviation"], pf.PLAN_TOLERANCE)
+
+    def test_empty_class_below_target_is_reported(self):
+        classes = [{"name": "Ações", "target": 60}, {"name": "Internacionais", "target": 40}]
+        items = [{"key": "PETR4", "label": "PETR4", "cls": "Ações", "value": 1000, "kind": "quote", "market": "b3",
+                  "priceBRL": 10, "sell": False, "target": 60, "fixedTarget": None, "setup": None}]
+        plan = pf.contribution_plan(classes, items, 1000, 100, "todos")
+        self.assertEqual(plan["rows"][0]["suggestion"], 100)
+        self.assertEqual(plan["basis"], "meta")
+        self.assertIn("Internacionais", plan["emptyClasses"][0])
+
 
 class StrengthTextTest(unittest.TestCase):
     def test_partial_reason_tells_if_the_rally_is_still_strong(self):

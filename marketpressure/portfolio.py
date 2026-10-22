@@ -13,7 +13,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from .core import (ENTRY, EXIT, REENTRY_DISTANCE, add_up, trend_strength, weak_close, closed_candles, compute_indicators, day_of, entry_stats,
                   entry_warnings, evaluate_setup, exit_signal,
-                  fmt_date, fmt_num, fmt_pct_value, fmt_qty, iso_day_in, js_round, today_iso)
+                  fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_qty, iso_day_in, js_round, today_iso)
 
 # Classes da carteira: fixas e as mesmas da aba Configurações. "group" é o grupo da regra de
 # venda (strategy.py); a situação de cada posição segue a regra da classe do ativo. Renda fixa
@@ -1029,24 +1029,112 @@ def split_cents(amount, weights):
 
 def distribute(amount, rows):
     """Sugestão de aporte (só compra) entre as linhas elegíveis: proporcional ao que falta para
-    cada uma chegar ao valor ideal; se todas já estão no ideal ou acima, proporcional às metas."""
-    gaps = [max(0, r["diff"]) for r in rows]
+    cada uma chegar ao valor ideal; se todas já estão no ideal ou acima, proporcional às metas.
+    O peso de cada linha é multiplicado por boost (COMPRAR com prioridade do Screener)."""
+    gaps = [max(0, r["diff"]) * r.get("boost", 1) for r in rows]
     by_gap = add_up(gaps) > 0.005
-    parts = split_cents(amount, gaps if by_gap else [r["target"] for r in rows])
+    parts = split_cents(amount, gaps if by_gap else [r["target"] * r.get("boost", 1) for r in rows])
     return {"basis": "falta" if by_gap else "meta", "parts": {r["key"]: parts[k] for k, r in enumerate(rows)}}
 
 
-def contribution_plan(classes, items, total, amount, mode, selected=()):
+def allocate(amount, rows, gaps, targets):
+    """Rebalanceamento só por aporte, em dois níveis: o aporte vai às classes com linhas elegíveis
+    (rows) proporcionalmente ao que falta a cada uma para a meta (gaps: {classe: ideal − saldo},
+    negativo = acima da meta, que não recebe); se nenhuma está abaixo, às metas delas (targets).
+    Dentro da classe, distribute entre os ativos. Nada é vendido: a classe acima da meta não é
+    reduzida, só deixa de receber até as outras a alcançarem."""
+    classes = list(dict.fromkeys(r["cls"] for r in rows))
+    weights = [max(0, gaps.get(c, 0)) for c in classes]
+    by_gap = add_up(weights) > 0.005
+    shares = split_cents(amount, weights if by_gap else [targets.get(c, 0) for c in classes])
+    parts = {}
+    for c, share in zip(classes, shares):
+        parts.update(distribute(share, [r for r in rows if r["cls"] == c])["parts"])
+    return {"basis": "falta" if by_gap else "meta", "parts": parts}
+
+
+def capped_allocation(amount, rows, gaps, targets):
+    """allocate com o teto por compra de cada linha (r["cap"], R$; None = sem teto): quem passa do
+    teto fica nele e o resto é dividido de novo entre os demais (a classe perde o que já recebeu do
+    que lhe faltava). O que nenhuma linha pode receber sobra em unallocated."""
+    parts, free, left, gaps = {}, list(rows), amount, dict(gaps)
+    basis = None
+    while free and left > 0.004:
+        plan = allocate(left, free, gaps, targets)
+        basis = basis or plan["basis"]
+        over = {r["key"] for r in free if r.get("cap") is not None and plan["parts"][r["key"]] > r["cap"] + 0.005}
+        if not over:
+            parts.update(plan["parts"])
+            left = 0
+            break
+        for r in free:
+            if r["key"] in over:
+                part = math.floor(r["cap"] * 100 + EPS) / 100
+                parts[r["key"]] = part
+                left -= part
+                gaps[r["cls"]] = gaps.get(r["cls"], 0) - part
+        free = [r for r in free if r["key"] not in over]
+    for r in rows:
+        parts.setdefault(r["key"], 0)
+    return {"basis": basis, "parts": parts, "unallocated": max(0, js_round(left * 100) / 100)}
+
+
+# Teto por compra no aporte, em % do patrimônio após o aporte (o tamanho da compra dos backtests de
+# carteira: 7,5–10% por compra; com prioridade, até prioritySize vezes isso). "0" = sem teto.
+BUY_CAPS = {"10": 0.10, "7.5": 0.075, "15": 0.15, "0": None}
+PLAN_TOLERANCE = 1     # p.p.: no plano de vários aportes, a classe "chegou" à meta a menos disto
+PLAN_MAX_MONTHS = 120  # horizonte máximo do plano de vários aportes
+
+
+def contribution_options(body, priority_size):
+    """Opções da calculadora como chegam da página: teto por compra (cap: chave de BUY_CAPS),
+    seguir a Indicação do Screener (advice), máximo de ativos no aporte (maxAssets; vazio = sem
+    limite) e reaproveitar a sobra em cotas (reuse)."""
+    body = body or {}
+    cap = str(body.get("cap", "10"))
+    try:
+        max_assets = int(parse_number(body.get("maxAssets")) or 0)
+    except (TypeError, ValueError, OverflowError):
+        max_assets = 0
+    return {"cap": cap if cap in BUY_CAPS else "10", "advice": body.get("advice", True) is not False,
+            "maxAssets": max_assets if max_assets >= 1 else None, "reuse": body.get("reuse", True) is not False,
+            "prioritySize": priority_size}
+
+
+def _reuse_leftover(rows):
+    """Reaproveita a sobra do arredondamento das cotas: uma cota por vez (só mercados de cotas
+    inteiras) no ativo elegível mais longe do valor ideal que ainda caiba na sobra e no teto."""
+    pool = add_up(r["leftover"] for r in rows)
+    while True:
+        fits = [r for r in rows if r["eligible"] and r["kind"] == "quote" and r["priceBRL"] > 0
+                and MARKETS.get(r["market"], MARKETS["b3"])["decimals"] == 0 and r["priceBRL"] <= pool + EPS
+                and (r.get("cap") is None or r["effective"] + r["priceBRL"] <= r["cap"] + 0.005)]
+        if not fits:
+            return
+        best = max(fits, key=lambda r: (r["ideal"] - r["value"] - r["effective"]) * r.get("boost", 1))
+        best["shares"] = (best["shares"] or 0) + 1
+        best["extraShares"] += 1
+        best["effective"] = js_round(best["shares"] * best["priceBRL"] * 100) / 100
+        pool -= best["priceBRL"]
+
+
+def contribution_plan(classes, items, total, amount, mode, selected=(), options=None):
     """Calculadora de aporte (método ARCA). Entrada:
       classes: [{ name, target }]; total: patrimônio atual (R$); amount: valor do aporte (R$);
       mode: 'todos' | 'escolher' | 'pullback'; selected: chaves escolhidas (modo 'escolher');
       items: [{ key, label, cls, value, target (% do patrimônio), kind: 'quote'|'fixed',
-               market, priceBRL, sell (exit_signal), setup: { ok, ma, enough } | None }].
-    Valor ideal = (patrimônio + aporte) × meta; diferença = ideal − saldo (pode ser negativa).
+               market, priceBRL, sell (exit_signal), setup: { ok, ma, enough } | None,
+               candidate (ativo novo vindo do Screener), priority (COMPRAR com prioridade) }];
+      options: contribution_options (teto por compra, Indicação, máximo de ativos, sobra).
+    Valor ideal = (patrimônio + aporte) × meta; diferença = ideal − saldo (negativa = acima da
+    meta: não recebe, mas nunca é vendida; o rebalanceamento é só por aportes, allocate).
     Elegíveis: sem sinal de venda e, conforme o modo, escolhidos ou em pullback (renda fixa
-    segue elegível pela meta). A parte que caberia a quem ficou de fora (comparado ao modo
-    "todos") vai para os elegíveis e é informada em redirected."""
+    segue elegível pela meta; um candidato do Screener foi escolhido e está no setup). A parte
+    que caberia a quem ficou de fora (comparado ao modo "todos") vai para os elegíveis e é
+    informada em redirected."""
+    opts = options or contribution_options({"cap": "0", "reuse": False}, 1)  # sem opções: como antes delas
     estimated = total + amount
+    cap = BUY_CAPS[opts["cap"]]
     chosen = set(selected)
     rows = []
     for i in items:
@@ -1056,6 +1144,8 @@ def contribution_plan(classes, items, total, amount, mode, selected=()):
             status = {"key": "sell", "label": "Vender"}
         elif i["kind"] == "fixed":
             status = {"key": "fixed", "label": "Renda fixa"}
+        elif i.get("candidate"):
+            status = {"key": "candidate", "label": f"Novo · Screener ({setup['ma']['name']})" if setup.get("ma") else "Novo · Screener"}
         elif setup.get("ok") and setup.get("wait"):
             status = {"key": "wait", "label": f"Pullback ({setup['ma']['name']}) em tendência fraca"}
         elif setup.get("ok"):
@@ -1065,23 +1155,42 @@ def contribution_plan(classes, items, total, amount, mode, selected=()):
         excluded = None
         if status["key"] == "sell":
             excluded = "Vender: fechamento abaixo da MM20, MM50 e MM200 com MM50 < MM200 — não recebe aporte"
+        elif status["key"] == "candidate":
+            excluded = None
         elif mode == "escolher" and i["key"] not in chosen:
             excluded = "Não selecionado"
         elif mode == "pullback" and status["key"] == "wait":
             excluded = ("Aguardar pullback (histórico insuficiente para a MM200)" if setup.get("enough") is False
                         else "Aguardar: tendência fraca — " + "; ".join(setup["wait"]) if setup.get("wait")
                         else "Aguardar pullback")
+        boost = opts["prioritySize"] if opts["advice"] and i.get("priority") and i["kind"] == "quote" else 1
         rows.append({**i, "pct": i["value"] / total * 100 if total else 0, "ideal": ideal, "diff": ideal - i["value"],
+                     "above": ideal - i["value"] < -0.005, "boost": boost, "priorityApplied": boost > 1,
+                     "cap": estimated * cap * boost if cap and i["kind"] == "quote" else None,
                      "status": status, "excluded": excluded, "eligible": not excluded})
 
+    targets = {c["name"]: _number(c.get("target")) for c in classes}
+    gaps = {name: estimated * t / 100 - add_up(r["value"] for r in rows if r["cls"] == name) for name, t in targets.items()}
+    notes = []
     eligible = [r for r in rows if r["eligible"]]
-    reference = distribute(amount, [r for r in rows if r["status"]["key"] != "sell"])["parts"]  # modo "todos"
+    limit = opts["maxAssets"]
+    if amount > 0 and limit and len(eligible) > limit:
+        # Máximo de ativos: ficam os que receberiam mais (o resto do aporte é dividido entre eles).
+        trial = capped_allocation(amount, eligible, gaps, targets)["parts"]
+        keep = {r["key"] for r in sorted(eligible, key=lambda r: -trial[r["key"]])[:limit]}
+        for r in eligible:
+            if r["key"] not in keep:
+                r["excluded"], r["eligible"] = f"Fora dos {limit} ativos deste aporte", False
+        notes.append(f"Aporte concentrado em {limit} ativo(s): ficaram os que mais receberiam; os demais aguardam o "
+                     "próximo aporte (menos compras pequenas, menos custo de corretagem e emolumentos).")
+        eligible = [r for r in rows if r["eligible"]]
+    reference = capped_allocation(amount, [r for r in rows if r["status"]["key"] != "sell"], gaps, targets)["parts"]  # modo "todos"
     waiting = amount > 0 and not eligible
-    plan = {"basis": None, "parts": {}} if waiting else distribute(amount, eligible)
+    plan = {"basis": None, "parts": {}, "unallocated": 0} if waiting else capped_allocation(amount, eligible, gaps, targets)
     for r in rows:
         r["suggestion"] = plan["parts"].get(r["key"], 0) if r["eligible"] else 0
         r["wouldReceive"] = reference.get(r["key"], 0) if r["excluded"] and r["status"]["key"] != "sell" else 0
-        r["shares"], r["effective"], r["leftover"] = None, r["suggestion"], 0
+        r["shares"], r["effective"], r["leftover"], r["extraShares"] = None, r["suggestion"], 0, 0
         if r["kind"] == "quote" and r["priceBRL"] > 0 and r["suggestion"] > 0:
             scale = 10 ** MARKETS.get(r["market"], MARKETS["b3"])["decimals"]
             r["shares"] = math.floor(r["suggestion"] / r["priceBRL"] * scale + EPS) / scale
@@ -1089,20 +1198,37 @@ def contribution_plan(classes, items, total, amount, mode, selected=()):
             r["leftover"] = js_round((r["suggestion"] - r["effective"]) * 100) / 100
         elif r["kind"] == "quote":
             r["shares"] = None if r["suggestion"] > 0 else 0
+    if opts["reuse"] and not waiting and amount > 0:
+        _reuse_leftover(rows)
+        extra = sum(r["extraShares"] for r in rows)
+        if extra:
+            notes.append(f"Sobra reaproveitada: {extra} cota(s) a mais, uma por vez no ativo mais longe do valor ideal "
+                         "que ainda cabia na sobra" + (" e no teto por compra." if cap else "."))
+    for r in rows:
+        r["leftover"] = js_round((r["suggestion"] - r["effective"]) * 100) / 100
+        r["gapAfter"] = max(0, r["ideal"] - r["value"] - r["effective"])
+    if plan["unallocated"] > 0.004:
+        notes.append(f"{fmt_brl(plan['unallocated'])} ficam sem destino pelo teto de {fmt_pct_value(cap)}% do patrimônio por compra"
+                     + (f" ({fmt_pct_value(cap * opts['prioritySize'])}% com prioridade)" if opts["advice"] else "")
+                     + ": guarde para o próximo aporte, escolha mais ativos (sugestões do Screener) ou aumente o teto.")
+    if any(r["priorityApplied"] and r["eligible"] for r in rows):
+        notes.append(f"Ativos com COMPRAR com prioridade no Screener pesam {fmt_num(opts['prioritySize'], 1)}x na divisão "
+                     "dentro da classe e têm teto maior (nos backtests do app essas compras renderam mais em média).")
 
     class_rows = []
     for c in classes:
         members = [r for r in rows if r["cls"] == c["name"]]
         value = add_up(r["value"] for r in members)
-        suggestion = add_up(r["suggestion"] for r in members)
+        effective = add_up(r["effective"] for r in members)
         target = _number(c.get("target"))
         ideal = estimated * target / 100
         class_rows.append({
             "cls": c["name"], "members": sorted(members, key=lambda r: -r["value"]), "value": value,
             "pct": value / total * 100 if total else 0, "target": target, "ideal": ideal, "diff": ideal - value,
-            "suggestion": suggestion, "effective": add_up(r["effective"] for r in members),
+            "above": ideal - value < -0.005,
+            "suggestion": add_up(r["suggestion"] for r in members), "effective": effective,
             "leftover": add_up(r["leftover"] for r in members),
-            "pctAfter": (value + suggestion) / estimated * 100 if estimated else 0,
+            "pctAfter": (value + effective) / estimated * 100 if estimated else 0,
         })
 
     # Redirecionado: o que iria para ativos fora do modo escolhido (sem contar "Vender").
@@ -1110,20 +1236,111 @@ def contribution_plan(classes, items, total, amount, mode, selected=()):
     by_class = {}
     for r in out:
         by_class[r["cls"]] = by_class.get(r["cls"], 0) + r["wouldReceive"]
+    # Classe abaixo da meta sem nenhum ativo: o aporte não tem onde entrar nela.
+    empty = [f"{c['cls']} está {fmt_brl(c['diff'])} abaixo da meta e não tem ativos na carteira: só recebe aporte "
+             "depois de escolher um ativo (sugestões do Screener, abaixo, ou Nova operação); até lá, o aporte vai para as outras classes."
+             for c in class_rows if not c["members"] and c["diff"] > 0.005]
+    effective = add_up(r["effective"] for r in rows)
     return {
         "mode": mode, "total": total, "amount": amount, "estimated": estimated, "rows": rows,
         "classRows": class_rows, "waiting": waiting, "basis": plan["basis"],
-        "suggested": add_up(r["suggestion"] for r in rows), "effective": add_up(r["effective"] for r in rows),
-        "leftover": add_up(r["leftover"] for r in rows),
+        "suggested": add_up(r["suggestion"] for r in rows), "effective": effective,
+        "leftover": js_round((amount - effective - plan["unallocated"]) * 100) / 100 if not waiting else 0,
+        "unallocated": plan["unallocated"], "notes": notes, "options": opts,
         "redirected": None if waiting else {"total": add_up(r["wouldReceive"] for r in out),
                                             "byClass": [{"cls": k, "value": v} for k, v in by_class.items()]},
         "targetSum": add_up(_number(c.get("target")) for c in classes),
+        "gap": add_up(max(0, c["diff"]) for c in class_rows), "emptyClasses": empty,
     }
 
 
-def contribution_items(portfolio, analysis, mode):
+def contribution_path(class_rows, amount, months=PLAN_MAX_MONTHS):
+    """Plano de vários aportes por classe: repetindo o aporte todo mês, com os preços de hoje, o
+    valor vai às classes abaixo da meta, proporcional ao que falta a cada uma (o mesmo critério da
+    calculadora, sem vender nada). Classes com meta acima de 0% recebem mesmo sem ativos (é o plano,
+    supondo que você escolha os ativos). Para quando todas ficam a menos de PLAN_TOLERANCE p.p. da
+    meta. → {months: [{n, parts: {classe: R$}, pct: {classe: %}, deviation}], reached, start}."""
+    if amount <= 0 or not class_rows:
+        return None
+    names = [c["cls"] for c in class_rows]
+    targets = {c["cls"]: c["target"] for c in class_rows}
+    values = {c["cls"]: c["value"] for c in class_rows}
+
+    def snapshot():
+        total = add_up(values.values())
+        pct = {n: values[n] / total * 100 if total else 0 for n in names}
+        return pct, max((abs(pct[n] - targets[n]) for n in names), default=0)
+
+    pct, deviation = snapshot()
+    start = {"pct": pct, "deviation": deviation}
+    out, reached = [], 0 if deviation <= PLAN_TOLERANCE else None
+    for n in range(1, months + 1):
+        if reached is not None:
+            break
+        estimated = add_up(values.values()) + amount
+        gaps = [max(0, estimated * targets[c] / 100 - values[c]) for c in names]
+        weights = gaps if add_up(gaps) > 0.005 else [targets[c] for c in names]
+        parts = dict(zip(names, split_cents(amount, weights)))
+        for c in names:
+            values[c] += parts[c]
+        pct, deviation = snapshot()
+        out.append({"n": n, "parts": parts, "pct": pct, "deviation": deviation})
+        if deviation <= PLAN_TOLERANCE:
+            reached = n
+    tol = fmt_num(PLAN_TOLERANCE, 0)
+    if reached == 0:
+        summary = f"Todas as classes já estão a menos de {tol} p.p. da meta: os próximos aportes seguem as metas."
+    elif reached:
+        summary = (f"Repetindo {fmt_brl(amount)} por mês, com os preços de hoje, todas as classes ficam a menos de "
+                   f"{tol} p.p. da meta em {reached} {'mês' if reached == 1 else 'meses'}, só com aportes.")
+    else:
+        summary = (f"Repetindo {fmt_brl(amount)} por mês, em {months} meses ainda há classe a {fmt_num(deviation, 1)} p.p. "
+                   "da meta: só com aportes desse tamanho o equilíbrio demora; aumente o aporte ou revise as metas.")
+    empty = [c["cls"] for c in class_rows if c["target"] > 0 and not c.get("members")]
+    if empty and reached != 0:
+        summary += (f" O plano supõe que {', '.join(empty)} {'recebe' if len(empty) == 1 else 'recebem'} a sua parte; "
+                    f"hoje, sem ativos, {'ela não recebe' if len(empty) == 1 else 'elas não recebem'} nada: escolha um nas sugestões do Screener.")
+    return {"months": out, "reached": reached, "start": start, "tolerance": PLAN_TOLERANCE, "amount": amount,
+            "summary": summary}
+
+
+def contribution_history(series, classes, months=12):
+    """Aportes líquidos dos últimos `months` meses, no total e por classe (compras e aportes −
+    vendas e resgates), e a aderência às metas: a parte dos aportes de cada mês que foi para
+    classes abaixo da meta no fim do mês anterior (pelas metas de hoje; None sem patrimônio no
+    início do mês). → [{month, total, byClass: {classe: R$}, adherence, above: [classes acima
+    da meta que receberam]}], do mais recente ao mais antigo."""
+    if not series or not series["dates"]:
+        return []
+    dates, by_class = series["dates"], series["classes"]
+    targets = {c["name"]: _number(c.get("target")) for c in classes}
+    ends = month_ends(dates)
+    rows = []
+    for m, end in enumerate(ends):
+        begin = ends[m - 1] + 1 if m else 0
+        flows = {c: add_up(by_class[c]["flow"][begin:end + 1]) for c in by_class}
+        flows = {c: v for c, v in flows.items() if abs(v) > 0.004}
+        if not flows:
+            continue
+        start = {c: by_class[c]["value"][begin - 1] if begin else 0 for c in by_class}
+        total_start = add_up(start.values())
+        adherence, above = None, []
+        positive = add_up(v for v in flows.values() if v > 0)
+        if total_start > EPS and positive > EPS:
+            below = {c for c in by_class if start[c] / total_start * 100 < targets.get(c, 0) - EPS}
+            adherence = add_up(v for c, v in flows.items() if v > 0 and c in below) / positive * 100
+            above = [c for c, v in flows.items() if v > 0 and c not in below]
+        rows.append({"month": dates[end][:7], "total": add_up(flows.values()),
+                     "byClass": flows, "adherence": adherence, "above": above})
+    return rows[::-1][:months]
+
+
+def contribution_items(portfolio, analysis, mode, candidates=(), priority=()):
     """Linhas da calculadora a partir da análise da carteira: ativos com posição (quantidade > 0)
-    e títulos com valor > 0, cada um com a meta calculada por asset_targets."""
+    e títulos com valor > 0, mais os candidatos do Screener escolhidos (candidates: itens já
+    prontos, com candidate=True e valor 0), cada um com a meta calculada por asset_targets (o
+    candidato divide a meta da classe como se já estivesse nela). priority: tickers com COMPRAR
+    com prioridade no Screener."""
     assets = portfolio.get("assets") or {}
     items = []
     for p in analysis["open"]:
@@ -1138,6 +1355,10 @@ def contribution_items(portfolio, analysis, mode):
             items.append({"key": f"fi:{f['id']}", "label": f["name"], "cls": f["cls"], "value": f["value"],
                           "kind": "fixed", "market": "b3", "priceBRL": 0, "sell": False, "setup": None,
                           "fixedTarget": f["fixedTarget"]})
+    held = {i["key"] for i in items}
+    items += [c for c in candidates if c["key"] not in held]
+    for i in items:
+        i["priority"] = i.get("priority") or i["key"] in priority
     targets, warnings = asset_targets(portfolio["classes"], items)
     return [{**i, "target": targets[i["key"]]["target"], "autoTarget": targets[i["key"]]["auto"]} for i in items], warnings
 
@@ -1291,7 +1512,7 @@ def batch_rows(plan, positions, day):
             rows.append({"kind": "fixed", "key": r["key"], "id": r["key"][3:], "label": r["label"], "include": True,
                          "date": day, "amount": r["suggestion"]})
             continue
-        p = by_ticker[r["key"]]
+        p = by_ticker.get(r["key"]) or r  # candidato do Screener: sem posição, os dados vêm na linha
         foreign = p["market"] != "b3"
         rows.append({"kind": "quote", "key": r["key"], "label": r["label"], "market": p["market"], "cls": p["cls"],
                      "include": True, "date": day, "qty": r["shares"],

@@ -15,8 +15,8 @@ from . import market_data, runtime
 from . import strategy as st
 from .core import add_up, day_of, fmt_date, session_in_progress, today_iso
 from .portfolio import (APORTE_MODES, BENCHMARK, CLASS_GROUP, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
-                        analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_items,
-                        contribution_plan, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
+                        analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_history,
+                        contribution_items, contribution_path, contribution_plan, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
                         market_of, net_flows, normalize_ticker, open_lots, parse_number, patrimony_bars, period_start,
                         rebase_series,
                         suggest_class, targets_off, tx_flow)
@@ -219,21 +219,26 @@ def analysis_payload(portfolio):
     }
 
 
-def contribution(portfolio, amount, mode, base, selected):
-    """Plano de aporte para os campos do painel, com as linhas prontas para "Registrar compras"."""
+def contribution(portfolio, amount, mode, base, selected, options=None, candidates=(), priority=()):
+    """Plano de aporte para os campos do painel, com as linhas prontas para "Registrar compras",
+    o plano de vários aportes (por classe) e o histórico de aportes dos últimos 12 meses.
+    options: contribution_options; candidates: ativos novos do Screener escolhidos (itens da
+    calculadora); priority: tickers com COMPRAR com prioridade no Screener (aporte.py monta os dois)."""
     a = full_analysis(portfolio, reuse=True)
     amount = max(0, parse_number(amount, 0) or 0)
     mode = mode if mode in APORTE_MODES else "todos"
-    items, warnings = contribution_items(portfolio, a, base)
-    plan = contribution_plan(portfolio["classes"], items, a["kpis"]["total"], amount, mode, selected or [])
+    items, warnings = contribution_items(portfolio, a, base, candidates, priority)
+    plan = contribution_plan(portfolio["classes"], items, a["kpis"]["total"], amount, mode, selected or [], options)
     can_register = not plan["waiting"] and any(r["kind"] == "quote" and r["eligible"] and (r["shares"] or 0) > 0
                                                for r in plan["rows"])
     for r in plan["rows"]:
         r.pop("setup", None)
-    return {**plan, "warnings": warnings, "canRegister": can_register, "targetsOff": targets_off(plan["targetSum"]),
+    return {**plan, "warnings": warnings + plan["emptyClasses"], "canRegister": can_register, "targetsOff": targets_off(plan["targetSum"]),
             "classDiff": add_up(c["diff"] for c in plan["classRows"]),
             "sells": [r["label"] for r in plan["rows"] if r["status"]["key"] == "sell"],
-            "batchRows": batch_rows(plan, a["open"], today_iso()) if can_register else []}
+            "batchRows": batch_rows(plan, a["open"], today_iso()) if can_register else [],
+            "path": contribution_path(plan["classRows"], amount),
+            "history": contribution_history(a["series"], portfolio["classes"])}
 
 
 def receivables(portfolio):

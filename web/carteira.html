@@ -276,6 +276,21 @@
                         <option value="intradiario">Intradiário</option>
                     </select>
                 </label>
+                <label class="field">Teto por compra
+                    <select id="aporteCap" class="select">
+                        <option value="10">10% do patrimônio</option>
+                        <option value="7.5">7,5% do patrimônio</option>
+                        <option value="15">15% do patrimônio</option>
+                        <option value="0">Sem teto</option>
+                    </select>
+                </label>
+                <label class="field">Máximo de ativos neste aporte
+                    <input type="number" id="aporteMax" class="select" min="1" step="1" inputmode="numeric" placeholder="Sem limite">
+                </label>
+            </div>
+            <div class="aporte-toggles">
+                <label class="toggle"><input type="checkbox" id="aporteAdvice" checked> Seguir a Indicação do Screener (prioridade pesa 1,5x)</label>
+                <label class="toggle"><input type="checkbox" id="aporteReuse" checked> Reaproveitar a sobra em cotas</label>
             </div>
             <div class="kpis aporte-kpis" id="aporteKpis"></div>
             <div class="aporte-note" id="aporteNote" role="status" aria-live="polite"></div>
@@ -290,7 +305,7 @@
                             <th class="r">% atual</th>
                             <th class="r">% meta</th>
                             <th class="r">Valor ideal</th>
-                            <th class="r">A investir (ideal − saldo)</th>
+                            <th class="r">Falta para o ideal</th>
                             <th class="r">Sugestão</th>
                             <th>Atual × meta</th>
                         </tr>
@@ -298,6 +313,8 @@
                     <tbody id="aporteClassBody"></tbody>
                 </table>
             </div>
+
+            <div id="aporteCandidates" hidden></div>
 
             <h3>Por ativo</h3>
             <div class="table-container">
@@ -311,7 +328,7 @@
                             <th class="r">% atual</th>
                             <th class="r">% meta</th>
                             <th class="r">Valor ideal</th>
-                            <th class="r">A investir (ideal − saldo)</th>
+                            <th class="r">Falta para o ideal</th>
                             <th class="r">Sugestão</th>
                             <th class="r">Cotas</th>
                             <th class="r">Valor efetivo</th>
@@ -359,14 +376,79 @@
                 </div>
                 <div class="form-msg" id="batchMsg" role="status" aria-live="polite"></div>
             </div>
-            <ul class="notes">
-                <li><strong>Valor ideal</strong> = (patrimônio atual + aporte) × % meta; <strong>"a investir"</strong> pode ser negativo (acima do ideal).</li>
-                <li><strong>Meta de cada ativo:</strong> por padrão, a meta da classe dividida igualmente entre os ativos com posição. Digite um % para fixá-la (os demais dividem o restante) ou apague o campo para voltar ao automático.</li>
-                <li><strong>Sugestão</strong> só compra: divide o aporte entre os ativos elegíveis, proporcionalmente ao que falta para o valor ideal. Ativos com situação <strong>Vender</strong> nunca recebem aporte; no modo pullback, só recebem os ativos em setup agora (mesma regra e base do screener), fora os de tendência fraca ou mais fracos que o Ibovespa (exceto internacionais), e a renda fixa, pela meta.</li>
-                <li><strong>Cotas</strong> = sugestão ÷ preço em reais, arredondado para baixo (inteiras na B3; 4 casas para EUA e cripto).</li>
-                <li><strong>Barras:</strong> faixa de cima = % atual; de baixo = % após a sugestão; traço = meta.</li>
-                <li><strong>"Registrar compras sugeridas"</strong> abre a lista para conferir quantidade, preço, câmbio e data antes de gravar; os lançamentos entram juntos no histórico.</li>
-            </ul>
+            <div id="aporteChartsBlock" hidden>
+                <h3>Gráficos do aporte</h3>
+                <div class="aporte-charts">
+                    <div class="aporte-chart">
+                        <h4>Por classe: atual, após o aporte e meta</h4>
+                        <div class="chart-wrap chart-small"><canvas id="aporteClassChart" role="img" aria-label="Percentual de cada classe hoje, após o aporte e a meta"></canvas></div>
+                    </div>
+                    <div class="aporte-chart">
+                        <h4>Composição da carteira</h4>
+                        <div class="donuts">
+                            <figure><div class="donut-wrap"><canvas id="aporteDonutNow" role="img" aria-label="Composição atual por classe"></canvas></div><figcaption>Atual</figcaption></figure>
+                            <figure><div class="donut-wrap"><canvas id="aporteDonutAfter" role="img" aria-label="Composição após o aporte por classe"></canvas></div><figcaption>Após o aporte</figcaption></figure>
+                            <figure><div class="donut-wrap"><canvas id="aporteDonutTarget" role="img" aria-label="Metas por classe"></canvas></div><figcaption>Meta</figcaption></figure>
+                        </div>
+                        <div class="donut-legend small" id="aporteDonutLegend"></div>
+                    </div>
+                </div>
+                <div class="aporte-chart">
+                    <h4>Para onde vai o aporte, por ativo</h4>
+                    <div class="chart-wrap" id="aporteAssetWrap"><canvas id="aporteAssetChart" role="img" aria-label="Saldo atual, aporte e o que ainda falta para o valor ideal de cada ativo"></canvas></div>
+                </div>
+            </div>
+
+            <div id="aportePathBlock" hidden>
+                <h3>Plano de vários aportes</h3>
+                <p class="aporte-note" id="aportePathSummary"></p>
+                <div class="chart-wrap chart-small"><canvas id="aportePathChart" role="img" aria-label="Percentual de cada classe ao longo dos próximos aportes"></canvas></div>
+                <details class="aporte-details">
+                    <summary>Quanto vai para cada classe em cada mês</summary>
+                    <div class="table-container">
+                        <table class="sticky-first">
+                            <thead id="aportePathHead"></thead>
+                            <tbody id="aportePathBody"></tbody>
+                        </table>
+                    </div>
+                </details>
+            </div>
+
+            <div id="aporteHistoryBlock" hidden>
+                <h3>Histórico de aportes</h3>
+                <div class="table-container">
+                    <table class="sticky-first">
+                        <thead>
+                            <tr>
+                                <th>Mês</th>
+                                <th class="r">Aporte líquido</th>
+                                <th>Por classe</th>
+                                <th class="r">Para classes abaixo da meta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="aporteHistoryBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <details class="aporte-details">
+                <summary>Como a calculadora funciona</summary>
+                <ul class="notes">
+                    <li><strong>Valor ideal</strong> = (patrimônio atual + aporte) × % meta; <strong>falta para o ideal</strong> = ideal − saldo, ou "acima da meta" quando o saldo já passou do ideal.</li>
+                    <li><strong>Rebalanceamento só por aporte:</strong> nada é vendido para equilibrar a carteira (vender gera imposto e fere a regra de venda). Quem está acima da meta só deixa de receber até os outros alcançarem.</li>
+                    <li><strong>Meta de cada ativo:</strong> por padrão, a meta da classe dividida igualmente entre os ativos com posição. Digite um % para fixá-la (os demais dividem o restante) ou apague o campo para voltar ao automático.</li>
+                    <li><strong>Sugestão</strong> só compra: divide o aporte entre as classes abaixo da meta, proporcionalmente ao que falta a cada uma (se nenhuma está abaixo, pelas metas), e dentro da classe entre os ativos elegíveis, proporcionalmente ao que falta para o valor ideal. Ativos com situação <strong>Vender</strong> nunca recebem aporte; no modo pullback, só recebem os ativos em setup agora (mesma regra e base do screener), fora os de tendência fraca ou mais fracos que o Ibovespa (exceto internacionais), e a renda fixa, pela meta.</li>
+                    <li><strong>Cotas</strong> = sugestão ÷ preço em reais, arredondado para baixo (inteiras na B3; 4 casas para EUA e cripto). Com <strong>"Reaproveitar a sobra"</strong>, o que sobra do arredondamento compra mais cotas, uma por vez, no ativo mais longe do valor ideal.</li>
+                    <li><strong>Teto por compra:</strong> nenhum ativo recebe mais que esse % do patrimônio após o aporte (1,5x com prioridade, se a Indicação estiver ligada). Nos backtests de carteira do app, compras de 7,5–10% do patrimônio foram as mais robustas; fatias maiores foram bem piores. O que não cabe fica sem destino.</li>
+                    <li><strong>Indicação do Screener:</strong> ativos com COMPRAR com prioridade no ranking de hoje pesam 1,5x na divisão dentro da classe.</li>
+                    <li><strong>Sugestões do Screener:</strong> para cada classe abaixo da meta, os ativos que a carteira ainda não tem e que estão com COMPRAR no ranking de hoje. Marque os que quiser: entram no plano e em "Registrar compras sugeridas".</li>
+                    <li><strong>Máximo de ativos:</strong> o aporte fica nos que mais receberiam; os demais aguardam o próximo. Menos compras pequenas, menos custo.</li>
+                    <li><strong>Plano de vários aportes:</strong> repete este valor todo mês com os preços de hoje, por classe, até todas ficarem a menos de 1 p.p. da meta. Não prevê valorização nem quais ativos estarão em setup.</li>
+                    <li><strong>Histórico de aportes:</strong> os 12 meses mais recentes com lançamentos. "Para classes abaixo da meta" = a parte das compras e aportes do mês que foi para classes abaixo da meta no início do mês, pelas metas de hoje.</li>
+                    <li><strong>Barras:</strong> faixa de cima = % atual; de baixo = % após a sugestão; traço = meta.</li>
+                    <li><strong>"Registrar compras sugeridas"</strong> abre a lista para conferir quantidade, preço, câmbio e data antes de gravar; os lançamentos entram juntos no histórico.</li>
+                </ul>
+            </details>
             </div>
         </div>
 

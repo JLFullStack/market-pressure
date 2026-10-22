@@ -191,5 +191,21 @@ class ServerTest(DatabaseTestCase):
             self.assertIn(part, data["text"])
         self.assertEqual(self.request("GET", "/api/carteira/nao-existe/prompt")[0], 404)
 
+    def test_contribution_route(self):
+        pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "Aporte"})[1]["id"]
+        self.request("POST", "/api/carteira/acao", {"action": "nova_operacao", "id": pid, "ticker": "PETR4", "market": "b3",
+                                                    "type": "compra", "date": "2021-09-01", "quantity": "10",
+                                                    "price": "120", "fees": "0"})
+        body = {"amount": "1000", "mode": "todos", "base": "fechamento", "selected": [], "cap": "0", "maxAssets": "",
+                "advice": True, "reuse": True, "candidates": []}
+        with mock.patch.object(market_data, "cdi", lambda start: {"rates": []}):
+            status, data, _ = self.request("POST", f"/api/carteira/{pid}/aporte", body)
+        self.assertEqual(status, 200)
+        self.assertEqual(data["options"]["cap"], "0")
+        self.assertIsInstance(data["candidates"], list)
+        self.assertIn("months", data["path"])
+        self.assertEqual(data["history"][0]["byClass"], {"Ações": 1200})
+        self.assertTrue(any("Internacionais" in w for w in data["warnings"]))
+
 if __name__ == "__main__":
     unittest.main()
