@@ -186,7 +186,8 @@ class ServerTest(DatabaseTestCase):
         self.assertEqual(data["name"], "IA")
         for part in ("# Minha carteira: IA", "## PETR4", "## VALE3", "# Alocação por classe", "Situação do app",
                      "Compras abertas: 01/09/2021", "MANTER", "**Ações**",
-                     "# Eventos e fundamentos", "Posição com evento de veto"):
+                     "# Eventos e fundamentos", "Posição com evento de veto",
+                     "**Candidatos do ranking do Screener**", "tabela ordenada por prioridade"):
             self.assertIn(part, data["text"])
         self.assertEqual(self.request("GET", "/api/carteira/nao-existe/prompt")[0], 404)
 

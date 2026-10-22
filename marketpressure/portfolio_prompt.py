@@ -35,13 +35,29 @@ metas, a renda de proventos e os riscos que se acumulam (setor, país, câmbio, 
 **AUMENTAR**, **REDUZIR** ou **VENDER**, com o motivo principal em uma ou duas frases. Siga \
 "Como decidir", abaixo. Em REDUZIR ou VENDER, diga quanto (quantidade ou % da posição); em \
 AUMENTAR, a faixa de preço de entrada para hoje.
-3. **Próximos passos**, em ordem de prioridade: o que vender agora (se houver), onde colocar o \
-próximo aporte (classes e ativos, incluindo os candidatos do ranking do Screener abaixo, das \
-classes abaixo da meta) e se algo precisa mudar nas metas ou na estratégia.
-4. **Riscos** que os números não mostram (resultados, notícias, dívida, governança, setor, juros, \
+3. **Candidatos do ranking do Screener**, um a um: todos os ativos com Indicação COMPRAR nas \
+tabelas de "Ranking do Screener hoje" (os com AGUARDAR, numa linha só, com o motivo do app). \
+Para cada um, **pesquise as notícias antes** (veja "Eventos e fundamentos") e comece por \
+**COMPRAR**, **COMPRAR COM POSIÇÃO MENOR**, **NÃO NESTE APORTE** (motivo da carteira: classe na \
+meta ou acima, a mesma empresa ou o mesmo setor já pesado na carteira, aporte pequeno demais para \
+uma ação) ou **EVITAR** (motivo do ativo: evento de veto, fato grave, tendência quebrando). Em \
+seguida: o que a pesquisa encontrou (fato, data e fonte) ou que não conseguiu confirmar, e o \
+porquê da decisão em uma ou duas frases, com o que pesou (Score, prioridade, histórico, setor, \
+efeito na concentração da carteira). Não pule nenhum candidato com COMPRAR.
+4. **Próximos passos**, em ordem de prioridade: o que vender agora (se houver), o que não deve \
+receber dinheiro novo (classes e posições na meta ou acima), o **próximo aporte** e se algo \
+precisa mudar nas metas ou na estratégia. O próximo aporte vem **numa tabela ordenada por \
+prioridade**, com as colunas Prioridade (1º, 2º...), Ativo (código e nome), Indicação do app \
+(com a posição no ranking e o Score, ou a Situação, se já for posição), Faixa de entrada hoje, \
+Quantidade (ações e valor em R$, pela regra de "Tamanho da posição", e o mínimo de 1 ação) e Por \
+quê. Entram as posições para AUMENTAR e os candidatos do item 3 com COMPRAR ou COMPRAR COM POSIÇÃO \
+MENOR; os que ficaram de fora (NÃO NESTE APORTE ou EVITAR) vêm no fim da tabela, com "—" na \
+prioridade e o motivo em poucas palavras. Se nenhum ativo servir, diga onde deixar o dinheiro até \
+o próximo aporte (renda fixa ou classe abaixo da meta).
+5. **Riscos** que os números não mostram (resultados, notícias, dívida, governança, setor, juros, \
 câmbio), com o resultado da checagem de "Eventos e fundamentos" para as posições e para os ativos \
 do ranking que você indicar (o que encontrou, com data e fonte, ou que não conseguiu confirmar).
-5. **Nota de confiança** de 0 a 10 para a sua análise, com uma linha de justificativa.
+6. **Nota de confiança** de 0 a 10 para a sua análise, com uma linha de justificativa.
 
 Termine com um resumo de três linhas, para quem não quiser ler o resto."""
 
