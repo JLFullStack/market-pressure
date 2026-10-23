@@ -21,6 +21,7 @@ from . import portfolio_prompt
 from . import portfolio_service as svc
 from . import portfolio_store as store
 from . import strategy as st
+from . import tax_alert
 from .core import PARTIAL_TIMINGS
 
 log = logging.getLogger(__name__)
@@ -242,6 +243,21 @@ def post_settings(req):
 # Carteira
 
 
+@route("GET", "/api/configuracoes/avisos")
+def get_alert_settings(req):
+    return tax_alert.payload()
+
+
+@route("POST", "/api/configuracoes/avisos")
+def post_alert_settings(req):
+    """Salva o aviso de imposto ({enabled, warnAt} em reais)."""
+    alert, error = tax_alert.from_form(req.json_object())
+    if error:
+        raise HTTPError(400, error)
+    tax_alert.save(alert)
+    return {**tax_alert.payload(alert), "message": "Aviso salvo. A Carteira já segue esta configuração."}
+
+
 @route("GET", "/api/portfolios")
 def get_portfolios(req):
     return store.read_doc()
@@ -288,6 +304,17 @@ def get_asset_chart(req):
         raise HTTPError(404, str(err)) from None
     except RuntimeError as err:  # quote_history: o Yahoo não tem cotações do ativo
         raise HTTPError(502, str(err)) from None
+
+
+@route("GET", f"/api/carteira/{PORTFOLIO_ID}/imposto")
+def get_tax_preview(req):
+    """Formulário "Nova operação": como o mês fica com a venda digitada (tax_alert.preview); null
+    quando não é uma venda completa ou o aviso está desligado."""
+    tx = {"ticker": pf.normalize_ticker(req.arg("ticker")), "market": req.arg("market", "b3"), "type": req.arg("type"),
+          "date": req.arg("date") if pf.is_iso_date(req.arg("date") or "") else None,
+          "quantity": pf.parse_number(req.arg("quantity")), "price": pf.parse_number(req.arg("price")),
+          "fees": pf.parse_number(req.arg("fees"), 0), "fx": pf.parse_number(req.arg("fx"), 1)}
+    return {"alert": tax_alert.preview(portfolio_of(req), tx)}
 
 
 @route("GET", f"/api/carteira/{PORTFOLIO_ID}/prompt")

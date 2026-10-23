@@ -13,6 +13,7 @@ from . import database as db
 from . import goals as gl
 from . import market_data, runtime
 from . import strategy as st
+from . import tax_alert
 from .core import add_up, day_of, fmt_date, session_in_progress, today_iso
 from .portfolio import (APORTE_MODES, BENCHMARK, CLASS_GROUP, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
                         analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_history,
@@ -229,6 +230,7 @@ def analysis_payload(portfolio):
         "chart": _chart(series), "patrimony": patrimony_bars(series), "lastDay": series["dates"][-1] if series else None,
         "live": a["live"], "failed": a["failed"], "loadedAt": a["loadedAt"],
         "assetTargets": _asset_target_groups(portfolio, a),
+        "taxAlert": tax_alert.status(portfolio, a["open"]),
     }
 
 

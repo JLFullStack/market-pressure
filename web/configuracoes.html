@@ -134,6 +134,29 @@
         </div>
     </form>
 
+    <form id="alertForm" novalidate>
+        <div class="panel" data-reveal>
+            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg></span><h2>Aviso de imposto</h2></div>
+            <div class="alert-settings">
+                <label class="toggle"><input type="checkbox" name="enabled" checked> Avisar quando as vendas de ações do mês se aproximarem do limite da isenção</label>
+                <label class="field">Avisar a partir de (R$ vendidos em ações no mês)
+                    <input type="number" name="warnAt" class="select" min="1000" max="20000" step="500" inputmode="decimal">
+                </label>
+            </div>
+            <ul class="notes">
+                <li><strong>A regra</strong>: vendas de ações na B3 que somam até <strong>R$ 20 mil no mês</strong> são isentas de imposto de renda. Passando disso, o lucro de <strong>todas</strong> as vendas de ações do mês paga 15% (DARF até o último dia útil do mês seguinte).</li>
+                <li>Conta o <strong>valor vendido</strong>, não o lucro. ETFs, BDRs e fundos não têm a isenção: o lucro paga imposto em qualquer valor.</li>
+                <li><strong>Onde o aviso aparece</strong>: no topo da Visão geral da Carteira (com as vendas que a Situação indica hoje), no formulário "Nova operação" enquanto você digita uma venda, na confirmação da venda registrada e no texto do "ANALISAR CARTEIRA".</li>
+                <li>Uma venda parcial pode ficar para o mês seguinte para caber na isenção; a venda pela reversão de tendência não deve esperar por causa do imposto.</li>
+            </ul>
+            <p class="small muted" id="alertText"></p>
+            <div class="strategy-actions">
+                <button type="submit" class="btn">Salvar aviso</button>
+            </div>
+            <div class="form-msg" id="alertMsg" role="status"></div>
+        </div>
+    </form>
+
     <div class="panel" data-reveal>
         <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><h2>Em vigor</h2></div>
         <ul class="in-force" id="currentText"><li>—</li></ul>

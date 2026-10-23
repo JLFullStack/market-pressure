@@ -1506,3 +1506,15 @@ tr.in .target-bar i { animation: grow-x 0.9s var(--ease-out) backwards; animatio
 @media (prefers-reduced-motion: reduce) { .chart-dialog[open] { animation: none; } }
 .price-target.reached { border-style: dotted; }
 .price-target .price-target-tag { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--success); }
+
+/* Aviso de imposto (tax_alert.py): vendas de ações do mês perto (near) ou acima (over) do limite da
+   isenção; info = venda de ETF, BDR ou fundo, que não tem a isenção. */
+.tax-alert { border: 1px solid var(--border-color); border-left: 4px solid var(--warning); border-radius: 8px;
+             background: rgba(255, 166, 87, 0.08); padding: 12px 14px; margin: 0 0 16px; font-size: 14px; line-height: 1.5; }
+.tax-alert p { margin: 4px 0 0; color: var(--text-muted); }
+.tax-alert strong { color: var(--text-color); }
+.tax-alert.tax-over { border-left-color: var(--danger); background: rgba(255, 123, 114, 0.08); }
+.tax-alert.tax-info { border-left-color: var(--accent); background: rgba(56, 139, 253, 0.08); }
+#txTaxAlert { margin: 12px 0 0; }
+.alert-settings { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin: 6px 0 4px; }
+.alert-settings .field { min-width: 260px; }

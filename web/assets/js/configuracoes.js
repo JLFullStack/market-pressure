@@ -98,7 +98,37 @@ form.addEventListener('submit', async (event) => {
     }
 });
 
+// Aviso de imposto (tax_alert.py, rotas /api/configuracoes/avisos).
+const alertForm = document.getElementById('alertForm');
+function showAlert(data) {
+    alertForm.elements.enabled.checked = data.alert.enabled;
+    alertForm.elements.warnAt.value = Math.round(data.alert.warnAt);
+    alertForm.elements.warnAt.disabled = !data.alert.enabled;
+    document.getElementById('alertText').textContent = data.text;
+}
+alertForm.elements.enabled.addEventListener('change', () => { alertForm.elements.warnAt.disabled = !alertForm.elements.enabled.checked; });
+alertForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const out = document.getElementById('alertMsg');
+    const busy = busyStart('Salvando aviso...');
+    try {
+        const data = await apiPost('/configuracoes/avisos', { enabled: alertForm.elements.enabled.checked, warnAt: alertForm.elements.warnAt.value });
+        showAlert(data);
+        out.className = 'form-msg ok';
+        out.textContent = data.message;
+    } catch (e) {
+        out.className = 'form-msg error';
+        out.textContent = e.message;
+    } finally {
+        busy();
+    }
+});
+
 observeReveal();
+apiGet('/configuracoes/avisos').then(showAlert, (e) => {
+    document.getElementById('alertMsg').className = 'form-msg error';
+    document.getElementById('alertMsg').textContent = `Não foi possível carregar o aviso de imposto (${e.message}).`;
+});
 (async () => {
     const busy = busyStart('Carregando configurações...');
     try {

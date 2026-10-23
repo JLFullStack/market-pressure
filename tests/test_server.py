@@ -207,6 +207,21 @@ class ServerTest(DatabaseTestCase):
         self.assertEqual(data["history"][0]["byClass"], {"Ações": 1200})
         self.assertTrue(any("Internacionais" in w for w in data["warnings"]))
 
+    def test_tax_alert_routes(self):
+        status, data, _ = self.request("GET", "/api/configuracoes/avisos")
+        self.assertEqual((status, data["alert"]), (200, {"enabled": True, "warnAt": 15000}))
+        status, data, _ = self.request("POST", "/api/configuracoes/avisos", {"enabled": True, "warnAt": "18000"})
+        self.assertEqual((status, data["alert"]["warnAt"]), (200, 18000))
+        self.assertEqual(self.request("POST", "/api/configuracoes/avisos", {"enabled": True, "warnAt": "50"})[0], 400)
+        pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "IR"})[1]["id"]
+        self.request("POST", "/api/carteira/acao", {"action": "nova_operacao", "id": pid, "ticker": "PETR4", "market": "b3",
+                                                    "type": "compra", "date": "2021-09-01", "quantity": "2000",
+                                                    "price": "10", "fees": "0"})
+        q = "ticker=petr4&market=b3&type=venda&date=2021-09-02&quantity=1900&price=11"
+        status, data, _ = self.request("GET", f"/api/carteira/{pid}/imposto?{q}")
+        self.assertEqual((status, data["alert"]["level"]), (200, "over"))
+        self.assertIsNone(self.request("GET", f"/api/carteira/{pid}/imposto?ticker=petr4&type=compra")[1]["alert"])
+
     def test_asset_chart_route(self):
         pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "Gráfico"})[1]["id"]
         self.request("POST", "/api/carteira/acao", {"action": "nova_operacao", "id": pid, "ticker": "PETR4", "market": "b3",

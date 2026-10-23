@@ -88,6 +88,7 @@ const state = {
     run: 0,
     aporteSeq: 0,        // descarta respostas de aporte fora de ordem
     txSeq: 0,            // idem para a consulta de ticker/preço do formulário
+    taxSeq: 0,           // idem para o aviso de imposto da venda digitada (GET /imposto)
     batchSeq: 0,         // idem para os totais da lista de compras
     amountTimer: null,
     classTouched: false, // a classe sugerida só substitui a escolha enquanto o usuário não mexe no seletor
@@ -194,6 +195,10 @@ async function init() {
     });
     $('txTicker').addEventListener('change', onTxInputChange);
     $('txDate').addEventListener('change', onTxInputChange);
+    for (const id of ['txType', 'txDate', 'txQty', 'txPrice', 'txFx', 'txTicker']) {
+        $(id).addEventListener('input', scheduleTxTax);
+        $(id).addEventListener('change', scheduleTxTax);
+    }
     $('txMarket').addEventListener('change', onTxInputChange);
     $('txClass').addEventListener('change', () => { state.classTouched = true; });
     $('txForm').addEventListener('submit', submitTransaction);
@@ -397,6 +402,7 @@ async function loadPortfolio(busy) {
     $('livePill').hidden = !a.live;
     $('lastUpdate').innerText = `Cotações de ${fmtDate(a.lastDay)}${a.live ? ' (pregão em andamento)' : ''} · atualizado em ${new Date(a.loadedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
     renderKpis(a);
+    renderTaxAlert($('taxAlert'), a.taxAlert);
     renderAporte();
     renderPatrimony();
     renderChart();
@@ -1811,6 +1817,36 @@ function setMsg(id, text, kind) {
 }
 
 // Confirmação de um lançamento salvo, com atalho para a Visão geral (a aba não muda sozinha).
+// Aviso de imposto (tax_alert.py): o título e as frases vêm prontos do servidor; aqui só a cor
+// pelo nível (near = perto do limite, over = acima, info = venda sem isenção).
+function renderTaxAlert(el, alert) {
+    if (!alert || !alert.show) { el.hidden = true; el.innerHTML = ''; return; }
+    el.className = `tax-alert tax-${alert.level}`;
+    el.innerHTML = `<strong>${escapeHTML(alert.title)}</strong>${(alert.lines || []).map(l => `<p>${escapeHTML(l)}</p>`).join('')}`;
+    el.hidden = false;
+}
+
+// Enquanto uma venda é digitada em "Nova operação": como o mês fica com ela (GET /imposto).
+let txTaxTimer = null;
+function scheduleTxTax() {
+    clearTimeout(txTaxTimer);
+    txTaxTimer = setTimeout(updateTxTax, 300);
+}
+async function updateTxTax() {
+    const portfolio = current();
+    const box = $('txTaxAlert');
+    if (!portfolio || $('txType').value !== 'venda') { renderTaxAlert(box, null); return; }
+    const seq = ++state.taxSeq;
+    const q = new URLSearchParams({ ticker: $('txTicker').value, market: $('txMarket').value, type: 'venda', date: $('txDate').value,
+                                    quantity: $('txQty').value, price: $('txPrice').value, fx: $('txFx').value });
+    try {
+        const r = await apiGet(`/carteira/${portfolio.id}/imposto?${q}`);
+        if (seq === state.taxSeq) renderTaxAlert(box, r.alert);
+    } catch (e) {
+        if (seq === state.taxSeq) renderTaxAlert(box, null);
+    }
+}
+
 function setSavedMsg(id, text) {
     setMsg(id, text, 'ok');
     $(id).insertAdjacentHTML('beforeend', ' <a href="#visao" class="inline-link">Ver na visão geral</a>');
@@ -1853,6 +1889,7 @@ async function onTxInputChange() {
     if (q.error) hint.innerText = `${info.ticker}: sem histórico (${q.error})`;
     else if (q.close) {
         $('txPrice').value = q.close.price.toFixed(foreign ? 4 : 2);
+        scheduleTxTax();
         hint.innerText = `Fechamento de ${fmtDate(q.close.date)} (editável)`;
     } else {
         hint.innerText = 'Data anterior ao histórico: informe o preço';
@@ -1873,6 +1910,7 @@ async function submitTransaction(ev) {
     });
     if (res.error) return setMsg('txMsg', res.error, 'error');
     setSavedMsg('txMsg', res.message);
+    renderTaxAlert($('txTaxAlert'), res.taxAlert);   // a venda registrada deixou o mês perto ou acima da isenção
     for (const id of ['txTicker', 'txQty', 'txPrice', 'txFx']) $(id).value = '';
     $('txFees').value = '0';
     $('txPriceHint').innerText = $('txFxHint').innerText = '';

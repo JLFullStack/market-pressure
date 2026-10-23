@@ -91,6 +91,8 @@ SCHEMAS = {
     "settings": _schema(("strategy", _str), ("partial_target", _f64), ("partial_fraction", _f64)),
     # regra de venda de cada tipo de ativo (strategy.GROUPS): "forca", "parcial" ou "reversao"
     "settings_kinds": _schema(("kind", _str), ("strategy", _str)),
+    # aviso de imposto (tax_alert.py): ligado e a partir de quanto (R$) de vendas de ações no mês
+    "settings_alerts": _schema(("enabled", _bool), ("warn_at", _f64)),
     # Screener
     "universe": _schema(("ticker", _str), ("name", _str), ("sector", _str), ("kind", _str), ("close", _f64),
                         ("volume", _f64), ("avg_volume", _f64)),

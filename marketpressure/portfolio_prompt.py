@@ -14,6 +14,7 @@ from . import market_data, screener
 from . import portfolio as pf
 from . import portfolio_service as svc
 from . import strategy as st
+from . import tax_alert
 from .ai_prompt import EVENTS, ROLE, _bova, _pct, _ratio_pct
 from .core import add_up, compute_indicators, fmt_brl, fmt_date, fmt_num, fmt_qty, local_time, today_iso
 
@@ -363,6 +364,8 @@ def build(portfolio, analysis, settings):
             concentration += f"; as três maiores somam {fmt_num(add_up(h['weight'] for h in top[:3]), 1)}%"
         lines.append(concentration)
     lines.append(f"- {len(open_)} ativo(s) em carteira e {len(analysis['fixed'])} título(s) de renda fixa")
+    if (tax := tax_alert.prompt_line(portfolio, analysis["open"])):
+        lines.append(tax)
     if analysis.get("failed"):
         lines.append(f"- Dados indisponíveis agora: {'; '.join(analysis['failed'])} (ativos sem cotação usam o último "
                      "preço lançado; sem o CDI, a comparação com ele fica em 0%)")

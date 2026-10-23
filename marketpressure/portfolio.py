@@ -272,6 +272,54 @@ def build_positions(transactions):
     return positions
 
 
+STOCK_EXEMPTION = 20_000   # vendas de ações no mês isentas de IR (pessoa física, operações comuns)
+STOCK_TAX = 0.15           # alíquota sobre o lucro das vendas de ações do mês acima da isenção
+
+
+def stock_sales(transactions, stocks, month):
+    """Vendas de ações (stocks: tickers) no mês "AAAA-MM": valor vendido (quantidade × preço ×
+    câmbio, sem descontar taxas, como na regra da isenção), lucro pelo preço médio (como
+    build_positions) e quantas foram."""
+    cost, qty = {}, {}
+    sold = gain = 0.0
+    count = 0
+    for tx in by_date(transactions):
+        t = tx["ticker"]
+        if tx["type"] == "compra":
+            cost[t] = cost.get(t, 0) + tx_flow(tx)
+            qty[t] = qty.get(t, 0) + tx["quantity"]
+            continue
+        avg = cost.get(t, 0) / qty[t] if qty.get(t) else 0
+        if t in stocks and tx["date"][:7] == month:
+            sold += tx["quantity"] * tx["price"] * (tx.get("fx") or 1)
+            gain += -tx_flow(tx) - avg * tx["quantity"]
+            count += 1
+        qty[t] = qty.get(t, 0) - tx["quantity"]
+        cost[t] = cost.get(t, 0) - avg * tx["quantity"]
+        if qty[t] < EPS:
+            qty[t] = cost[t] = 0
+    return {"month": month, "sold": sold, "gain": gain, "count": count}
+
+
+def indicated_stock_sales(open_positions, stocks):
+    """As vendas que a Situação indica hoje nas ações (VENDER = a posição toda; VENDER 50% = a
+    parte devida), pelo preço atual em reais: [{ticker, label, quantity, value}]."""
+    out = []
+    for p in open_positions:
+        if p["ticker"] not in stocks or not p.get("hasQuote"):
+            continue
+        if p.get("statusKey") == "sell":
+            quantity = p["quantity"]
+        elif p.get("statusKey") == "partial" and p.get("partial"):
+            quantity = p["partial"].get("quantity") or 0
+        else:
+            continue
+        if quantity > 0:
+            out.append({"ticker": p["ticker"], "label": p.get("status") or "", "quantity": quantity,
+                        "value": quantity * p["price"]})
+    return out
+
+
 def check_sequence(transactions):
     """Nenhuma venda pode exceder a quantidade possuída na data dela. Retorna o erro ou None."""
     qty = {}

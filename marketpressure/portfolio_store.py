@@ -16,6 +16,7 @@ from . import database as db
 from . import goals as gl
 from . import portfolio as pf
 from . import portfolio_service as svc
+from . import tax_alert
 from .core import fmt_brl, fmt_qty, today_iso
 
 DOC_VERSION = 2
@@ -204,7 +205,11 @@ def add_transaction(doc, body):
     cls = (cur["assets"].get(tx["ticker"]) or {}).get("class") \
         or (body.get("cls") if body.get("cls") in classes else None) or info["suggestedClass"]
     _add_transaction(cur, tx, cls, market)
-    return {"message": f"{'Compra' if tx['type'] == 'compra' else 'Venda'} de {fmt_qty(tx['quantity'])} {tx['ticker']} registrada."}
+    out = {"message": f"{'Compra' if tx['type'] == 'compra' else 'Venda'} de {fmt_qty(tx['quantity'])} {tx['ticker']} registrada."}
+    tax = tax_alert.after_sale(cur, tx)   # vendas de ações do mês perto ou acima da isenção
+    if tax:
+        out["taxAlert"] = tax
+    return out
 
 
 def add_fixed_income_item(doc, body):
