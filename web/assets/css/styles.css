@@ -1651,3 +1651,28 @@ tr.in .target-bar i { animation: grow-x 0.9s var(--ease-out) backwards; animatio
 .chart-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 8px; }
 .chart-toolbar .bt-legend { margin-top: 0; }
 .chart-toolbar .seg { margin-left: auto; }
+
+/* Card do gráfico: altura pela área visível de verdade (dvh; no celular 100vh inclui a parte
+   escondida atrás da barra de endereço, e o card saía cortado em cima e embaixo). No celular ele
+   vira uma tela cheia com rolagem interna e o "X" fica preso no canto. */
+.chart-dialog { max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); }
+@media (max-width: 640px) {
+    .chart-dialog {
+        inset: 0; margin: 0; width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh;
+        border-radius: 0; border-left: 0; border-right: 0;
+        padding: calc(16px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
+        overscroll-behavior: contain;
+    }
+    .chart-dialog::before { left: 0; right: 0; }
+    .chart-dialog-close.icon-btn { position: fixed; top: calc(10px + env(safe-area-inset-top)); right: 12px; z-index: 5; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5); }
+    .chart-dialog .bt-chart { height: 48vh; height: 48dvh; }
+}
+
+/* Alocação por classe: o nome da classe numa linha no desktop; no celular quebra (a coluna é a fixa,
+   estreita), com o quadradinho da cor ao lado da primeira linha. */
+.class-cell { white-space: nowrap; }
+@media (max-width: 640px) {
+    .class-cell { white-space: normal; min-width: 96px; line-height: 1.3; }
+    .class-cell strong { display: inline; }
+    .class-cell .swatch-box { flex: none; }
+}

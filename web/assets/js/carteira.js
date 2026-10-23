@@ -1315,7 +1315,7 @@ function renderChart() {
 function renderAllocation(a) {
     $('allocationViewBody').innerHTML = a.allocation.map((r, k) => `
         <tr>
-            <td class="nowrap"><span class="swatch-box" style="background:${classColor(r.cls, k)}"></span><strong>${escapeHTML(r.cls)}</strong></td>
+            <td class="class-cell"><span class="swatch-box" style="background:${classColor(r.cls, k)}"></span><strong>${escapeHTML(r.cls)}</strong></td>
             <td class="r nowrap">${fmtBRL(r.value)}</td>
             <td class="r nowrap">${fmtNum(r.pct)}%</td>
             <td class="r nowrap">${fmtNum(r.target)}%</td>

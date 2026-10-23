@@ -122,24 +122,7 @@
         <div class="kpi-note">Setup: MM20 e MM50 acima de uma MM200 ascendente + fechamento até 3% acima da média, pullback próximo dela. Um ranking por tipo de ativo, abaixo.</div>
     </section>
 
-    <!-- Um painel por tipo de ativo (Ações, Fundos, ETFs, BDRs), montado por renderRankings em app.js. -->
-    <div id="rankings">
-        <div class="panel"><div class="empty-row">Iniciando varredura automatizada do mercado...</div></div>
-    </div>
-
-    <section class="panel guidelines-panel" data-reveal>
-        <div class="panel-title">
-            <span class="icon-chip tone-warn" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></span>
-            <h2>Diretrizes de gerenciamento de risco</h2>
-        </div>
-        <ul class="guidelines">
-            <li><strong>Fator Score Composto:</strong> priorize alocações em ativos cujo Score Composto seja superior a 75.0, mitigando falsos rompimentos.</li>
-            <li><strong>Slippage &amp; Execução:</strong> ativos fora do Ibovespa principal exigem ordens do tipo "Stop-Limitada" para blindagem contra gaps de abertura.</li>
-            <li><strong>Invalidação Teórica:</strong> fechamento diário abaixo do suporte dinâmico da média anula imediatamente o viés acumulativo da garrafa de gás.</li>
-        </ul>
-    </section>
-
-    <details class="panel method">
+    <details class="panel method" data-reveal>
         <summary>Metodologia <span class="muted">como o ranking é montado</span></summary>
         <dl class="method-list">
             <div>
@@ -193,6 +176,24 @@
         </dl>
         <p class="method-disclaimer">Ferramenta de estudo — não constitui recomendação de investimento.</p>
     </details>
+
+    <!-- Um painel por tipo de ativo (Ações, Fundos, ETFs, BDRs), montado por renderRankings em app.js. -->
+    <div id="rankings">
+        <div class="panel"><div class="empty-row">Iniciando varredura automatizada do mercado...</div></div>
+    </div>
+
+    <section class="panel guidelines-panel" data-reveal>
+        <div class="panel-title">
+            <span class="icon-chip tone-warn" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></span>
+            <h2>Diretrizes de gerenciamento de risco</h2>
+        </div>
+        <ul class="guidelines">
+            <li><strong>Fator Score Composto:</strong> priorize alocações em ativos cujo Score Composto seja superior a 75.0, mitigando falsos rompimentos.</li>
+            <li><strong>Slippage &amp; Execução:</strong> ativos fora do Ibovespa principal exigem ordens do tipo "Stop-Limitada" para blindagem contra gaps de abertura.</li>
+            <li><strong>Invalidação Teórica:</strong> fechamento diário abaixo do suporte dinâmico da média anula imediatamente o viés acumulativo da garrafa de gás.</li>
+        </ul>
+    </section>
+
 </div>
 
 <script src="assets/js/core.js"></script>
