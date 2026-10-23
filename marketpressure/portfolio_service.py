@@ -20,6 +20,7 @@ from .portfolio import (APORTE_MODES, BENCHMARK, CLASS_GROUP, FI_LABELS, FX, JCP
                         market_of, net_flows, normalize_ticker, open_lots, parse_number, patrimony_bars, period_start, receivables_by_month,
                         rebase_series,
                         suggest_class, targets_off, tx_flow)
+from .portfolio import asset_chart as pf_asset_chart
 
 log = logging.getLogger(__name__)
 
@@ -324,6 +325,26 @@ def goal_preview(portfolio, goal):
     today = today_iso()
     data = _portfolio_data(portfolio, today) if goal["usePortfolio"] else _portfolio_data({}, today)
     return {"warning": data["warning"], "portfolioValue": data["value"], "goal": _goal_view(goal, data, today)}
+
+
+def asset_chart(portfolio, ticker):
+    """Card "Operações no gráfico" de uma posição: o gráfico do ativo com os lançamentos e os
+    alvos das compras abertas pela regra da classe dele (portfolio.asset_chart). LookupError se o
+    ativo não tem lançamentos na carteira."""
+    ticker = normalize_ticker(ticker)
+    if not any(t["ticker"] == ticker for t in portfolio["transactions"]):
+        raise LookupError(f"{ticker} não tem lançamentos nesta carteira")
+    market = market_of(portfolio, ticker)
+    classes = {t: a.get("class") for t, a in portfolio["assets"].items()}
+    rule = st.asset_rules(st.load(), classes)(ticker, market)
+    out = pf_asset_chart(portfolio["transactions"], ticker, quote_history(ticker, market)["candles"], market, rule)
+    name = ticker
+    if market == "b3":
+        try:
+            name = next((u.get("name") for u in db.read_table("universe") if u["ticker"] == ticker), None) or ticker
+        except Exception:
+            log.warning("não foi possível ler a lista de ativos salva; gráfico sem o nome do ativo", exc_info=True)
+    return {**out, "cls": classes.get(ticker), "name": name, "ruleLabel": st.STRATEGIES[rule["key"]]}
 
 
 def held_lots(portfolio, tickers):

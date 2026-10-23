@@ -99,7 +99,10 @@ const state = {
     goals: null,         // resposta de /metas (null = ainda não carregada para a carteira atual)
     goalsSeq: 0,         // descarta respostas de metas fora de ordem
     goalCharts: [],      // gráficos dos cartões de meta (destruídos a cada redesenho)
-    editingGoal: null    // id da meta em edição no formulário (null = nova)
+    editingGoal: null,   // id da meta em edição no formulário (null = nova)
+    // Card "Operações no gráfico" (linha das Posições): resposta de /grafico, gráfico e séries,
+    // linhas de alvo desenhadas, índices dos alvos visíveis e candles/linha.
+    asset: null, assetPrice: null, assetLines: [], targetsShown: new Set(), assetSeq: 0, chartType: 'candles'
 };
 
 const $ = (id) => document.getElementById(id);
@@ -231,6 +234,7 @@ async function init() {
     $('goalKind').addEventListener('change', updateGoalForm);
     $('goalUsePortfolio').addEventListener('change', updateGoalForm);
     $('goalsList').addEventListener('click', onGoalsClick);
+    setupAssetChart();
     updateGoalForm();
     let collapsed = false;
     try { collapsed = localStorage.getItem(COLLAPSE_KEY) === '1'; } catch (e) { /* sem preferência salva */ }
@@ -1462,7 +1466,7 @@ function renderPositions(a) {
     const classIndex = (cls) => Math.max(0, a.allocation.findIndex(r => r.cls === cls));
     const avatar = (label, cls) => `<span class="avatar solo" style="--a1:${classColor(cls, classIndex(cls))}" aria-hidden="true">${escapeHTML(label.slice(0, 2).toUpperCase())}</span>`;
     const rows = a.open.map(p => `
-        <tr data-reveal>
+        <tr data-reveal class="position-row" tabindex="0" data-ticker="${escapeHTML(p.ticker)}" aria-label="Abrir o gráfico de ${escapeHTML(p.ticker)} com as operações e os alvos">
             <td><div class="asset">${avatar(p.ticker, p.cls)}<div class="asset-text"><a href="https://br.tradingview.com/chart/?symbol=${encodeURIComponent(tradingViewSymbol(p.ticker, p.market))}" target="_blank" rel="noopener" class="ticker-link">${p.ticker}</a>
                 ${p.market === 'crypto' ? '' : `<a href="backtest.html?ticker=${encodeURIComponent(p.ticker)}&market=${p.market}" class="inline-link small" aria-label="Backtest de ${p.ticker}">backtest</a>`}
                 <div class="small muted">${escapeHTML(p.cls)}${p.market === 'b3' ? '' : ` · ${MARKETS[p.market].label}`}</div></div></div></td>
@@ -1492,6 +1496,146 @@ function renderPositions(a) {
     $('positionsBody').innerHTML = rows.length || fixedRows.length ? [...rows, ...fixedRows].join('')
         : `<tr><td colspan="11" class="empty-row">Nenhuma posição aberta.</td></tr>`;
     revealItems($('positionsBody'));
+}
+
+// ---------------------------------------------------------------- Operações no gráfico (card flutuante)
+// Clicar numa linha das Posições abre o gráfico do ativo com as compras (C) e vendas (V) lançadas
+// e os alvos das compras abertas (GET /api/carteira/{id}/grafico). Para o gráfico não ficar
+// carregado, os alvos próximos já vêm agrupados do servidor e só o mais próximo aparece de início;
+// os demais se ligam pelos chips abaixo do gráfico.
+
+function setupAssetChart() {
+    try { state.chartType = localStorage.getItem(CHART_KEY) === 'line' ? 'line' : 'candles'; } catch (e) { /* sem preferência */ }
+    const open = (ev) => {
+        if (ev.target.closest?.('a, button, .tip')) return; // links, selo da situação e ajuda seguem como antes
+        const row = ev.target.closest?.('tr[data-ticker]');
+        if (row) openAssetChart(row.dataset.ticker);
+    };
+    $('positionsBody').addEventListener('click', open);
+    $('positionsBody').addEventListener('keydown', (ev) => {
+        if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches?.('tr[data-ticker]')) { ev.preventDefault(); open(ev); }
+    });
+    const dlg = $('assetChartDialog');
+    $('assetChartClose').addEventListener('click', () => dlg.close());
+    // Toque fora do card (no fundo escurecido) fecha.
+    dlg.addEventListener('click', (ev) => {
+        const r = dlg.getBoundingClientRect();
+        if (ev.target === dlg && (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom)) dlg.close();
+    });
+    dlg.addEventListener('close', () => {
+        state.assetSeq++;
+        state.assetPrice?.chart.remove();
+        state.assetPrice = null;
+        state.assetLines = [];
+        const tipBox = $('tipBox');
+        if (tipBox && tipBox.parentElement === dlg) { tipBox.hidden = true; document.body.appendChild(tipBox); }
+        state.assetRow?.focus();
+    });
+    setTypeButtons();
+    $('assetChartType').addEventListener('click', (ev) => {
+        const type = ev.target.dataset?.type;
+        if (!type || type === state.chartType) return;
+        state.chartType = type;
+        try { localStorage.setItem(CHART_KEY, type); } catch (e) { /* preferência não salva */ }
+        setTypeButtons();
+        if (state.assetPrice) { showPriceType(state.assetPrice, state.asset.markers, type); drawTargets(); }
+    });
+    $('assetTargetMode').addEventListener('click', (ev) => {
+        const mode = ev.target.dataset?.mode;
+        if (!mode || !state.asset) return;
+        const all = state.asset.targets.map((t, k) => k);
+        state.targetsShown = new Set(mode === 'all' ? all : mode === 'next' ? nextTarget() : []);
+        drawTargets();
+    });
+    $('assetTargetChips').addEventListener('click', (ev) => {
+        const chip = ev.target.closest?.('button[data-k]');
+        if (!chip) return;
+        const k = Number(chip.dataset.k);
+        if (state.targetsShown.has(k)) state.targetsShown.delete(k); else state.targetsShown.add(k);
+        drawTargets();
+    });
+}
+
+function setTypeButtons() {
+    for (const b of $('assetChartType').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.type === state.chartType));
+}
+
+async function openAssetChart(ticker) {
+    const dlg = $('assetChartDialog');
+    const seq = ++state.assetSeq;
+    state.assetRow = document.activeElement?.closest?.('tr[data-ticker]') || $('positionsBody').querySelector(`tr[data-ticker="${CSS.escape(ticker)}"]`);
+    state.assetPrice?.chart.remove();
+    state.assetPrice = null;
+    state.asset = null;
+    $('assetChartTitle').innerText = `${ticker} · Operações no gráfico`;
+    $('assetChartInfo').innerText = '';
+    $('assetChartLegend').innerHTML = '';
+    $('assetTargets').hidden = true;
+    $('assetChartMsg').innerText = `Carregando ${ticker}...`;
+    if (!dlg.open) dlg.showModal();
+    // A caixa de ajuda flutuante precisa estar dentro do card (camada de cima do diálogo).
+    if ($('tipBox')) dlg.appendChild($('tipBox'));
+    let data;
+    try {
+        data = await apiGet(`/carteira/${encodeURIComponent(state.currentId)}/grafico?ticker=${encodeURIComponent(ticker)}`);
+    } catch (e) {
+        if (seq === state.assetSeq) $('assetChartMsg').innerText = `Não foi possível carregar o gráfico de ${ticker} (${e.message}).`;
+        return;
+    }
+    if (seq !== state.assetSeq || !dlg.open) return;
+    state.asset = data;
+    state.targetsShown = new Set(nextTarget());
+    state.assetLines = [];
+    const rule = data.rule.fraction > 0 ? `${data.ruleLabel} (${fmtNum(data.rule.fraction, 0)}% em +${fmtNum(data.rule.target, 1)}%)` : data.ruleLabel;
+    $('assetChartInfo').innerText = [data.name !== data.ticker ? data.name : null, data.cls,
+        `${data.transactions} lançamento(s) · ${data.openLots} compra(s) aberta(s)`, rule].filter(Boolean).join(' · ');
+    $('assetChartLegend').innerHTML = priceLegend([[COLORS.buy, 'C = compra'], [COLORS.exit, 'V = venda'],
+        ...(data.targets.length ? [[COLORS.target, 'Alvo da venda parcial']] : [])]);
+    $('assetChartMsg').innerText = data.note || '';
+    state.assetPrice = priceChart($('assetChartBox'), data);
+    showPriceType(state.assetPrice, data.markers, state.chartType);
+    if (data.range) state.assetPrice.chart.timeScale().setVisibleRange(data.range);
+    else state.assetPrice.chart.timeScale().fitContent();
+    drawTargets();
+    keepTipsWithText($('assetTargets'));
+}
+
+// O alvo mostrado de início ("Próximo"): o mais próximo ainda não atingido, escolhido no servidor.
+const nextTarget = () => state.asset?.nextTarget === null || state.asset?.nextTarget === undefined ? [] : [state.asset.nextTarget];
+
+// Linhas de alvo (tracejadas, na série visível) e os chips. Com mais de 3 alvos à mostra, só o
+// próximo leva o rótulo na linha; os outros ficam só com o preço no eixo. Alvo já atingido (parte
+// ainda não vendida): linha pontilhada e mais apagada.
+function drawTargets() {
+    const d = state.asset;
+    if (!d || !state.assetPrice) return;
+    for (const { series, line } of state.assetLines) series.removePriceLine(line);
+    state.assetLines = [];
+    const series = state.chartType === 'candles' ? state.assetPrice.candles : state.assetPrice.line;
+    const shown = [...state.targetsShown].sort((a, b) => a - b);
+    const main = shown.includes(d.nextTarget) ? d.nextTarget : shown[0];
+    shown.forEach((k) => {
+        const t = d.targets[k];
+        const label = k === main || shown.length <= 3;
+        const line = series.createPriceLine({
+            price: t.price, color: hexAlpha(COLORS.target, t.reached ? 0.45 : k === main ? 0.9 : 0.55), lineWidth: 1,
+            lineStyle: t.reached ? LightweightCharts.LineStyle.Dotted : LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
+            title: label ? `${t.reached ? 'Alvo atingido' : 'Alvo'}${t.lots.length > 1 ? ` (${t.lots.length})` : ''}` : ''
+        });
+        state.assetLines.push({ series, line });
+    });
+    $('assetTargets').hidden = !d.targets.length;
+    const count = d.targets.length;
+    const mode = shown.length === 0 ? 'none' : shown.length === count && count > 1 ? 'all' : shown.length === 1 && shown[0] === d.nextTarget ? 'next' : '';
+    for (const b of $('assetTargetMode').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+    $('assetTargetMode').querySelector('[data-mode="all"]').hidden = count < 2;
+    $('assetTargetChips').innerHTML = d.targets.map((t, k) => `
+        <button type="button" class="price-target${t.reached ? ' reached' : ''}" data-k="${k}" aria-pressed="${state.targetsShown.has(k)}"
+            data-tip-title="Alvo em ${escapeHTML(fmtMoney(t.price, d.currency))}" data-tip="${escapeHTML(t.detail)}">
+            <strong>${fmtMoney(t.price, d.currency)}</strong>
+            ${t.reached ? '<span class="price-target-tag">atingido</span>' : `<span class="pos">${t.distance === null ? '' : fmtPct(t.distance, 1)}</span>`}
+            <span class="muted">${t.lots.length} compra${t.lots.length > 1 ? 's' : ''}</span>
+        </button>`).join('');
 }
 
 // Histórico de lançamentos (já em ordem do mais recente, vindo da estrutura da carteira).

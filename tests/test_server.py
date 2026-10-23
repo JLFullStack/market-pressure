@@ -207,5 +207,19 @@ class ServerTest(DatabaseTestCase):
         self.assertEqual(data["history"][0]["byClass"], {"Ações": 1200})
         self.assertTrue(any("Internacionais" in w for w in data["warnings"]))
 
+    def test_asset_chart_route(self):
+        pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "Gráfico"})[1]["id"]
+        self.request("POST", "/api/carteira/acao", {"action": "nova_operacao", "id": pid, "ticker": "PETR4", "market": "b3",
+                                                    "type": "compra", "date": "2021-09-01", "quantity": "10",
+                                                    "price": "120", "fees": "0"})
+        status, data, _ = self.request("GET", f"/api/carteira/{pid}/grafico?ticker=petr4")
+        self.assertEqual(status, 200)
+        self.assertEqual((data["ticker"], data["cls"], data["transactions"]), ("PETR4", "Ações", 1))
+        self.assertEqual(data["markers"][0]["kind"], "buy")
+        self.assertTrue(data["candles"] and data["ma"]["mm200"])
+        self.assertIn("targets", data)
+        self.assertEqual(self.request("GET", f"/api/carteira/{pid}/grafico?ticker=VALE3")[0], 404)
+        self.assertEqual(self.request("GET", "/api/carteira/nao-existe/grafico?ticker=PETR4")[0], 404)
+
 if __name__ == "__main__":
     unittest.main()

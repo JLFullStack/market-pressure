@@ -702,6 +702,109 @@ def setup_now(candles, market, mode, now=None, memo=None, bench6m=None, check_en
     return {"enough": True, "ok": bool(s["ok"]), "ma": s["ma"], "close": use[-1]["c"], "wait": wait}
 
 
+# Gráfico de um ativo da carteira (card flutuante das Posições): alvos a até TARGET_MERGE um do
+# outro viram um nível só, para muitas compras próximas não encherem o gráfico de linhas.
+TARGET_MERGE = 0.015
+CHART_MARGIN_SESSIONS = 60  # pregões mostrados antes da primeira compra, no zoom inicial
+
+
+def target_levels(lots, strategy, last_close):
+    """Alvos da venda parcial das compras abertas cuja parte ainda não foi vendida, agrupados por
+    preço (TARGET_MERGE; só alvos no mesmo estado), por preço: [{price, distance (% sobre
+    last_close), reached (já atingido, à espera da venda), lots: [{date, price, quantity}],
+    quantity}]. Vazio na regra "reversao"."""
+    fraction = partial_fraction(strategy)
+    if fraction <= 0:
+        return []
+    pending = sorted(({"date": lot["date"], "price": lot["price"], "quantity": lot["remaining"],
+                       "goal": lot["price"] * (1 + strategy["target"]), "reached": bool(lot["hitDate"])}
+                      for lot in lots if lot["quantity"] * fraction - lot.get("realized", 0) > EPS),
+                     key=lambda lot: lot["goal"])
+    levels = []
+    for reached in (False, True):
+        group = []
+        for lot in (lot for lot in pending if lot["reached"] == reached):
+            if group and lot["goal"] <= group[-1]["first"] * (1 + TARGET_MERGE):
+                group[-1]["members"].append(lot)
+            else:
+                group.append({"first": lot["goal"], "reached": reached, "members": [lot]})
+        levels += group
+    levels.sort(key=lambda level: level["first"])
+    out = []
+    for level in levels:
+        members = level["members"]
+        quantity = add_up(m["quantity"] for m in members)
+        # preço do nível: média dos alvos pela quantidade (com um lote, o alvo dele)
+        price = add_up(m["goal"] * m["quantity"] for m in members) / quantity if quantity > EPS else members[0]["goal"]
+        out.append({"price": price, "distance": (price / last_close - 1) * 100 if last_close else None,
+                    "reached": level["reached"], "quantity": quantity, "low": members[0]["goal"], "high": members[-1]["goal"],
+                    "lots": [{"date": m["date"], "price": m["price"], "quantity": m["quantity"]} for m in members]})
+    return out
+
+
+def asset_chart(transactions, ticker, candles, market, strategy=DEFAULT_STRATEGY, now=None):
+    """O que o card "Operações no gráfico" de uma posição mostra: candles e médias (moeda do
+    ativo, preço bruto como nas Posições), as compras (C) e vendas (V) lançadas, os alvos das
+    compras abertas (target_levels) e o zoom inicial (range: da primeira compra até hoje).
+    As médias e a regra usam os pregões fechados; o candle do pregão em andamento aparece no gráfico."""
+    closed = closed_for(candles, market, now)
+    ind = compute_indicators(closed) if len(closed) >= 200 else None
+    full = compute_indicators(candles)
+    days = [day_of(c["date"]) for c in candles]
+    txs = by_date(t for t in transactions if t["ticker"] == ticker)
+    lots = open_lots(transactions, ticker, candles, strategy["target"], partial_fraction(strategy),
+                     partial_timing(strategy), ind)
+    currency = MARKETS[market]["currency"]
+
+    # Marcadores: um por dia e tipo (lançamento em dia sem pregão vai para o pregão seguinte).
+    marks = {}
+    for tx in txs:
+        k = min(lower_bound(days, tx["date"]), len(days) - 1)
+        kind = "buy" if tx["type"] == "compra" else "sell"
+        m = marks.setdefault((k, kind), {"quantity": 0.0, "count": 0, "items": []})
+        m["quantity"] += tx["quantity"]
+        m["count"] += 1
+        m["items"].append(f"{fmt_qty(tx['quantity'])} a {currency} {fmt_num(tx['price'], 2)}")
+    markers = [{"time": days[k], "kind": kind,
+                "text": ("C" if kind == "buy" else "V") + (f"×{m['count']}" if m["count"] > 1 else ""),
+                "detail": f"{'Compra' if kind == 'buy' else 'Venda'} em {fmt_date(days[k])}: " + "; ".join(m["items"])}
+               for (k, kind), m in sorted(marks.items(), key=lambda kv: (kv[0][0], kv[0][1] != "buy"))]
+
+    last_close = candles[-1]["c"] if candles else None
+    levels = target_levels(lots, strategy, last_close)
+    t = fmt_pct_value(strategy["target"])
+    for level in levels:
+        level["detail"] = "\n".join(
+            f"Compra de {fmt_date(lot['date'])} a {currency} {fmt_num(lot['price'], 2)} ({fmt_qty(lot['quantity'])} em aberto): "
+            f"alvo em {currency} {fmt_num(lot['price'] * (1 + strategy['target']), 2)}" for lot in level["lots"])
+        if level["reached"]:
+            level["detail"] += (f"\nJá atingiu +{t}%; a venda da parte segue a regra (veja o motivo da Situação "
+                                "na tabela de Posições).")
+    # Alvo mostrado de início: o mais próximo ainda não atingido (sem ele, o primeiro).
+    upcoming = next((k for k, level in enumerate(levels) if not level["reached"]), 0 if levels else None)
+    first = lower_bound(days, txs[0]["date"]) if txs else 0
+    if partial_fraction(strategy) <= 0:
+        note = "A regra deste tipo vende tudo só na reversão de tendência: as compras não têm alvo."
+    elif not lots:
+        note = "Sem compras abertas: nenhum alvo a mostrar."
+    elif not levels:
+        note = "A venda parcial das compras abertas já foi feita; o restante sai na reversão de tendência."
+    else:
+        note = None
+    return {
+        "ticker": ticker, "market": market, "currency": currency, "lastClose": last_close,
+        "rule": {"key": strategy["key"], "target": strategy["target"] * 100,
+                 "fraction": partial_fraction(strategy) * 100, "timing": partial_timing(strategy)},
+        "candles": [{"time": days[i], "open": c["o"], "high": c["h"], "low": c["l"], "close": c["c"]}
+                    for i, c in enumerate(candles)],
+        "ma": {k: [{"time": days[i], "value": v} for i, v in enumerate(full[k]) if v is not None]
+               for k in ("mm20", "mm50", "mm200")},
+        "markers": markers, "targets": levels, "nextTarget": upcoming, "note": note,
+        "openLots": len(lots), "transactions": len(txs),
+        "range": {"from": days[max(0, first - CHART_MARGIN_SESSIONS)], "to": days[-1]} if days else None,
+    }
+
+
 def indicators_memo(candles, memo):
     if memo is None:
         return compute_indicators(candles)

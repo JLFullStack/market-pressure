@@ -279,6 +279,17 @@ def get_analysis(req):
     return svc.analysis_payload(portfolio_of(req, needs_entries=True))
 
 
+@route("GET", f"/api/carteira/{PORTFOLIO_ID}/grafico")
+def get_asset_chart(req):
+    """Card "Operações no gráfico" de uma posição: candles, médias, lançamentos e alvos do ativo."""
+    try:
+        return svc.asset_chart(portfolio_of(req), req.arg("ticker"))
+    except LookupError as err:
+        raise HTTPError(404, str(err)) from None
+    except RuntimeError as err:  # quote_history: o Yahoo não tem cotações do ativo
+        raise HTTPError(502, str(err)) from None
+
+
 @route("GET", f"/api/carteira/{PORTFOLIO_ID}/prompt")
 def get_portfolio_prompt(req):
     """Botão "ANALISAR CARTEIRA": o texto para uma IA sobre a carteira e cada ativo dela."""

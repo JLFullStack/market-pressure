@@ -182,6 +182,44 @@ class PartialExitTest(unittest.TestCase):
         hit = pf.partial_to_sell(pf.open_lots(txs, "PETR4", self.CANDLES, 0.10, 0.3), "b3", rule)
         self.assertEqual((hit["quantity"], hit["fraction"]), (3, 30.0))
 
+
+class AssetChartTest(unittest.TestCase):
+    """Card "Operações no gráfico" das Posições: alvos agrupados, marcadores e zoom."""
+    CANDLES = day_candles({"2024-01-02": 10, "2024-01-03": 10.1, "2024-01-04": 10.2, "2024-01-05": 10.3,
+                           "2024-01-06": 10.2, "2024-01-08": 10.4})
+    RULE = {"key": "parcial", "target": 0.10, "fraction": 0.5, "timing": "alvo"}
+
+    def test_close_targets_are_merged_and_sold_partials_are_left_out(self):
+        def lot(price, qty, hit=None, realized=0):
+            return {"date": "2024-01-02", "price": price, "quantity": qty, "remaining": qty - realized,
+                    "realized": realized, "hitDate": hit}
+        lots = [lot(10.0, 100), lot(10.1, 100),                      # alvos a 1% um do outro: juntos
+                lot(12.0, 50),
+                lot(10.05, 20, "2024-01-08"),                         # atingiu, parte ainda não vendida: à parte
+                lot(8.0, 10, "2024-01-05", realized=5)]               # parcial já vendida: sem alvo
+        levels = pf.target_levels(lots, self.RULE, 10.0)
+        self.assertEqual([(len(level["lots"]), level["reached"]) for level in levels], [(2, False), (1, True), (1, False)])
+        self.assertAlmostEqual(levels[0]["price"], (11.0 * 100 + 11.11 * 100) / 200)
+        self.assertAlmostEqual(levels[2]["price"], 13.2)
+        self.assertAlmostEqual(levels[0]["distance"], (levels[0]["price"] / 10 - 1) * 100)
+        self.assertEqual(pf.target_levels(lots, {**self.RULE, "key": "reversao"}, 10.0), [])
+
+    def test_chart_payload(self):
+        txs = [tx("2024-01-02", "compra", 100, 10), tx("2024-01-02", "compra", 50, 10.1),
+               tx("2024-01-07", "venda", 20, 10.3)]   # domingo: marcador no pregão seguinte
+        out = pf.asset_chart(txs, "PETR4", self.CANDLES, "b3", self.RULE, now=self.CANDLES[-1]["date"] + 86400)
+        self.assertEqual([(m["time"], m["kind"], m["text"]) for m in out["markers"]],
+                         [("2024-01-02", "buy", "C×2"), ("2024-01-08", "sell", "V")])
+        self.assertEqual((len(out["targets"]), out["nextTarget"]), (1, 0))
+        self.assertIn("alvo em R$ 11,00", out["targets"][0]["detail"])
+        self.assertEqual(out["range"], {"from": "2024-01-02", "to": "2024-01-08"})
+        self.assertEqual((out["openLots"], out["transactions"]), (2, 3))
+        self.assertIsNone(out["note"])
+        reversal = pf.asset_chart(txs, "PETR4", self.CANDLES, "b3", {**self.RULE, "key": "reversao"})
+        self.assertEqual(reversal["targets"], [])
+        self.assertIn("reversão", reversal["note"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

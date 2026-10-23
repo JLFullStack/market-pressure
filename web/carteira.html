@@ -823,6 +823,38 @@
     </section>
 </div>
 
+<!-- Card flutuante "Operações no gráfico": abre ao clicar numa linha das Posições (assetChart* em carteira.js). -->
+<dialog class="chart-dialog" id="assetChartDialog" aria-labelledby="assetChartTitle">
+    <div class="panel-head">
+        <div class="result-head"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3v18M17 3v18"/><rect x="5" y="7" width="4" height="8" rx="1"/><rect x="15" y="9" width="4" height="7" rx="1"/></svg></span><div>
+            <h2 id="assetChartTitle">Operações no gráfico</h2>
+            <div class="small muted" id="assetChartInfo"></div>
+        </div></div>
+        <div class="chart-dialog-tools">
+            <div class="seg" role="group" aria-label="Tipo de gráfico" id="assetChartType">
+                <button type="button" data-type="candles" aria-pressed="true">Candles</button>
+                <button type="button" data-type="line" aria-pressed="false">Linha</button>
+            </div>
+            <button type="button" class="icon-btn" id="assetChartClose" title="Fechar" aria-label="Fechar o gráfico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+    </div>
+    <div class="bt-legend" id="assetChartLegend"></div>
+    <div class="bt-chart" id="assetChartBox" role="img" aria-label="Gráfico de preço do ativo com as compras, as vendas e os alvos das compras abertas"></div>
+    <div class="price-targets" id="assetTargets" hidden>
+        <div class="price-target-head">
+            <span class="small"><strong>Alvos das compras abertas</strong> <span class="tip" tabindex="0" data-tip="Preço em que cada compra ainda aberta atinge o alvo da venda parcial da regra da classe dela (Configurações). Alvos a menos de 1,5% um do outro aparecem juntos, num nível só (o preço é a média pela quantidade). Alvo já atingido cuja parte ainda não foi vendida aparece com a marca ATINGIDO (linha pontilhada). Para o gráfico não ficar carregado, só o próximo alvo ainda não atingido aparece de início: toque num alvo para mostrá-lo ou escondê-lo." aria-label="Ajuda: alvos das compras abertas">?</span></span>
+            <div class="seg" role="group" aria-label="Alvos no gráfico" id="assetTargetMode">
+                <button type="button" data-mode="next" aria-pressed="true">Próximo</button>
+                <button type="button" data-mode="all" aria-pressed="false">Todos</button>
+                <button type="button" data-mode="none" aria-pressed="false">Nenhum</button>
+            </div>
+        </div>
+        <div class="price-target-chips" id="assetTargetChips"></div>
+    </div>
+    <p class="small muted" id="assetChartMsg" role="status"></p>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="assets/js/core.js"></script>
 <script src="assets/js/carteira.js"></script>

@@ -12,23 +12,7 @@
 //        -> botão "ANALISAR BACKTEST": o texto para a IA, com os parâmetros do resultado mostrado
 // Aqui só se desenham os gráficos e as tabelas.
 
-// Cores (sobre o fundo #0e1527 do painel). Médias como no TradingView do usuário:
-// MM20 laranja, MM50 azul, MM200 roxa.
-const COLORS = {
-    up: '#3ddc97', down: '#ff6b6b', close: '#dce5f5',
-    mm20: '#ffb057', mm50: '#5aa2ff', mm200: '#a78bfa',
-    buy: '#3ddc97', partial: '#ffc65c', exit: '#ff6b6b',
-    profit: '#5aa2ff', profitB: '#ffb057', zero: '#8a99b6',
-    grid: 'rgba(120, 150, 210, 0.08)', border: '#1f2b46', text: '#dce5f5', panel: '#0e1527', crosshair: '#5aa2ff'
-};
-const MA_LABEL = { mm20: 'MM20', mm50: 'MM50', mm200: 'MM200' };
-// Marcador de cada evento de lote (o rótulo, ex. "C3" ou "V1–4", vem pronto do servidor).
-const MARKER = {
-    buy: { position: 'belowBar', shape: 'arrowUp', color: COLORS.buy },
-    partial: { position: 'aboveBar', shape: 'circle', color: COLORS.partial },
-    exit: { position: 'aboveBar', shape: 'arrowDown', color: COLORS.exit }
-};
-const CHART_KEY = 'marketpressure_backtest_grafico'; // "candles" | "line"
+// Cores, marcadores e o gráfico de preço (COLORS, MARKER, chartOptions, priceChart) ficam em core.js.
 const PAGE_SIZE_KEY = 'marketpressure_backtest_por_pagina'; // linhas por página das tabelas de lotes e de operações
 // Linhas do gráfico do modo Carteira, por estratégia (chave do servidor).
 const PF_COLORS = { rule: '#5aa2ff', onlyB: '#ffb057', bova: '#4ad991', ivvb: '#a78bfa', mix: '#22d3ee', cdi: '#94a3b8' };
@@ -225,7 +209,7 @@ function render(d) {
     $('btTitle').innerText = `${d.ticker} — ${d.name}`;
     setChips($('btSubtitle'), [d.kindLabel, `${d.period} (${fmtNum(d.stats.periodSessions, 0)} pregões, ≈ ${d.stats.periodDuration})`,
         d.rule.text, d.strict ? 'com candle de rejeição' : null]);
-    $('btLegend').innerHTML = priceLegend();
+    $('btLegend').innerHTML = priceLegend(LOT_LEGEND);
     $('btEquityLegend').innerHTML = `<span><i class="swatch-line" style="background:${COLORS.profit}"></i>${d.equityB ? `Com venda parcial (${fmtNum(d.rule.fraction, 0)}% ${d.rule.timing === 'forca' ? 'depois de' : 'em'} +${fmtNum(d.rule.target, 1)}%${d.rule.timing === 'forca' ? ', quando a alta perde força' : ''}) + regra B` : 'Estratégia escolhida'}</span>`
         + (d.equityB ? `<span><i class="swatch-line" style="background:${COLORS.profitB}"></i>Só a regra B</span>` : '');
     $('btCompareChart').innerText = d.compare || '';
@@ -240,21 +224,6 @@ function render(d) {
     $('lotsBody')._itemsSeen = false;
     renderLots(d);
     keepTipsWithText($('btResult') || document);
-}
-
-// O tamanho vem do contêiner (.bt-chart no CSS): autoSize acompanha a largura da página.
-function chartOptions() {
-    const line = { color: COLORS.crosshair, width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: '#2f6bff' };
-    return {
-        layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#8a99b6', fontSize: 12,
-                  fontFamily: getComputedStyle(document.body).fontFamily },
-        grid: { vertLines: { color: COLORS.grid }, horzLines: { color: COLORS.grid } },
-        rightPriceScale: { borderVisible: false },
-        timeScale: { borderVisible: false },
-        crosshair: { mode: LightweightCharts.CrosshairMode.Normal, vertLine: line, horzLine: line },
-        localization: { locale: 'pt-BR', priceFormatter: (p) => fmtNum(p, 2) },
-        autoSize: true
-    };
 }
 
 function drawCharts(d) {
@@ -290,34 +259,8 @@ function drawCharts(d) {
     price.timeScale().fitContent();
 }
 
-// Gráfico de preço com candles, linha de fechamento e as médias (só uma das duas séries de preço
-// fica visível: showType). Devolve o gráfico e as séries.
-function priceChart(el, d) {
-    const chart = LightweightCharts.createChart(el, chartOptions());
-    const candles = chart.addCandlestickSeries({
-        upColor: COLORS.up, downColor: COLORS.down, borderVisible: false, wickUpColor: COLORS.up, wickDownColor: COLORS.down
-    });
-    candles.setData(d.candles);
-    const line = chart.addLineSeries({ color: COLORS.close, lineWidth: 2, priceLineVisible: false });
-    line.setData(d.candles.map(c => ({ time: c.time, value: c.close })));
-    for (const k of Object.keys(MA_LABEL)) {
-        const ma = chart.addLineSeries({ color: COLORS[k], lineWidth: k === 'mm200' ? 2 : 1, priceLineVisible: false,
-                                         lastValueVisible: false, crosshairMarkerVisible: false });
-        ma.setData(d.ma[k]);
-    }
-    return { chart, candles, line };
-}
-
 // Candles ou linha; os marcadores das operações ficam na série visível.
-function showType(series, markers) {
-    if (!series?.candles) return;
-    const candles = state.type === 'candles';
-    series.candles.applyOptions({ visible: candles });
-    series.line.applyOptions({ visible: !candles });
-    const list = (markers || []).map(m => ({ time: m.time, text: m.text, ...MARKER[m.kind] }));
-    series.candles.setMarkers(candles ? list : []);
-    series.line.setMarkers(candles ? [] : list);
-}
+const showType = (series, markers) => showPriceType(series, markers, state.type);
 
 function applyChartType() {
     if (state.data) showType(state.series, state.data.markers);
@@ -325,14 +268,7 @@ function applyChartType() {
 }
 
 // Legenda das médias e dos marcadores (C, P, V).
-function priceLegend() {
-    return [
-        ...Object.entries(MA_LABEL).map(([k, label]) => `<span><i class="swatch-line" style="background:${COLORS[k]}"></i>${label}</span>`),
-        `<span><i class="swatch-dot" style="background:${COLORS.buy}"></i>C = compra</span>`,
-        `<span><i class="swatch-dot" style="background:${COLORS.partial}"></i>P = venda parcial</span>`,
-        `<span><i class="swatch-dot" style="background:${COLORS.exit}"></i>V = saída (regra B)</span>`
-    ].join('');
-}
+const LOT_LEGEND = [[COLORS.buy, 'C = compra'], [COLORS.partial, 'P = venda parcial'], [COLORS.exit, 'V = saída (regra B)']];
 
 const pct = (v, d = 1) => v === null || v === undefined ? '—' : fmtPct(v, d);
 
@@ -761,7 +697,7 @@ function renderPortfolio(d) {
     revealItems($('pfCompareBody'));
     $('pfAsset').innerHTML = d.assets.map(a => `<option value="${escapeHTML(a.ticker)}">${escapeHTML(a.ticker)} — ${a.trades} operação(ões) · lucro ${fmtBRL(a.profit)}</option>`).join('')
         || '<option value="">Nenhuma operação</option>';
-    $('pfPriceLegend').innerHTML = priceLegend();
+    $('pfPriceLegend').innerHTML = priceLegend(LOT_LEGEND);
     state.pfPrice?.chart.remove();
     state.pfPrice = null;
     if (d.assets.length) showPfAsset(d.assets[0].ticker);

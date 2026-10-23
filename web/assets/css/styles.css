@@ -1466,3 +1466,43 @@ tr.in .target-bar i { animation: grow-x 0.9s var(--ease-out) backwards; animatio
     .bt-result-head .bt-analyze, .bt-head-actions { width: 100%; }
     .result-head h2 { font-size: 15px; }
 }
+
+/* Carteira: linha das Posições abre o card flutuante "Operações no gráfico" (#assetChartDialog). */
+.position-row { cursor: pointer; }
+.position-row:hover td { background-color: rgba(90, 162, 255, 0.06); }
+.position-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.chart-dialog {
+    width: min(1180px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; box-sizing: border-box;
+    background: linear-gradient(180deg, var(--panel-raised), var(--panel-bg) 40%);
+    color: var(--text-color); border: 1px solid var(--border-strong); border-radius: var(--radius);
+    padding: 20px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(90, 162, 255, 0.08);
+}
+.chart-dialog[open] { animation: chart-dialog-in 0.28s var(--ease-out) backwards; }
+.chart-dialog::backdrop { background: rgba(3, 6, 14, 0.7); backdrop-filter: blur(3px); }
+.chart-dialog h2 { margin: 0 0 4px; font-size: 17px; }
+.chart-dialog-tools { display: flex; align-items: center; gap: 10px; }
+.chart-dialog .bt-chart { height: min(480px, 52vh); }
+.chart-dialog > .panel-head { flex-wrap: nowrap; align-items: flex-start; }
+.chart-dialog > .panel-head > .result-head { flex: 1 1 auto; }
+@keyframes chart-dialog-in { from { opacity: 0; } }   /* sem transform: a caixa de ajuda (position fixed) mora dentro do card */
+.price-targets { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+.price-target-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.price-target-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.price-target {
+    display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+    color: var(--text-muted); background: rgba(255, 255, 255, 0.03); border: 1px dashed var(--border-strong); border-radius: 999px;
+    transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+}
+.price-target strong { color: var(--text-color); font-variant-numeric: tabular-nums; }
+.price-target[aria-pressed="true"] { color: var(--text-color); border: 1px solid rgba(255, 198, 92, 0.7); background: rgba(255, 198, 92, 0.1); }
+.price-target:hover { border-color: rgba(255, 198, 92, 0.7); }
+.price-target:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 640px) {
+    .chart-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 14px; }
+    .chart-dialog .bt-chart { height: 52vh; }
+    .chart-dialog > .panel-head { flex-wrap: wrap; }
+    .chart-dialog-tools { width: 100%; justify-content: space-between; }
+}
+@media (prefers-reduced-motion: reduce) { .chart-dialog[open] { animation: none; } }
+.price-target.reached { border-style: dotted; }
+.price-target .price-target-tag { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--success); }
