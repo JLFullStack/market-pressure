@@ -828,19 +828,23 @@
 <!-- Card flutuante "Operações no gráfico": abre ao clicar numa linha das Posições (assetChart* em carteira.js). -->
 <dialog class="chart-dialog" id="assetChartDialog" aria-labelledby="assetChartTitle">
     <div class="panel-head">
-        <div class="result-head"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3v18M17 3v18"/><rect x="5" y="7" width="4" height="8" rx="1"/><rect x="15" y="9" width="4" height="7" rx="1"/></svg></span><div>
+        <div class="result-head"><span class="avatar solo chart-dialog-avatar" id="assetChartAvatar" aria-hidden="true"></span><div>
+            <div class="eyebrow chart-dialog-eyebrow">Operações no gráfico</div>
             <h2 id="assetChartTitle">Operações no gráfico</h2>
             <div class="small muted" id="assetChartInfo"></div>
         </div></div>
         <div class="chart-dialog-tools">
-            <div class="seg" role="group" aria-label="Tipo de gráfico" id="assetChartType">
-                <button type="button" data-type="candles" aria-pressed="true">Candles</button>
-                <button type="button" data-type="line" aria-pressed="false">Linha</button>
-            </div>
-            <button type="button" class="icon-btn" id="assetChartClose" title="Fechar" aria-label="Fechar o gráfico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            <button type="button" class="icon-btn chart-dialog-close" id="assetChartClose" title="Fechar" aria-label="Fechar o gráfico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </div>
     </div>
-    <div class="bt-legend" id="assetChartLegend"></div>
+    <div class="chart-dialog-stats" id="assetChartStats"></div>
+    <div class="chart-toolbar">
+        <div class="bt-legend" id="assetChartLegend"></div>
+        <div class="seg" role="group" aria-label="Tipo de gráfico" id="assetChartType">
+            <button type="button" data-type="candles" aria-pressed="true">Candles</button>
+            <button type="button" data-type="line" aria-pressed="false">Linha</button>
+        </div>
+    </div>
     <div class="bt-chart" id="assetChartBox" role="img" aria-label="Gráfico de preço do ativo com as compras, as vendas e os alvos das compras abertas"></div>
     <div class="price-targets" id="assetTargets" hidden>
         <div class="price-target-head">

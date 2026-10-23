@@ -135,20 +135,42 @@
     </form>
 
     <form id="alertForm" novalidate>
-        <div class="panel" data-reveal>
-            <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg></span><h2>Aviso de imposto</h2></div>
-            <div class="alert-settings">
-                <label class="toggle"><input type="checkbox" name="enabled" checked> Avisar quando as vendas de ações do mês se aproximarem do limite da isenção</label>
-                <label class="field">Avisar a partir de (R$ vendidos em ações no mês)
-                    <input type="number" name="warnAt" class="select" min="1000" max="20000" step="500" inputmode="decimal">
-                </label>
+        <div class="panel tax-panel" data-reveal>
+            <div class="panel-head">
+                <div class="panel-title"><span class="icon-chip tone-warn" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg></span><h2>Aviso de imposto</h2></div>
+                <label class="toggle switch tax-switch"><input type="checkbox" name="enabled" checked><span class="switch-track" aria-hidden="true"></span>
+                    <span>Avisar quando as vendas de ações do mês se aproximarem do limite da isenção</span></label>
             </div>
-            <ul class="notes">
-                <li><strong>A regra</strong>: vendas de ações na B3 que somam até <strong>R$ 20 mil no mês</strong> são isentas de imposto de renda. Passando disso, o lucro de <strong>todas</strong> as vendas de ações do mês paga 15% (DARF até o último dia útil do mês seguinte).</li>
-                <li>Conta o <strong>valor vendido</strong>, não o lucro. ETFs, BDRs e fundos não têm a isenção: o lucro paga imposto em qualquer valor.</li>
-                <li><strong>Onde o aviso aparece</strong>: no topo da Visão geral da Carteira (com as vendas que a Situação indica hoje), no formulário "Nova operação" enquanto você digita uma venda, na confirmação da venda registrada e no texto do "ANALISAR CARTEIRA".</li>
-                <li>Uma venda parcial pode ficar para o mês seguinte para caber na isenção; a venda pela reversão de tendência não deve esperar por causa do imposto.</li>
-            </ul>
+            <div class="tax-grid">
+                <label class="param-card tone-cyan tax-input">
+                    <span class="kpi-label">Avisar a partir de</span>
+                    <span class="param-input"><b>R$</b><input name="warnAt" class="select" type="number" min="1000" max="20000" step="500" inputmode="decimal" aria-label="Avisar a partir de (R$ vendidos em ações no mês)"></span>
+                    <span class="kpi-note">vendidos em ações no mês</span>
+                    <input type="range" class="tax-range" id="warnRange" min="1000" max="20000" step="500" aria-label="Avisar a partir de (R$ vendidos em ações no mês)">
+                </label>
+                <div class="tax-scale" aria-hidden="true">
+                    <div class="tax-bar">
+                        <i class="tax-zone z-ok"></i><i class="tax-zone z-near"></i><i class="tax-zone z-over"></i>
+                        <b class="tax-mark tax-warn-mark"><span>aviso</span></b>
+                        <b class="tax-mark tax-limit-mark"><span>limite</span></b>
+                    </div>
+                    <div class="tax-legend">
+                        <span><i class="swatch-dot" style="background: var(--success)"></i>isento, sem aviso</span>
+                        <span><i class="swatch-dot" style="background: var(--warning)"></i>isento, com aviso</span>
+                        <span><i class="swatch-dot" style="background: var(--danger)"></i>acima de <strong id="taxLimit">R$ 20 mil</strong>: o lucro de todas as vendas paga 15%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="tax-facts">
+                <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h7"/></svg>
+                    <span><strong>A regra</strong>Vendas de ações na B3 que somam até <b>R$ 20 mil no mês</b> são isentas. Passando disso, o lucro de <b>todas</b> as vendas de ações do mês paga 15% (DARF até o último dia útil do mês seguinte).</span></div>
+                <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M7 8h7a3 3 0 0 1 0 6H8"/></svg>
+                    <span><strong>O que conta</strong>O <b>valor vendido</b>, não o lucro. ETFs, BDRs e fundos não têm a isenção: o lucro paga imposto em qualquer valor.</span></div>
+                <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg>
+                    <span><strong>Onde o aviso aparece</strong>No topo da Visão geral da Carteira (com as vendas que a Situação indica hoje), no formulário "Nova operação" enquanto você digita uma venda, na confirmação da venda registrada e no texto do "ANALISAR CARTEIRA".</span></div>
+                <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>
+                    <span><strong>Venda parcial × reversão</strong>Uma venda parcial pode ficar para o mês seguinte para caber na isenção; a venda pela reversão de tendência não deve esperar por causa do imposto.</span></div>
+            </div>
             <p class="small muted" id="alertText"></p>
             <div class="strategy-actions">
                 <button type="submit" class="btn">Salvar aviso</button>
@@ -156,11 +178,6 @@
             <div class="form-msg" id="alertMsg" role="status"></div>
         </div>
     </form>
-
-    <div class="panel" data-reveal>
-        <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><h2>Em vigor</h2></div>
-        <ul class="in-force" id="currentText"><li>—</li></ul>
-    </div>
 </div>
 
 <script src="assets/js/core.js"></script>

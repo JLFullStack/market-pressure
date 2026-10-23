@@ -1573,8 +1573,10 @@ async function openAssetChart(ticker) {
     state.assetPrice?.chart.remove();
     state.assetPrice = null;
     state.asset = null;
-    $('assetChartTitle').innerText = `${ticker} · Operações no gráfico`;
-    $('assetChartInfo').innerText = '';
+    $('assetChartTitle').innerText = ticker;
+    $('assetChartInfo').innerHTML = '';
+    $('assetChartStats').innerHTML = '';
+    $('assetChartAvatar').textContent = ticker.slice(0, 2).toUpperCase();
     $('assetChartLegend').innerHTML = '';
     $('assetTargets').hidden = true;
     $('assetChartMsg').innerText = `Carregando ${ticker}...`;
@@ -1593,8 +1595,17 @@ async function openAssetChart(ticker) {
     state.targetsShown = new Set(nextTarget());
     state.assetLines = [];
     const rule = data.rule.fraction > 0 ? `${data.ruleLabel} (${fmtNum(data.rule.fraction, 0)}% em +${fmtNum(data.rule.target, 1)}%)` : data.ruleLabel;
-    $('assetChartInfo').innerText = [data.name !== data.ticker ? data.name : null, data.cls,
-        `${data.transactions} lançamento(s) · ${data.openLots} compra(s) aberta(s)`, rule].filter(Boolean).join(' · ');
+    const k = Math.max(0, (state.analysis?.allocation || []).findIndex(r => r.cls === data.cls));
+    const color = classColor(data.cls, k);
+    $('assetChartAvatar').style.setProperty('--a1', color);
+    $('assetChartDialog').style.setProperty('--g', color);
+    // Informações em pílulas: nome, classe (na cor dela), lançamentos e compras abertas, regra de venda.
+    $('assetChartInfo').innerHTML = `<span class="chips">${[
+        data.name !== data.ticker ? `<span class="chip">${escapeHTML(data.name)}</span>` : '',
+        `<span class="chip chip-class"><span class="swatch-box" style="background:${color}"></span>${escapeHTML(data.cls)}</span>`,
+        `<span class="chip"><strong>${data.transactions}</strong> lançamento(s) · <strong>${data.openLots}</strong> compra(s) aberta(s)</span>`,
+        `<span class="chip">${escapeHTML(rule)}</span>`].join('')}</span>`;
+    renderAssetStats(data);
     $('assetChartLegend').innerHTML = priceLegend([[COLORS.buy, 'C = compra'], [COLORS.exit, 'V = venda'],
         ...(data.targets.length ? [[COLORS.target, 'Alvo da venda parcial']] : [])]);
     $('assetChartMsg').innerText = data.note || '';
@@ -1604,6 +1615,31 @@ async function openAssetChart(ticker) {
     else state.assetPrice.chart.timeScale().fitContent();
     drawTargets();
     keepTipsWithText($('assetTargets'));
+    // Entrada: o gráfico se desenha da esquerda para a direita a cada ativo aberto.
+    const box = $('assetChartBox');
+    box.classList.remove('drawing'); void box.offsetWidth; box.classList.add('drawing');
+}
+
+// Faixa de números do card: preço de agora, preço médio, resultado da posição (das Posições, já
+// calculado no Python), o próximo alvo e a situação. Os valores em reais e % contam ao abrir.
+function renderAssetStats(data) {
+    const p = (state.analysis?.open || []).find(x => x.ticker === data.ticker);
+    const next = data.nextTarget === null || data.nextTarget === undefined ? null : data.targets[data.nextTarget];
+    const stat = (label, value, note = '', tone = '') => `<div class="dlg-stat ${tone}"><span class="kpi-label">${label}</span>
+        <span class="dlg-stat-value num">${value}</span>${note ? `<span class="kpi-note">${note}</span>` : ''}</div>`;
+    const counter = (v, f, d = 2) => `<span data-count="${v}" data-format="${f}" data-decimals="${d}">${COUNT_FORMAT[f](0, d)}</span>`;
+    const cards = [stat('Preço atual', fmtMoney(data.lastClose, data.currency), data.currency === 'R$' ? 'último fechamento' : `em ${data.currency}`, 'tone-blue')];
+    if (p) {
+        cards.push(stat('Preço médio', counter(p.avgPrice, 'brl'), `${fmtQty(p.quantity)} ${p.quantity === 1 ? 'cota' : 'cotas'}`, 'tone-cyan'));
+        cards.push(stat('Resultado', p.returnPct === null ? '—' : counter(p.returnPct, 'pct', 2), `lucro ${fmtBRL(p.profit)}`,
+            p.returnPct === null ? 'tone-violet' : p.returnPct >= 0 ? 'tone-green' : 'tone-red'));
+    }
+    if (next) cards.push(stat(next.reached ? 'Alvo atingido' : 'Próximo alvo', fmtMoney(next.price, data.currency),
+        next.reached ? 'parte ainda não vendida' : next.distance === null ? '' : `${fmtPct(next.distance, 1)} do preço atual`, 'tone-amber'));
+    if (p?.status) cards.push(`<div class="dlg-stat tone-violet"><span class="kpi-label">Situação</span>
+        <span class="dlg-stat-badge">${signalBadge(p.status, p.statusReason, STATUS_BADGE[p.statusKey] || 'badge-low')}</span></div>`);
+    $('assetChartStats').innerHTML = cards.join('');
+    $('assetChartStats').querySelectorAll('[data-count]').forEach(countUp);
 }
 
 // O alvo mostrado de início ("Próximo"): o mais próximo ainda não atingido, escolhido no servidor.

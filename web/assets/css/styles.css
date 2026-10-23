@@ -1484,6 +1484,15 @@ tr.in .target-bar i { animation: grow-x 0.9s var(--ease-out) backwards; animatio
 .chart-dialog .bt-chart { height: min(480px, 52vh); }
 .chart-dialog > .panel-head { flex-wrap: nowrap; align-items: flex-start; }
 .chart-dialog > .panel-head > .result-head { flex: 1 1 auto; }
+/* Fechar: sempre no canto de cima à direita do card, em vermelho (a ação de fechar). */
+.chart-dialog > .panel-head { padding-right: 46px; }
+.chart-dialog-close.icon-btn {
+    position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border-radius: 50%;
+    color: #ff6b6b; background: rgba(255, 107, 107, 0.14); border-color: rgba(255, 107, 107, 0.55);
+}
+.chart-dialog-close.icon-btn svg { width: 17px; height: 17px; stroke-width: 2.4; }
+.chart-dialog-close.icon-btn:hover { color: #fff; background: #ff6b6b; border-color: #ff6b6b; box-shadow: 0 0 14px rgba(255, 107, 107, 0.45); }
+.chart-dialog-close.icon-btn:focus-visible { outline-color: #ff6b6b; }
 @keyframes chart-dialog-in { from { opacity: 0; } }   /* sem transform: a caixa de ajuda (position fixed) mora dentro do card */
 .price-targets { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }
 .price-target-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -1501,7 +1510,10 @@ tr.in .target-bar i { animation: grow-x 0.9s var(--ease-out) backwards; animatio
     .chart-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 14px; }
     .chart-dialog .bt-chart { height: 52vh; }
     .chart-dialog > .panel-head { flex-wrap: wrap; }
-    .chart-dialog-tools { width: 100%; justify-content: space-between; }
+    .chart-dialog-tools { width: 100%; justify-content: flex-start; }
+    .chart-dialog > .panel-head { padding-right: 0; }
+    .chart-dialog > .panel-head > .result-head { padding-right: 42px; }
+    .chart-dialog-close.icon-btn { top: 10px; right: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .chart-dialog[open] { animation: none; } }
 .price-target.reached { border-style: dotted; }
@@ -1518,3 +1530,124 @@ tr.in .target-bar i { animation: grow-x 0.9s var(--ease-out) backwards; animatio
 #txTaxAlert { margin: 12px 0 0; }
 .alert-settings { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin: 6px 0 4px; }
 .alert-settings .field { min-width: 260px; }
+
+/* Configurações: regra em vigor dentro do cartão de cada tipo */
+.kind-now { display: flex; flex-direction: column; gap: 4px; padding-top: 10px; border-top: 1px dashed var(--border-color); font-size: 12.5px; line-height: 1.5; }
+.kind-now-head { display: flex; align-items: center; gap: 8px; }
+.kind-now b { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--g); }
+.kind-now-text { color: var(--text-muted); }
+.kind-unsaved { display: none; font-size: 10px; padding: 1px 7px; }
+.kind-card.unsaved { border-color: rgba(255, 176, 87, 0.55); }
+.kind-card.unsaved .kind-unsaved { display: inline-block; }
+.kind-card.unsaved .kind-now-text { text-decoration: line-through; text-decoration-color: rgba(255, 176, 87, 0.6); }
+
+/* Configurações: aviso de imposto */
+.tax-panel { transition: opacity 0.3s; }
+.tax-panel .panel-head { align-items: center; margin-bottom: 14px; }
+.tax-switch { white-space: normal; max-width: 520px; color: var(--text-color); }
+.tax-switch > span:last-child { line-height: 1.4; }
+.tax-grid { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 20px; align-items: center; }
+.tax-input { cursor: default; }
+.tax-input .select { width: 5.2em; }
+.tax-range { width: 100%; margin: 6px 0 0; accent-color: var(--cyan); cursor: pointer; }
+.tax-range:disabled { cursor: not-allowed; }
+.tax-scale { display: flex; flex-direction: column; gap: 30px; padding: 26px 4px 4px; }
+.tax-bar { position: relative; display: flex; height: 14px; border-radius: 7px; background: rgba(255, 255, 255, 0.05); }
+.tax-zone { display: block; height: 100%; }
+.z-ok { width: var(--warn, 60%); border-radius: 7px 0 0 7px; background: linear-gradient(90deg, rgba(74, 217, 145, 0.35), #4ad991); }
+.z-near { width: calc(var(--limit, 80%) - var(--warn, 60%)); background: linear-gradient(90deg, #ffc65c, #ffb057); }
+.z-over { flex: 1; border-radius: 0 7px 7px 0; background: repeating-linear-gradient(135deg, #ff6b6b 0 6px, #e5484d 6px 12px); }
+.in .tax-zone { animation: grow-x 1s var(--ease-out) backwards; transform-origin: left; }
+.in .z-near { animation-delay: 0.15s; }
+.in .z-over { animation-delay: 0.3s; }
+.tax-zone, .tax-mark { transition: width 0.35s var(--ease-out), left 0.35s var(--ease-out); }
+.tax-mark { position: absolute; top: -6px; bottom: -6px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: #fff; box-shadow: 0 0 10px rgba(255, 255, 255, 0.6); }
+.tax-mark span { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 11.5px; font-weight: 700; }
+.tax-warn-mark { left: var(--warn, 60%); }
+.tax-warn-mark span { bottom: calc(100% + 4px); color: var(--warning); }
+.tax-limit-mark { left: var(--limit, 80%); background: var(--danger); box-shadow: 0 0 10px rgba(255, 107, 107, 0.7); }
+.tax-limit-mark span { top: calc(100% + 4px); color: var(--danger); }
+.tax-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-muted); }
+.tax-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.tax-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px; margin-top: 20px; }
+.tax-fact {
+    display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px;
+    border: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.02); font-size: 12.5px; line-height: 1.5; color: var(--text-muted);
+    transition: transform 0.25s var(--ease-out), border-color 0.25s;
+}
+.tax-fact:hover { transform: translateY(-2px); border-color: rgba(255, 176, 87, 0.45); }
+.tax-fact svg { flex: none; width: 18px; height: 18px; margin-top: 2px; fill: none; stroke: var(--warning); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.tax-fact strong { display: block; margin-bottom: 2px; color: var(--text-color); font-size: 13px; }
+.tax-fact b { color: var(--text-color); font-weight: 600; }
+.tax-panel.off .tax-grid, .tax-panel.off .tax-facts { opacity: 0.45; filter: grayscale(0.6); }
+@media (max-width: 760px) {
+    .tax-grid { grid-template-columns: minmax(0, 1fr); }
+    .tax-panel .panel-head { flex-direction: column; align-items: flex-start; }
+}
+
+/* Card flutuante "Operações no gráfico": mais vida. Sem transform no próprio diálogo (a caixa de
+   ajuda, position fixed, mora dentro dele); os filhos entram em cascata e o gráfico se desenha. */
+.chart-dialog { --g: var(--accent); border-color: color-mix(in srgb, var(--g) 45%, var(--border-strong));
+    background: radial-gradient(700px 260px at 0% 0%, color-mix(in srgb, var(--g) 16%, transparent), transparent 70%), linear-gradient(180deg, var(--panel-raised), var(--panel-bg) 45%);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(90, 162, 255, 0.08), 0 0 50px -20px var(--g); }
+.chart-dialog::before { content: ""; position: absolute; left: 24px; right: 24px; top: 0; height: 2px; border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--g), var(--cyan), transparent); }
+.chart-dialog::backdrop { background: radial-gradient(900px 500px at 50% 40%, rgba(47, 107, 255, 0.18), transparent 70%), rgba(3, 6, 14, 0.74); backdrop-filter: blur(6px); }
+.chart-dialog[open] > :not(#tipBox) { animation: reveal-in 0.55s var(--ease-out) backwards; }
+.chart-dialog[open] > :nth-child(2) { animation-delay: 0.06s; }
+.chart-dialog[open] > :nth-child(3) { animation-delay: 0.12s; }
+.chart-dialog[open] > :nth-child(4) { animation-delay: 0.18s; }
+.chart-dialog[open] > :nth-child(5) { animation-delay: 0.24s; }
+.chart-dialog-avatar { width: 46px; height: 46px; font-size: 14px; box-shadow: 0 8px 22px -8px var(--a1); }
+.chart-dialog-eyebrow { margin-bottom: 2px; font-size: 10.5px; }
+.chart-dialog h2 { font-size: 22px; letter-spacing: -0.01em; }
+.chart-dialog .result-head .chips { margin-top: 6px; }
+.chart-dialog .chip-class { display: inline-flex; align-items: center; color: var(--text-color); border-color: color-mix(in srgb, var(--g) 45%, var(--border-color)); }
+.chart-dialog-close.icon-btn svg { transition: transform 0.3s var(--ease-out); }
+.chart-dialog-close.icon-btn:hover svg { transform: rotate(90deg); }
+/* Faixa de números */
+.chart-dialog-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0 12px; }
+.chart-dialog-stats:empty { display: none; }
+.dlg-stat {
+    position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px;
+    border: 1px solid var(--tone-border, var(--border-color)); background: linear-gradient(160deg, var(--tone-bg, rgba(255, 255, 255, 0.03)), rgba(255, 255, 255, 0.01) 70%);
+    transition: transform 0.25s var(--ease-out), border-color 0.25s, box-shadow 0.25s;
+}
+.dlg-stat::before { content: ""; position: absolute; left: 10px; right: 10px; top: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--tone, var(--accent)), transparent); }
+.dlg-stat:hover { transform: translateY(-2px); border-color: var(--tone); box-shadow: 0 12px 24px -16px var(--tone); }
+.dlg-stat .kpi-label { font-size: 10.5px; letter-spacing: 0.05em; }
+.dlg-stat-value { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.dlg-stat.tone-green .dlg-stat-value { color: var(--success); }
+.dlg-stat.tone-red .dlg-stat-value { color: var(--danger); }
+.dlg-stat.tone-amber .dlg-stat-value { color: var(--warning); }
+.dlg-stat-badge { margin-top: 4px; }
+.tone-amber { --tone: #ffc65c; --tone-bg: rgba(255, 198, 92, 0.12); --tone-border: rgba(255, 198, 92, 0.28); }
+.chart-dialog[open] .dlg-stat { animation: reveal-in 0.5s var(--ease-out) backwards; }
+.chart-dialog[open] .dlg-stat:nth-child(2) { animation-delay: 0.08s; }
+.chart-dialog[open] .dlg-stat:nth-child(3) { animation-delay: 0.16s; }
+.chart-dialog[open] .dlg-stat:nth-child(4) { animation-delay: 0.24s; }
+.chart-dialog[open] .dlg-stat:nth-child(5) { animation-delay: 0.32s; }
+/* Gráfico: moldura e entrada desenhando */
+.chart-dialog .bt-chart { border: 1px solid var(--border-color); border-radius: 12px; background: linear-gradient(180deg, color-mix(in srgb, var(--g) 7%, transparent), transparent 70%); }
+/* :not(#tipBox) dá a mesma força da regra da cascata acima, que senão venceria. */
+.chart-dialog[open] > .bt-chart.drawing:not(#tipBox) { animation: wipe-in 1.1s cubic-bezier(0.65, 0, 0.35, 1) backwards; }
+/* Alvos: chips âmbar mais vivos */
+.price-targets { border-top-style: dashed; }
+.price-target { padding: 6px 12px; border-color: rgba(255, 198, 92, 0.35); transition: color 0.2s, border-color 0.2s, background-color 0.2s, transform 0.2s var(--ease-out), box-shadow 0.2s; }
+.price-target:hover { transform: translateY(-2px); box-shadow: 0 8px 18px -10px rgba(255, 198, 92, 0.9); }
+.price-target[aria-pressed="true"] { background: linear-gradient(135deg, rgba(255, 198, 92, 0.2), rgba(255, 176, 87, 0.08)); box-shadow: 0 0 0 1px rgba(255, 198, 92, 0.25), 0 6px 16px -10px rgba(255, 198, 92, 0.9); }
+.price-target.reached[aria-pressed="true"] { border-color: rgba(74, 217, 145, 0.6); background: linear-gradient(135deg, rgba(74, 217, 145, 0.16), rgba(74, 217, 145, 0.05)); }
+.chart-dialog[open] .price-target { animation: reveal-in 0.45s var(--ease-out) backwards; }
+@media (max-width: 640px) {
+    .chart-dialog-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .chart-dialog-avatar { display: grid; width: 38px; height: 38px; }
+    .chart-dialog h2 { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .chart-dialog[open] > :not(#tipBox), .chart-dialog[open] .dlg-stat, .chart-dialog[open] .price-target { animation: none !important; }
+}
+
+/* Card do gráfico: legenda à esquerda e Candles/Linha à direita, logo acima do gráfico. */
+.chart-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 8px; }
+.chart-toolbar .bt-legend { margin-top: 0; }
+.chart-toolbar .seg { margin-left: auto; }

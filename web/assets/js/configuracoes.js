@@ -6,6 +6,7 @@ const form = document.getElementById('strategyForm');
 const msg = document.getElementById('strategyMsg');
 let defaults = null;
 let options = [];
+let saved = {};  // regra salva de cada tipo: {group: {key, text}} (o "Em vigor" de cada cartão)
 // Cor de cada tipo (a mesma da classe na Carteira) e ícone.
 const GROUP_COLORS = { acoes: '#4f8dff', fundos: '#3ddc97', etfs: '#ffc65c', internacionais: '#a78bfa' };
 const GROUP_ICONS = {
@@ -20,7 +21,8 @@ function showMsg(ok, text) {
     msg.textContent = text;
 }
 
-// Um cartão por tipo de ativo, na cor da classe, com a regra escolhida ({group, groupLabel, key}).
+// Um cartão por tipo de ativo, na cor da classe, com a regra escolhida ({group, groupLabel, key}) e,
+// embaixo, a regra em vigor (a salva, com o texto do Python); "não salvo" quando a escolha difere dela.
 function renderKinds(kinds) {
     const grid = document.getElementById('kindsGrid');
     grid.innerHTML = kinds.map(k => `
@@ -30,9 +32,20 @@ function renderKinds(kinds) {
             <select class="select strategy-kind" name="kind_${k.group}" aria-label="Regra de venda: ${escapeHTML(k.groupLabel)}">
                 ${options.map(o => `<option value="${o.key}"${o.key === k.key ? ' selected' : ''}>${escapeHTML(o.label)}</option>`).join('')}
             </select>
+            <span class="kind-now"><span class="kind-now-head"><b>Em vigor</b><span class="badge badge-fill kind-unsaved">não salvo</span></span>
+                <span class="kind-now-text">${escapeHTML(saved[k.group]?.text || '—')}</span></span>
         </label>`).join('');
     revealItems(grid, '.kind-card');
+    markUnsaved();
     markDiagrams();
+}
+
+// Cartões cuja escolha ainda não foi salva (a regra em vigor continua a anterior).
+function markUnsaved() {
+    form.querySelectorAll('select.strategy-kind').forEach(sel => {
+        const group = sel.name.slice(5);
+        sel.closest('.kind-card').classList.toggle('unsaved', !!saved[group] && saved[group].key !== sel.value);
+    });
 }
 
 // Destaca as ilustrações das regras escolhidas em algum tipo e mostra o alvo digitado nelas.
@@ -46,6 +59,7 @@ form.addEventListener('change', (ev) => {
     if (ev.target.matches('select.strategy-kind')) {
         const card = ev.target.closest('.kind-card');
         card.classList.remove('changed'); void card.offsetWidth; card.classList.add('changed'); // pulso de confirmação
+        markUnsaved();
     }
     markDiagrams();
 });
@@ -61,12 +75,8 @@ function fill(s) {
 function show(data) {
     defaults = data.default;
     options = data.options;
+    saved = Object.fromEntries(data.strategy.kinds.map(k => [k.group, { key: k.key, text: k.text }]));
     fill(data.strategy);
-    const current = document.getElementById('currentText');
-    current.innerHTML = data.strategy.kinds
-        .map(k => `<li style="--g:${GROUP_COLORS[k.group] || '#5aa2ff'}"><strong>${escapeHTML(k.groupLabel)}</strong><span>${escapeHTML(k.text)}</span></li>`).join('');
-    current._itemsSeen = false;
-    revealItems(current, ':scope > li');
     document.getElementById('reversalText').textContent = `Reversão de tendência: ${data.strategy.reversal}.`;
 }
 
@@ -100,13 +110,38 @@ form.addEventListener('submit', async (event) => {
 
 // Aviso de imposto (tax_alert.py, rotas /api/configuracoes/avisos).
 const alertForm = document.getElementById('alertForm');
-function showAlert(data) {
-    alertForm.elements.enabled.checked = data.alert.enabled;
-    alertForm.elements.warnAt.value = Math.round(data.alert.warnAt);
-    alertForm.elements.warnAt.disabled = !data.alert.enabled;
-    document.getElementById('alertText').textContent = data.text;
+const warnRange = document.getElementById('warnRange');
+let taxLimit = 20000;
+// Régua do aviso: de R$ 0 até um pouco além do limite; as faixas (sem aviso, com aviso, acima do
+// limite) e as marcas acompanham o valor digitado ou arrastado.
+const TAX_SCALE = 1.25;
+function syncTaxScale() {
+    const max = taxLimit * TAX_SCALE;
+    const warn = Math.min(taxLimit, Math.max(0, Number(alertForm.elements.warnAt.value) || 0));
+    const bar = alertForm.querySelector('.tax-bar');
+    bar.style.setProperty('--warn', `${(warn / max * 100).toFixed(2)}%`);
+    bar.style.setProperty('--limit', `${(taxLimit / max * 100).toFixed(2)}%`);
+    alertForm.querySelector('.tax-warn-mark span').textContent = `aviso ${fmtBRL(warn).replace(',00', '')}`;
+    alertForm.querySelector('.tax-panel').classList.toggle('off', !alertForm.elements.enabled.checked);
 }
-alertForm.elements.enabled.addEventListener('change', () => { alertForm.elements.warnAt.disabled = !alertForm.elements.enabled.checked; });
+function showAlert(data) {
+    taxLimit = data.limit;
+    const [lo, hi] = data.range;
+    for (const el of [alertForm.elements.warnAt, warnRange]) { el.min = lo; el.max = hi; }
+    alertForm.elements.enabled.checked = data.alert.enabled;
+    alertForm.elements.warnAt.value = warnRange.value = Math.round(data.alert.warnAt);
+    alertForm.elements.warnAt.disabled = warnRange.disabled = !data.alert.enabled;
+    document.getElementById('taxLimit').textContent = fmtBRL(data.limit).replace(',00', '');
+    alertForm.querySelector('.tax-limit-mark span').textContent = `limite ${fmtBRL(data.limit).replace(',00', '')}`;
+    document.getElementById('alertText').textContent = data.text;
+    syncTaxScale();
+}
+alertForm.elements.enabled.addEventListener('change', () => {
+    alertForm.elements.warnAt.disabled = warnRange.disabled = !alertForm.elements.enabled.checked;
+    syncTaxScale();
+});
+alertForm.elements.warnAt.addEventListener('input', () => { warnRange.value = alertForm.elements.warnAt.value; syncTaxScale(); });
+warnRange.addEventListener('input', () => { alertForm.elements.warnAt.value = warnRange.value; syncTaxScale(); });
 alertForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const out = document.getElementById('alertMsg');
