@@ -58,6 +58,7 @@ function pyCall(method, path, body) {
 // ---------------------------------------------------------------- Login (versão publicada)
 
 function toLogin() {
+    try { sessionStorage.removeItem('marketpressure_logado'); } catch (e) { /* sem armazenamento */ }
     location.replace(`/login?next=${encodeURIComponent(location.pathname + location.search + location.hash)}`);
 }
 
@@ -71,15 +72,23 @@ async function checkSession() {
     return response?.ok ? response.json() : null;
 }
 
-// Elementos [data-auth] (link "Conta", nome e "Sair") só aparecem com login.
+// Elementos [data-auth] (link "Conta", nome e "Sair") só aparecem com login. Com o login já
+// confirmado nesta sessão do navegador (AUTH_KEY), aparecem já na carga da página: no celular as
+// abas dividem a barra, e a "Conta" surgindo depois movia as outras (e o destaque da aba).
+const AUTH_KEY = 'marketpressure_logado';
+const showAuth = (on) => document.querySelectorAll('[data-auth]').forEach(el => { el.hidden = !on; });
+try { if (IN_BROWSER && sessionStorage.getItem(AUTH_KEY) === '1') showAuth(true); } catch (e) { /* sem armazenamento */ }
 const session = IN_BROWSER ? checkSession() : Promise.resolve(null);
 session.then(user => {
+    // Sem resposta (rede): mantém como está; sessão vencida já foi para o login (toLogin limpa a marca).
     if (!user) return;
-    document.querySelectorAll('[data-auth]').forEach(el => { el.hidden = false; });
+    try { sessionStorage.setItem(AUTH_KEY, '1'); } catch (e) { /* sem armazenamento */ }
+    showAuth(true);
     const name = document.getElementById('userName');
     if (name) name.textContent = user.name;
     document.getElementById('logoutBtn')?.addEventListener('click', async () => {
         await fetch('/auth/logout', { method: 'POST' }).catch(() => null);
+        try { sessionStorage.removeItem(AUTH_KEY); } catch (e) { /* sem armazenamento */ }
         location.replace('/login');
     });
 });
@@ -356,6 +365,17 @@ function setupSlidingPill(group, itemSel, activeSel, pillClass = 'slide-pill') {
     };
     let frame = 0;
     const later = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(rest); };
+    // Layout que mudou sozinho (aba que aparece, fonte carregada, tela girada): a pílula vai direto
+    // para o lugar novo, sem deslizar (senão parecia voltar para outra aba e depois ir para a certa).
+    const snap = () => {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => {
+            const moving = pill.classList.contains('moving');
+            pill.classList.remove('moving');
+            rest();
+            if (moving) { void pill.offsetWidth; pill.classList.add('moving'); }
+        });
+    };
     rest();
     group.addEventListener('pointerover', (e) => {
         const item = e.target.closest(itemSel);
@@ -374,12 +394,18 @@ function setupSlidingPill(group, itemSel, activeSel, pillClass = 'slide-pill') {
     });
     // Voltar à página pelo histórico (cache do navegador): a aba clicada antes não vale mais.
     window.addEventListener('pageshow', (e) => { if (e.persisted) { pending = null; rest(); } });
-    new MutationObserver(() => {
+    new MutationObserver((records) => {
         if (!group.contains(pill)) group.prepend(pill);
-        later();
+        // Item ativo trocado: desliza; item que aparece/some ou grupo redesenhado: reposiciona.
+        const layout = records.some(r => r.type === 'childList' || r.attributeName === 'hidden');
+        if (layout) snap(); else later();
     }).observe(group, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-selected', 'aria-pressed', 'aria-current', 'hidden'] });
-    // Fontes carregadas, item que aparece (aba "Conta" com o login), grupo que sai de uma seção oculta.
-    if (window.ResizeObserver) new ResizeObserver(later).observe(group);
+    // Fontes carregadas, grupo que sai de uma seção oculta, tela girada: o tamanho dos itens muda.
+    if (window.ResizeObserver) {
+        const ro = new ResizeObserver(snap);
+        ro.observe(group);
+        group.querySelectorAll(itemSel).forEach(item => ro.observe(item));
+    }
 }
 
 // Abas do topo: criadas já na carga do script (o <nav> vem antes dele na página), para a

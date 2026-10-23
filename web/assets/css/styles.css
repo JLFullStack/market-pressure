@@ -277,6 +277,7 @@ tr:hover { background-color: rgba(90, 162, 255, 0.05); }
     width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
     transition: transform 0.3s var(--ease-out);
 }
+.tab-short { display: none; }
 .tab:hover { color: var(--text-color); }
 .tab:hover .tab-icon { transform: translateY(-2px) scale(1.08); }
 .tab:active .tab-icon { transform: scale(0.9); }
@@ -758,6 +759,9 @@ ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px
     /* Acima da barra de abas fixa (~72px de altura). */
     .scroll-top { right: 16px; bottom: calc(96px + env(safe-area-inset-bottom)); }
     .tab-icon { width: 23px; height: 23px; }
+    /* Com cinco abas, "Configurações" não cabe no botão: rótulo curto (o nome inteiro fica no aria-label). */
+    .tab-long { display: none; }
+    .tab-short { display: inline; }
 
     /* Selects dos controles ocupam a linha toda e não passam da tela (opções longas, como
        a de liquidez, são cortadas dentro do campo). */
