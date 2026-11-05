@@ -337,7 +337,7 @@ def get_taxes(req):
     """Sub-aba Impostos: apuração, DARF e declaração do ano (ano=AAAA). Sem cotações, segue sem os proventos."""
     portfolio = portfolio_of(req, needs_entries=True)
     try:
-        analysis = svc.full_analysis(portfolio, reuse=True)
+        analysis = {"dividends": svc.receivables(portfolio)["received"]["dividends"]}  # só os já pagos
     except RuntimeError:  # UpstreamError e histórico indisponível
         log.warning("cotações indisponíveis para a declaração; segue sem os proventos", exc_info=True)
         analysis = None

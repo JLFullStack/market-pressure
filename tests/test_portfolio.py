@@ -347,6 +347,38 @@ class DividendMonthsTest(unittest.TestCase):
             {"month": None, "total": 1.0, "confirmed": 0, "expected": 1.0}])
 
 
+class PendingDividendsTest(unittest.TestCase):
+    DIVIDENDS = [{"ticker": "CXSE3", "exDate": "2026-11-04", "comDate": "2026-11-03", "total": 0.7},
+                 {"ticker": "CXSE3", "exDate": "2026-05-04", "comDate": "2026-04-30", "total": 0.5},
+                 {"ticker": "BOVA11", "exDate": "2026-11-04", "comDate": "2026-11-03", "total": 2.0}]
+    ROW = {"ticker": "CXSE3", "comDate": "2026-11-03", "confirmed": True}
+
+    def test_announced_and_unpaid_is_not_received(self):
+        received, pending = pf.split_pending_dividends(self.DIVIDENDS, [self.ROW])
+        self.assertEqual([d["total"] for d in pending], [0.7])
+        self.assertEqual([d["total"] for d in received], [0.5, 2.0])  # pago e ativo sem data de pagamento
+
+    def test_near_record_date_matches_but_a_distant_one_does_not(self):
+        near = {**self.ROW, "comDate": "2026-11-05"}          # Yahoo e B3 com datas diferentes
+        self.assertEqual(len(pf.split_pending_dividends(self.DIVIDENDS, [near])[1]), 1)
+        far = {**self.ROW, "comDate": "2026-11-10"}
+        self.assertEqual(pf.split_pending_dividends(self.DIVIDENDS, [far])[1], [])
+
+    def test_expected_row_does_not_hold_a_paid_dividend(self):
+        expected = {**self.ROW, "confirmed": False}           # previsto: outro provento, ainda por vir
+        self.assertEqual(pf.split_pending_dividends(self.DIVIDENDS, [expected])[1], [])
+
+    def test_received_payload_leaves_the_pending_out(self):
+        from marketpressure import portfolio_service as ps
+        out = ps.received_dividends({"dividends": self.DIVIDENDS[:2]}, [self.ROW])
+        self.assertEqual(out["total"], 0.5)
+        self.assertEqual(out["totals"], [("CXSE3", 0.5)])
+        self.assertEqual(out["pendingTotal"], 0.7)
+        self.assertIn("R$ 0,70", out["pendingNote"])
+        self.assertEqual(out["warning"], "")
+        self.assertTrue(ps.received_dividends({"dividends": []}, [], ["CXSE3 (erro)"])["warning"])
+
+
 class AssetTargetRowTest(unittest.TestCase):
     def test_above_target_flag(self):
         from marketpressure import portfolio_service as ps

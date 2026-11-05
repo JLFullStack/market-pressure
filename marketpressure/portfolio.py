@@ -466,6 +466,26 @@ def dividends_to_receive(transactions, ticker, events, today=None):
     return out
 
 
+PENDING_MATCH_DAYS = 3  # dias entre a data-com da B3 e a calculada da data-ex do Yahoo, que podem divergir
+
+
+def split_pending_dividends(dividends, rows):
+    """Separa os proventos pela data-ex (dividends_received) em (recebidos, ainda não pagos). Não
+    pago = há em rows (dividends_to_receive) um confirmado do mesmo ticker com data-com próxima.
+    Quem não tem data de pagamento na B3 (ETFs, BDRs, EUA, cripto) conta como recebido. A
+    rentabilidade segue contando tudo pela data-ex, quando o preço cai e o direito já é do dono."""
+    announced = {}
+    for r in rows:
+        if r["confirmed"]:
+            announced.setdefault(r["ticker"], []).append(date.fromisoformat(r["comDate"]))
+    received, pending = [], []
+    for d in dividends:
+        com = date.fromisoformat(d["comDate"])
+        unpaid = any(abs((com - other).days) <= PENDING_MATCH_DAYS for other in announced.get(d["ticker"], ()))
+        (pending if unpaid else received).append(d)
+    return received, pending
+
+
 def open_lots(transactions, ticker, candles, target=EXIT["partialTarget"], fraction=EXIT["partialFraction"],
               timing="alvo", ind=None):
     """Compras (lotes) ainda abertas de um ticker e quanto falta vender de cada uma pela saída

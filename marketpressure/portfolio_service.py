@@ -14,12 +14,12 @@ from . import goals as gl
 from . import market_data, runtime
 from . import strategy as st
 from . import tax_alert, tax_report
-from .core import add_up, day_of, fmt_date, session_in_progress, today_iso
+from .core import add_up, day_of, fmt_brl, fmt_date, session_in_progress, today_iso
 from .portfolio import (APORTE_MODES, BENCHMARK, CLASS_GROUP, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
                         analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_history,
                         contribution_items, contribution_path, contribution_plan, dividends_by_month, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
                         market_of, net_flows, normalize_ticker, open_lots, parse_number, patrimony_bars, period_start, receivables_by_month,
-                        rebase_series,
+                        rebase_series, split_pending_dividends,
                         suggest_class, targets_off, tx_flow)
 from .portfolio import asset_chart as pf_asset_chart
 
@@ -215,16 +215,12 @@ def _asset_target_row(i, total):
 
 
 def analysis_payload(portfolio):
-    """O que a Visão geral, os Proventos recebidos e a Meta por ativo mostram."""
+    """O que a Visão geral e a Meta por ativo mostram (os proventos recebidos vêm de receivables)."""
     a = full_analysis(portfolio)
     series = a["series"]
     return {
         "open": [{k: v for k, v in p.items() if k != "setup"} for p in a["open"]],
         "fixed": [{k: v for k, v in f.items() if k != "entries"} for f in a["fixed"]],
-        "dividends": a["dividends"],
-        "dividendTotals": sorted(a["divByTicker"].items(), key=lambda kv: -kv[1]),
-        "dividendMonths": (months := dividends_by_month(a["dividends"], today_iso())),
-        "dividendYear": add_up(m["total"] for m in months),
         "allocation": a["allocation"], "targetSum": a["targetSum"], "targetsOff": targets_off(a["targetSum"]),
         "kpis": a["kpis"], "hasForeign": a["hasForeign"],
         "chart": _chart(series), "patrimony": patrimony_bars(series), "lastDay": series["dates"][-1] if series else None,
@@ -257,8 +253,26 @@ def contribution(portfolio, amount, mode, base, selected, options=None, candidat
             "history": contribution_history(a["series"], portfolio["classes"])}
 
 
+def received_dividends(analysis, rows, failed=()):
+    """Os proventos que já foram pagos, tirando da análise (que conta pela data-ex) os anunciados
+    em rows e ainda não pagos. failed: ativos sem a data de pagamento agora, que contam pela data-ex."""
+    received, pending = split_pending_dividends(analysis["dividends"], rows)
+    by_ticker = {}
+    for d in received:
+        by_ticker[d["ticker"]] = by_ticker.get(d["ticker"], 0) + d["total"]
+    months = dividends_by_month(received, today_iso())
+    pending_total = add_up(d["total"] for d in pending)
+    return {"dividends": received, "totals": sorted(by_ticker.items(), key=lambda kv: -kv[1]),
+            "total": add_up(d["total"] for d in received), "months": months, "year": add_up(m["total"] for m in months),
+            "pendingTotal": pending_total,
+            "pendingNote": f"{fmt_brl(pending_total)} a receber já contam no lucro e na rentabilidade" if pending else "",
+            "warning": "Sem a data de pagamento desses ativos agora: os proventos deles contam como recebidos pela data-ex."
+                       if failed else ""}
+
+
 def receivables(portfolio):
-    """Proventos anunciados e ainda não pagos dos ativos da B3, por data de pagamento."""
+    """Proventos anunciados e ainda não pagos dos ativos da B3, por data de pagamento, e os já
+    recebidos (received), que dependem deles."""
     tickers = [t for t in dict.fromkeys(tx["ticker"] for tx in portfolio["transactions"])
                if market_of(portfolio, t) == "b3"]
     rows, failed = [], []
@@ -272,7 +286,7 @@ def receivables(portfolio):
     rows.sort(key=lambda r: (r["paymentDate"] or "9999-99-99", r["ticker"]))
     return {"rows": rows, "failed": failed, "months": receivables_by_month(rows), "total": add_up(r["total"] for r in rows),
             "net": add_up(r["net"] for r in rows), "expected": add_up(r["total"] for r in rows if not r["confirmed"]),
-            "jcpTax": JCP_TAX}
+            "jcpTax": JCP_TAX, "received": received_dividends(full_analysis(portfolio, reuse=True), rows, failed)}
 
 
 def _portfolio_data(portfolio, today):

@@ -232,7 +232,7 @@
                     </table>
                 </div>
                 <ul class="notes">
-                    <li><strong>Lucro e rentabilidade</strong> incluem valorização, vendas e proventos, sobre o total comprado do ativo.</li>
+                    <li><strong>Lucro e rentabilidade</strong> incluem valorização, vendas e proventos (desde a data-ex, mesmo antes do pagamento), sobre o total comprado do ativo.</li>
                     <li><strong>Situação</strong> segue a estratégia de venda escolhida em <a href="configuracoes.html" class="inline-link">Configurações</a>; toque no selo para ver o motivo.
                         <strong>VENDER</strong> na reversão de tendência (vende tudo) ou <strong>VENDER X%</strong> quando uma compra atingiu o alvo (na regra "quando a alta perder força", só depois de um fechamento sem força ainda no alvo ou acima, para vender na abertura);
                         <strong>COMPRAR</strong> num pullback novo, a 5% ou mais das compras abertas e, fora dos internacionais, sem tendência fraca nem desempenho abaixo do Ibovespa em 6 meses (a mesma regra da Indicação do Screener); <strong>MANTER</strong> nos demais casos.</li>
@@ -255,7 +255,7 @@
                 </div>
                 <div>
                     <dt>Proventos</dt>
-                    <dd><p>Valor por cota × quantidade possuída na data-com (o pregão anterior à data-ex).</p></dd>
+                    <dd><p>Valor por cota × quantidade possuída na data-com (o pregão anterior à data-ex). No lucro e na rentabilidade contam desde a data-ex; em Proventos recebidos, só depois do pagamento.</p></dd>
                 </div>
                 <div>
                     <dt>Rentabilidade por cota (TWR)</dt>
@@ -634,7 +634,7 @@
             </div>
             <ul class="notes">
                 <li>Proventos anunciados por empresas e FIIs na B3 e ainda não pagos. Cobre ações, units e FIIs; ETFs, BDRs, ativos dos EUA e cripto ficam de fora.</li>
-                <li><strong>Confirmado:</strong> a data-com já passou e a quantidade é a que você tinha nela. Já aparece em Proventos recebidos e na rentabilidade, que contam pela data-ex.</li>
+                <li><strong>Confirmado:</strong> a data-com já passou e a quantidade é a que você tinha nela. Só passa para Proventos recebidos depois do pagamento, mas já conta no lucro e na rentabilidade, porque o preço cai na data-ex.</li>
                 <li><strong>Previsto:</strong> a data-com é hoje ou futura e a quantidade é a atual, então só vale se o ativo for mantido até lá.</li>
             </ul>
         </div>
@@ -657,6 +657,7 @@
             </div>
             <ul class="notes">
                 <li>Valores brutos estimados pela data-com e pelos proventos informados pelo Yahoo Finance (data-ex); podem diferir do extrato da corretora.</li>
+                <li><strong>ETFs, BDRs, ativos dos EUA e cripto</strong> não têm data de pagamento disponível: contam como recebidos a partir da data-ex.</li>
                 <li><strong>JCP</strong> tem 17,5% de IR retido na fonte desde 2026 (15% até 2025).</li>
                 <li><strong>Ativos dos EUA:</strong> dividendos brutos, sem os 30% de IR retidos lá, convertidos pelo câmbio USDBRL da data-ex.</li>
             </ul>

@@ -327,9 +327,10 @@ def _position(p, info, ranked, rule, transactions):
     return lines + [""]
 
 
-def build(portfolio, analysis, settings):
+def build(portfolio, analysis, settings, received):
     """Texto da análise da carteira em Markdown. analysis: portfolio_service.full_analysis;
-    settings: strategy.load (a regra de venda de cada classe)."""
+    settings: strategy.load (a regra de venda de cada classe); received: os proventos já pagos
+    (portfolio_service.received_dividends)."""
     k = analysis["kpis"]
     total = k["total"]
     names = _names()
@@ -405,12 +406,15 @@ def build(portfolio, analysis, settings):
         lines.append("")
 
     year_ago = pf.add_months(today_iso(), -12)
-    last_year = [d for d in analysis["dividends"] if d["exDate"] >= year_ago]
+    last_year = [d for d in received["dividends"] if d["exDate"] >= year_ago]
     lines += ["# Proventos", "",
-              f"- Recebidos desde o início: {fmt_brl(k['dividendsTotal'])}; nos últimos 12 meses: "
+              f"- Recebidos desde o início: {fmt_brl(received['total'])}; nos últimos 12 meses: "
               f"{fmt_brl(add_up(d['total'] for d in last_year))}"
               + (f" ({fmt_num(add_up(d['total'] for d in last_year) / total * 100, 2)}% do patrimônio atual)" if total else "")]
-    by_ticker = sorted(analysis["divByTicker"].items(), key=lambda kv: -kv[1])[:5]
+    if received["pendingTotal"]:
+        lines.append(f"- Com data-com já passada e ainda não pagos: {fmt_brl(received['pendingTotal'])} "
+                     "(já contam no lucro e na rentabilidade)")
+    by_ticker = received["totals"][:5]
     if by_ticker:
         lines.append("- Maiores pagadores desde o início: " + " · ".join(f"{t} {fmt_brl(v)}" for t, v in by_ticker))
     lines.append("")
@@ -429,4 +433,4 @@ def build(portfolio, analysis, settings):
 def prompt(portfolio):
     """{name, text} para a rota: a análise (a última, se a carteira não mudou) e o texto."""
     analysis = svc.full_analysis(portfolio, reuse=True)
-    return {"name": portfolio["name"], "text": build(portfolio, analysis, st.load())}
+    return {"name": portfolio["name"], "text": build(portfolio, analysis, st.load(), svc.receivables(portfolio)["received"])}

@@ -7,7 +7,8 @@ import unittest
 from http.server import ThreadingHTTPServer
 from unittest import mock
 
-from marketpressure import market_data, screener, server
+from marketpressure import core, market_data, screener, server
+from tests import support
 from tests.support import DatabaseTestCase
 
 
@@ -190,6 +191,33 @@ class ServerTest(DatabaseTestCase):
                      "**Candidatos do ranking do Screener**", "tabela ordenada por prioridade"):
             self.assertIn(part, data["text"])
         self.assertEqual(self.request("GET", "/api/carteira/nao-existe/prompt")[0], 404)
+
+    def test_announced_unpaid_dividend_is_not_received(self):
+        pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "Proventos"})[1]["id"]
+        self.request("POST", "/api/carteira/acao", {"action": "nova_operacao", "id": pid, "ticker": "PETR4", "market": "b3",
+                                                    "type": "compra", "date": "2021-02-01", "quantity": "2",
+                                                    "price": "100", "fees": "0"})
+        raw = support.raw_history("PETR4")
+        ex = raw["candles"][300]["date"]
+        raw["dividends"] = [{"date": ex, "amount": 0.35}]
+        com = core.day_of(raw["candles"][299]["date"])
+        event = {"type": "DIVIDENDO", "rate": 0.35, "comDate": com, "paymentDate": "2099-01-01", "relatedTo": ""}
+        cdi = lambda start: {"rates": []}
+        with mock.patch.object(market_data, "raw_history", lambda ticker, market="b3": raw if ticker == "PETR4" else support.raw_history(ticker)), \
+                mock.patch.object(market_data, "cdi", cdi), \
+                mock.patch.object(market_data, "proventos", lambda t: {"ticker": t, "events": [event] if t == "PETR4" else []}):
+            analysis = self.request("GET", f"/api/carteira/{pid}/analise")[1]
+            data = self.request("GET", f"/api/carteira/{pid}/proventos")[1]
+            year = com[:4]
+            taxes = self.request("GET", f"/api/carteira/{pid}/impostos?ano={year}")[1]
+            text = self.request("GET", f"/api/carteira/{pid}/prompt")[1]["text"]
+        self.assertAlmostEqual(analysis["kpis"]["dividendsTotal"], 0.7)      # o lucro conta pela data-ex
+        self.assertEqual(data["received"]["dividends"], [])
+        self.assertEqual(data["received"]["total"], 0)
+        self.assertAlmostEqual(data["received"]["pendingTotal"], 0.7)
+        self.assertAlmostEqual(data["total"], 0.7)                           # só em "a receber"
+        self.assertEqual(taxes["declaration"]["income"], [])
+        self.assertIn("ainda não pagos: R$ 0,70", text)
 
     def test_contribution_route(self):
         pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "Aporte"})[1]["id"]

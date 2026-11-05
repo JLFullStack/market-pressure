@@ -388,8 +388,7 @@ async function loadPortfolio(busy) {
     $('refreshBtn').disabled = true;
     $('lastUpdate').innerText = 'Carregando cotações...';
     busy.text('Carregando cotações e calculando a carteira...');
-    // Proventos a receber em paralelo; o card é preenchido depois do resto da página.
-    const receivables = apiGet(`/carteira/${portfolio.id}/proventos`).then(r => ({ ok: true, r }), e => ({ ok: false, e }));
+    state.receivables = null;
     let a;
     try {
         a = await apiGet(`/carteira/${portfolio.id}/analise`);
@@ -417,12 +416,13 @@ async function loadPortfolio(busy) {
     renderAllocation(a);
     renderPositions(a);
     renderAssetTargets(a);
-    renderDividends(a);
+    renderDividends(null, 'Carregando proventos...');
     $('receivableTotals').innerText = '';
     $('receivablesBody').innerHTML = `<tr><td colspan="8" class="empty-row">Carregando proventos anunciados...</td></tr>`;
     revealItems($('receivablesBody'));
     busy();
-    const result = await receivables;
+    // Depois da análise, que o servidor reaproveita: os recebidos vêm daqui (dependem das datas de pagamento).
+    const result = await apiGet(`/carteira/${portfolio.id}/proventos`).then(r => ({ ok: true, r }), e => ({ ok: false, e }));
     if (run !== state.run) return;
     renderReceivables(result);
 }
@@ -516,8 +516,6 @@ function renderKpis(a) {
     delta('kpiProfitPct', k.profitPct);
     toneBySign($('kpiProfitCard'), k.profit);
     $('kpiProfitNote').innerText = `Valorização ${fmtBRL(k.unrealized)} · proventos ${fmtBRL(k.dividendsTotal)} · realizado ${fmtBRL(k.realized)}`;
-    setCount($('kpiDividends'), k.dividendsTotal, { format: 'brl' });
-    $('kpiDividendsNote').innerText = 'Brutos, estimados pela data-com' + (a.hasForeign ? '; EUA sem os 30% de IR retidos' : '');
     setCount($('kpiDay'), k.day ? k.day.value : null, { format: 'sbrl' });
     delta('kpiDayPct', k.day ? k.day.pct : null);
     toneBySign($('kpiDayCard'), k.day ? k.day.value : null);
@@ -1738,7 +1736,7 @@ async function onHistoryClick(ev) {
 function renderDividendChart() {
     const a = state.analysis;
     if (!a || typeof Chart === 'undefined') return;
-    const received = a.dividendMonths || [];
+    const received = state.receivables?.received.months || [];
     const future = state.receivables?.months || [];
     const keys = received.map(m => m.month);
     for (const m of future) if (!keys.includes(m.month)) keys.push(m.month);
@@ -1752,7 +1750,7 @@ function renderDividendChart() {
     // Sem nenhum provento no período: uma frase no lugar de um eixo vazio.
     const any = series.some(x => x.data.some(v => v > 0));
     $('dividendChart').parentElement.hidden = !any;
-    $('dividendChartEmpty').hidden = any;
+    $('dividendChartEmpty').hidden = any || !state.receivables;  // sem resposta ainda, a frase não vale
     whenVisible('dividendChart', () => {
         state.dividendChart?.destroy();
         state.dividendChart = null;
@@ -1786,8 +1784,8 @@ function renderDividendChart() {
 
 // "Quem mais pagou": barras dos ativos com mais proventos recebidos (proporcionais ao maior).
 const DIVIDEND_RANKING = 8;
-function renderDividendRanking(a) {
-    const top = a.dividendTotals.slice(0, DIVIDEND_RANKING);
+function renderDividendRanking(totals) {
+    const top = totals.slice(0, DIVIDEND_RANKING);
     const max = top.length ? top[0][1] : 0;
     $('dividendRanking').innerHTML = top.length ? top.map(([t, v], k) => `<div class="rank-bar" style="--k:${k}">
             <span class="rank-bar-label">${escapeHTML(t)}</span>
@@ -1796,17 +1794,26 @@ function renderDividendRanking(a) {
         : '<p class="small muted">Nenhum provento recebido ainda.</p>';
 }
 
-function renderDividends(a) {
-    setCount($('divYear'), a.dividendYear, { format: 'brl' });
-    $('divYearNote').innerText = 'pela data-ex, brutos';
-    setCount($('divTotal'), a.kpis.dividendsTotal, { format: 'brl' });
-    $('divTotalNote').innerText = `${a.dividends.length} pagamento(s) desde a primeira compra`;
-    renderDividendRanking(a);
+// Os proventos já pagos (received de /proventos); sem eles, os campos vazios com a nota.
+function renderDividends(received, note) {
+    const foreign = state.analysis?.hasForeign ? '; EUA sem os 30% de IR retidos' : '';
+    setCount($('kpiDividends'), received ? received.total : null, { format: 'brl' });
+    $('kpiDividendsNote').innerText = received
+        ? [`Brutos, estimados pela data-com${foreign}`, received.pendingNote].filter(Boolean).join(' · ') : note;
+    setCount($('divYear'), received ? received.year : null, { format: 'brl' });
+    $('divYearNote').innerText = received ? 'pela data-ex, brutos' : note;
+    setCount($('divTotal'), received ? received.total : null, { format: 'brl' });
+    $('divTotalNote').innerText = received ? `${received.dividends.length} pagamento(s) desde a primeira compra` : note;
+    renderDividendRanking(received ? received.totals : []);
     renderDividendChart();
-    $('dividendTotals').innerHTML = a.dividendTotals.length
-        ? `Total por ativo: ${a.dividendTotals.map(([t, v]) => `<strong>${t}</strong> ${fmtBRL(v)}`).join(' · ')} · <strong>Total ${fmtBRL(a.kpis.dividendsTotal)}</strong>`
-        : '';
-    $('dividendsBody').innerHTML = a.dividends.length ? a.dividends.map(d => `
+    const totals = received?.totals || [];
+    const parts = [];
+    if (totals.length) parts.push(`Total por ativo: ${totals.map(([t, v]) => `<strong>${t}</strong> ${fmtBRL(v)}`).join(' · ')} · <strong>Total ${fmtBRL(received.total)}</strong>`);
+    if (received?.warning) parts.push(`<span class="neg">${escapeHTML(received.warning)}</span>`);
+    $('dividendTotals').innerHTML = parts.join(' · ');
+    const rows = received?.dividends || [];
+    $('dividendsBody').innerHTML = !received ? `<tr><td colspan="5" class="empty-row">${escapeHTML(note)}</td></tr>`
+        : rows.length ? rows.map(d => `
         <tr>
             <td class="nowrap">${fmtDate(d.comDate)}</td>
             <td><strong>${d.ticker}</strong></td>
@@ -1824,7 +1831,7 @@ function renderReceivables(result) {
     setCount($('divToReceive'), result.ok ? result.r.total : null, { format: 'brl' });
     $('divToReceiveNote').innerText = !result.ok ? 'proventos anunciados indisponíveis'
         : result.r.rows.length ? `${fmtBRL(result.r.net)} líquido estimado` : 'nenhum anunciado';
-    renderDividendChart();
+    renderDividends(result.ok ? result.r.received : null, 'Proventos indisponíveis agora');
     if (!result.ok) {
         $('receivableTotals').innerHTML = `<span class="neg">Proventos anunciados indisponíveis (${escapeHTML(result.e.message)}).</span>`;
         $('receivablesBody').innerHTML = `<tr><td colspan="8" class="empty-row">Nenhum provento anunciado a receber.</td></tr>`;
@@ -1834,7 +1841,7 @@ function renderReceivables(result) {
     const r = result.r, rows = r.rows;
     const parts = [];
     if (rows.length) {
-        parts.push(`Total a receber: <strong>${fmtBRL(r.total)}</strong> bruto · ${fmtBRL(r.net)} líquido estimado (JCP com ${fmtNum(r.jcpTax * 100, 0)}% de IR)`);
+        parts.push(`Total a receber: <strong>${fmtBRL(r.total)}</strong> bruto · ${fmtBRL(r.net)} líquido estimado (JCP com ${fmtNum(r.jcpTax * 100, 1)}% de IR)`);
         if (r.expected > 0) parts.push(`${fmtBRL(r.expected)} previstos dependem de manter o ativo até a data-com`);
     }
     if (r.failed.length) parts.push(`<span class="neg">Proventos anunciados indisponíveis: ${r.failed.map(escapeHTML).join('; ')}.</span>`);

@@ -39,9 +39,12 @@ class DatabaseTestCase(unittest.TestCase):
         database.DATA_DIR, database.BACKUP_DIR = self.data_dir, self.data_dir / "backup"
         self._raw_history = market_data.raw_history
         market_data.raw_history = lambda ticker, market="b3": raw_history(ticker)
+        self._proventos = market_data.proventos
+        market_data.proventos = lambda ticker: {"ticker": ticker, "events": []}
         backtest_prompt._cache.clear()   # resultados de backtest guardados para o prompt de análise
 
     def tearDown(self):
         market_data.raw_history = self._raw_history
+        market_data.proventos = self._proventos
         database.DATA_DIR, database.BACKUP_DIR = self._dirs
         shutil.rmtree(self.data_dir.parent, ignore_errors=True)

@@ -587,8 +587,8 @@ def method():
 
 
 def payload(portfolio, year=None, analysis=None, portfolio_count=1):
-    """Tudo o que a sub-aba Impostos mostra. analysis (portfolio_service.full_analysis) traz os
-    proventos; sem ela, o resto funciona. ValueError com um ano inválido."""
+    """Tudo o que a sub-aba Impostos mostra. analysis ({"dividends": os proventos já pagos}, de
+    portfolio_service.receivables); sem ela, o resto funciona. ValueError com um ano inválido."""
     today = today_iso()
     txs = portfolio.get("transactions") or []
     years = sorted({t["date"][:4] for t in txs} | {today[:4]}, reverse=True)
