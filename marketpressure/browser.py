@@ -38,6 +38,12 @@ def prime(url, status, text):
     market_data.prime(url, status, text)
 
 
+def set_role(admin):
+    """O Web Worker informa o perfil da sessão (/auth/me). Sem administrador, a página só lê a
+    varredura salva pela atualização diária (ver runtime.SHARED_WRITES)."""
+    runtime.SHARED_WRITES = bool(admin)
+
+
 # ---------------------------------------------------------------- Varredura em etapas
 
 

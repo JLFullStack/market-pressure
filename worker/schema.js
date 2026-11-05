@@ -17,7 +17,8 @@ export const SCHEMA = [
 // Tabelas do screener, comuns a todos os usuários, e os históricos salvos de cada ativo
 // (history_{mercado}_{ticker}, ver marketpressure/market_data.py), também comuns. As demais
 // (carteiras) são de cada usuário e ficam em mp_tables com o nome "{id do usuário}/{tabela}";
-// o Python não sabe disso.
+// o Python não sabe disso. Todos os usuários leem as comuns; só o administrador e a atualização
+// diária gravam nelas (index.js), porque um valor errado ali apareceria para todo mundo.
 export const SHARED_TABLES = new Set(["universe", "scan", "scan_failures", "scan_analyses"]);
 export const SHARED_PREFIX = "history_";
 export const isShared = (name) => SHARED_TABLES.has(name) || name.startsWith(SHARED_PREFIX);

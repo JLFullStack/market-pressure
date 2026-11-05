@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test:worker": "node --test tests/worker.test.mjs"
   },
   "devDependencies": {
     "pyodide": "314.0.7",

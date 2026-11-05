@@ -276,7 +276,10 @@ def load_universe():
     setor da brapi quando ela conhece o ticker. Sem o Yahoo (que às vezes recusa a sessão com
     HTTP 429), a última lista do Yahoo salva (tabela universe), que tem todos os tipos; se a
     salva não veio do Yahoo, as ações da brapi; sem nenhuma, a última lista salva, qualquer que
-    seja. A lista de reserva não é gravada por cima da salva."""
+    seja. A lista de reserva não é gravada por cima da salva. Sem permissão de atualizar o que é
+    comum (runtime.SHARED_WRITES), só a salva."""
+    if not runtime.SHARED_WRITES:
+        return _saved_universe()
     try:
         brapi = {s["ticker"]: s for s in load_brapi_stocks()}
     except Exception as err:
@@ -519,7 +522,7 @@ def merge_history(stored: dict, fresh: dict, market: str) -> dict | None:
 def _save_history(ticker, market, stored, hist, now):
     """Grava os candles de pregões já fechados (e os proventos), se mudaram desde o salvo."""
     name = history_table(ticker, market)
-    if name is None:
+    if name is None or not runtime.SHARED_WRITES:
         return
     last = last_closed_day(market, now)
     closed = {"candles": [c for c in hist["candles"] if _day(c["date"], market) <= last],

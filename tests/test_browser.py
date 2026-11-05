@@ -69,6 +69,68 @@ class RemoteDatabaseTest(BrowserTestCase):
             database.read_table("portfolios")
 
 
+class RegularUserTest(BrowserTestCase):
+    """Usuário comum: só lê o que é compartilhado. Nenhum pedido que o Worker recusaria sai daqui."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(runtime, "SHARED_WRITES", False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def job(self):
+        job = screener.ScanJob()
+        job.start = browser._request_scan
+        return job
+
+    def save_scan(self, timestamp):
+        """A varredura que a atualização diária teria salvo."""
+        screener.write_scan({"version": screener.SCAN_VERSION, "timestamp": timestamp, "universeSize": 0,
+                             "analyses": [], "failures": []})
+
+    def test_never_starts_a_scan(self):
+        job = self.job()
+        browser.take_scan_request()
+        with mock.patch.object(screener, "scan_job", job):
+            for path in ("/api/scan", "/api/scan?force=1"):
+                body = json.loads(browser.handle("GET", path))["body"]
+                self.assertEqual(body, {"state": "error", "message": screener.NO_SAVED_SCAN, "scan": None})
+        self.assertFalse(browser.take_scan_request())
+        self.assertEqual(self.worker.proxied, [])
+
+    def test_shows_the_saved_scan_even_when_old_or_forced(self):
+        self.save_scan(1000)   # muito antiga
+        job = self.job()
+        with mock.patch.object(screener, "scan_job", job):
+            for path in ("/api/scan", "/api/scan?force=1"):
+                body = json.loads(browser.handle("GET", path))["body"]
+                self.assertEqual((body["state"], body["scan"]["timestamp"]), ("done", 1000))
+        self.assertFalse(browser.take_scan_request())
+
+    def test_picks_up_a_newer_saved_scan(self):
+        job = self.job()
+        with mock.patch.object(screener, "scan_job", job):
+            self.assertEqual(json.loads(browser.handle("GET", "/api/scan"))["body"]["state"], "error")
+            self.save_scan(2000)
+            self.assertEqual(json.loads(browser.handle("GET", "/api/scan"))["body"]["state"], "done")
+
+    def test_asset_list_comes_from_the_saved_one_without_any_source(self):
+        database.write_tables({"universe": [{"ticker": "PETR4", "name": "Petrobras", "kind": "acoes"}]})
+        self.assertEqual(market_data.load_universe()[0]["ticker"], "PETR4")
+        self.assertEqual(self.worker.proxied, [])
+
+    def test_history_is_not_saved(self):
+        written = []
+        real = database.write_tables
+        with mock.patch.object(database, "write_tables", side_effect=lambda tables, **k: (written.append(tables), real(tables, **k))):
+            market_data._save_history("PETR4", "b3", None, {"candles": [{"date": 1000}], "dividends": []}, 2000)
+        self.assertEqual(written, [])
+
+    def test_own_tables_are_still_saved(self):
+        created = store.apply_action({"action": "criar_carteira", "name": "Minha"})
+        self.assertEqual(store.read_doc()["portfolios"][0]["id"], created["id"])
+
+
 class ProxyTest(BrowserTestCase):
     URL = "https://query1.finance.yahoo.com/v8/finance/chart/PETR4.SA?range=10y"
 
@@ -127,6 +189,13 @@ class BrowserBridgeTest(BrowserTestCase):
         self.assertEqual({k: v for k, v in status["scan"].items() if k not in ("views", "strategy")},
                          {k: v for k, v in saved.items() if k != "views"})
         self.assertEqual(status["scan"]["strategy"]["kinds"][0]["key"], "forca")
+
+    def test_set_role(self):
+        self.addCleanup(setattr, runtime, "SHARED_WRITES", runtime.SHARED_WRITES)
+        browser.set_role(False)
+        self.assertFalse(runtime.SHARED_WRITES)
+        browser.set_role(True)
+        self.assertTrue(runtime.SHARED_WRITES)
 
     def test_scan_failure_is_reported(self):
         job = screener.ScanJob()

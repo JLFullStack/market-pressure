@@ -11,6 +11,12 @@
 //                    juntas (uma transação) e, com backup, copia a versão anterior para mp_backup.
 //                    As tabelas das carteiras são de cada usuário (schema.js: SHARED_TABLES).
 //   /auth/*          login, sessão e contas (auth.js).
+//
+// Permissões. O Python roda no navegador, que não é confiável, então valem as daqui:
+//   qualquer usuário  as próprias tabelas; lê as comuns; candles, CDI e proventos pelo /proxy.
+//   administrador     também grava as comuns, atualiza a lista de ativos (brapi e screener do
+//                     Yahoo, pelo /proxy) e gerencia as contas (auth.js).
+//   token de serviço  só as tabelas comuns e o /proxy (atualização diária).
 //   o resto          arquivos de dist/ (páginas, CSS, JS e o pacote Python), via ASSETS.
 //
 // Tudo exige login, menos a tela de login (PUBLIC): sem sessão, as páginas redirecionam para
@@ -54,11 +60,11 @@ export default {
                 // Atualização diária (marketpressure/update.py no GitHub Actions): só /proxy e as
                 // tabelas comuns do /db, com o token de serviço (segredo SERVICE_TOKEN).
                 if (!(await isService(request, env))) return unauthenticated(request, url);
-                if (url.pathname === "/proxy") return await proxy(request, url, env);
+                if (url.pathname === "/proxy") return await proxy(request, url, env, SERVICE);
                 if (url.pathname === "/db") return await database(request, url, env, SERVICE);
                 return json(404, { message: "não encontrado" });
             }
-            if (url.pathname === "/proxy") return await proxy(request, url, env);
+            if (url.pathname === "/proxy") return await proxy(request, url, env, user);
             if (url.pathname === "/db") return await database(request, url, env, user);
         } catch (err) {
             console.error(err);
@@ -69,6 +75,8 @@ export default {
 };
 
 const SERVICE = { id: null, service: true };
+// Quem atualiza o que é comum a todos: o administrador e a atualização diária.
+const canUpdateShared = (user) => user.admin || user.service;
 
 // Authorization: Bearer <SERVICE_TOKEN>, comparado em tempo constante (pelo SHA-256 dos dois).
 async function isService(request, env) {
@@ -97,18 +105,23 @@ function json(status, body) {
 
 // ---------------------------------------------------------------- Repasse
 
-async function proxy(request, url, env) {
+async function proxy(request, url, env, user) {
     let target;
     try {
         target = new URL(url.searchParams.get("url"));
     } catch {
         return json(400, { message: "url inválida" });
     }
-    if (request.method === "POST" && target.href === YAHOO_SCREENER) return yahooScreener(request);
+    if (request.method === "POST" && target.href === YAHOO_SCREENER) {
+        if (!canUpdateShared(user)) return json(403, { message: "somente o administrador atualiza a lista de ativos" });
+        return yahooScreener(request);
+    }
     if (request.method !== "GET") return json(405, { message: "método não permitido" });
     const ttl = SOURCES[target.hostname];
     if (target.protocol !== "https:" || ttl === undefined) return json(400, { message: "fonte não permitida" });
     if (target.hostname === "brapi.dev") {
+        // A brapi só serve à lista de ativos, e a chamada leva o token do site.
+        if (!canUpdateShared(user)) return json(403, { message: "somente o administrador atualiza a lista de ativos" });
         target.searchParams.delete("token");
         if (env.BRAPI_TOKEN) target.searchParams.set("token", env.BRAPI_TOKEN);
     }
@@ -214,6 +227,9 @@ async function writeTables(db, request, user) {
         return json(400, { message: 'esperado {"backup": bool, "tables": {nome: "texto JSON"}}' });
     }
     if (forbidden(tables.map(([name]) => name), user)) return json(403, { message: "só as tabelas comuns" });
+    if (!canUpdateShared(user) && tables.some(([name]) => isShared(name))) {
+        return json(403, { message: "somente o administrador atualiza os dados comuns a todos" });
+    }
     const now = Date.now();
     const statements = [];
     for (const [table, rows] of tables) {

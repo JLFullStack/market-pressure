@@ -783,6 +783,9 @@ def read_scan():
             "analyses": list(analyses.values()), "failures": db.read_table("scan_failures")}
 
 
+NO_SAVED_SCAN = "ainda não há varredura salva; ela aparece aqui depois da próxima atualização automática"
+
+
 class ScanJob:
     """Uma varredura por vez, em segundo plano. status() devolve o resultado pronto (se ainda
     válido) ou inicia/acompanha a varredura. start() dispara o trabalho (uma thread com
@@ -857,6 +860,12 @@ class ScanJob:
 
     def status(self, force=False, liquidity="padrao", kinds=None):
         with self.lock:
+            if not runtime.SHARED_WRITES:   # usuário comum na versão publicada: só lê a varredura salva
+                if not self._fresh():
+                    self._reload()
+                if self.scan:
+                    return {"state": "done", "scan": self.payload(liquidity, kinds)}
+                return {"state": "error", "message": NO_SAVED_SCAN, "scan": None}
             if not self.running and not force and not self.error and not self._fresh():
                 self._reload()
             if not self.running and (force or not self._fresh()) and not (self.error and not force):

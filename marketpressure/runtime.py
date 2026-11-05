@@ -18,6 +18,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 BROWSER = sys.platform == "emscripten"
 REMOTE = BROWSER  # banco no D1 e fontes pelo /proxy (navegador ou use_remote)
+# Pode atualizar o que é comum a todos (varredura, lista de ativos, históricos)? No navegador, só o
+# administrador (browser.set_role). Isto só evita pedidos que seriam recusados: quem garante a
+# regra é o Worker (worker/index.js), porque o código daqui roda na máquina do usuário.
+SHARED_WRITES = not BROWSER
 HTTP_TIMEOUT_MS = 30000
 
 

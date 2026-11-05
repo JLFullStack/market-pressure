@@ -24,7 +24,11 @@ const ready = (async () => {
         pyodide.FS.writeFile(`${dir}/${file}`, await response.text());
     }));
     pyodide.runPython("import sys; sys.path.insert(0, '/home/pyodide')");
-    return pyodide.pyimport("marketpressure.browser");
+    const browser = pyodide.pyimport("marketpressure.browser");
+    // Perfil da sessão, só para não pedir o que o Worker recusaria (worker/index.js decide).
+    const me = await fetch("/auth/me", { cache: "no-store" }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    browser.set_role(!!me?.admin);
+    return browser;
 })();
 
 let scanning = false;

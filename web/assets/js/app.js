@@ -38,6 +38,14 @@ function currentPortfolio() {
 
 // ---------------------------------------------------------------- Varredura
 
+// Versão publicada: refazer a varredura é só do administrador; os demais usam a da atualização
+// automática. Escondido até saber o perfil; o Worker recusa o resto de qualquer forma.
+if (IN_BROWSER) {
+    const refresh = document.getElementById('refreshBtn');
+    refresh.hidden = true;
+    session.then(user => { refresh.hidden = !user?.admin; });
+}
+
 // Pede a varredura ao servidor: se houver uma recente, ela volta na hora; senão o servidor
 // começa uma em segundo plano e a página consulta o progresso até terminar.
 async function runScan(force) {
@@ -76,7 +84,10 @@ async function runScan(force) {
             return;
         }
         lastScan = status.scan;
-        if (!waited) setStatus(`Cache (${new Date(lastScan.timestamp).toLocaleTimeString('pt-BR')})`, 'ok');
+        // De outro dia, a data também aparece: o usuário comum não refaz a varredura e precisa vê-la.
+        const made = new Date(lastScan.timestamp);
+        const madeLabel = made.toDateString() === new Date().toDateString() ? made.toLocaleTimeString('pt-BR') : made.toLocaleString('pt-BR');
+        if (!waited) setStatus(`Cache (${madeLabel})`, 'ok');
         else setStatus(lastScan.apiErrors ? "API Parcial" : "API Conectada", lastScan.apiErrors ? 'warn' : 'ok');
         render(lastScan);
     } catch (err) {
