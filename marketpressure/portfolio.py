@@ -57,9 +57,10 @@ PATRIMONY_PERIODS = [("30D", None), ("1A", 12), ("2A", 24), ("5A", 60), ("10A", 
 PATRIMONY_DAILY = "30D"
 PATRIMONY_DAYS = 30
 FI_LABELS = {"aporte": "Aporte", "resgate": "Resgate", "valor_atual": "Valor atual"}
-# Tipos de provento da lista da B3; "JRS CAP PROPRIO" (JCP) tem 15% de IR retido na fonte.
+# Tipos de provento da lista da B3; "JRS CAP PROPRIO" (JCP) tem IR retido na fonte: 17,5% desde
+# 2026 (Lei Complementar 224/2025; 15% até 2025). Usado nos proventos a receber, sempre futuros.
 PROVENTO_TYPES = {"DIVIDENDO": "Dividendo", "JRS CAP PROPRIO": "JCP", "RENDIMENTO": "Rendimento"}
-JCP_TAX = 0.15
+JCP_TAX = 0.175
 APORTE_MODES = ("todos", "escolher", "pullback")
 EPS = 1e-9
 

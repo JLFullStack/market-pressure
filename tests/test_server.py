@@ -222,6 +222,33 @@ class ServerTest(DatabaseTestCase):
         self.assertEqual((status, data["alert"]["level"]), (200, "over"))
         self.assertIsNone(self.request("GET", f"/api/carteira/{pid}/imposto?ticker=petr4&type=compra")[1]["alert"])
 
+    def test_holidays_routes(self):
+        status, data, _ = self.request("GET", "/api/configuracoes/feriados")
+        self.assertEqual((status, data["annual"][0]["label"], data["dated"]), (200, "01/01", []))
+        self.assertEqual(self.request("POST", "/api/configuracoes/feriados", {"op": "x"})[0], 400)
+        self.assertEqual(self.request("POST", "/api/configuracoes/feriados", {"op": "add", "date": ""})[0], 400)
+        status, data, _ = self.request("POST", "/api/configuracoes/feriados", {"op": "moving", "year": 2027})
+        self.assertEqual((status, len(data["dated"])), (200, 4))
+        self.assertIn("message", data)
+
+    def test_taxes_routes(self):
+        pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "DARF"})[1]["id"]
+        self.assertEqual(self.request("GET", f"/api/carteira/{pid}/impostos")[0], 400)   # sem lançamentos
+        for kind, date, quantity, price in (("compra", "2021-09-01", "3000", "10"), ("venda", "2021-09-02", "3000", "20")):
+            self.request("POST", "/api/carteira/acao", {"action": "nova_operacao", "id": pid, "ticker": "PETR4", "market": "b3",
+                                                        "type": kind, "date": date, "quantity": quantity, "price": price, "fees": "0"})
+        status, data, _ = self.request("GET", f"/api/carteira/{pid}/impostos?ano=2021")
+        self.assertEqual((status, data["months"][0]["status"], data["months"][0]["code"]), (200, "overdue", "6015"))
+        self.assertTrue(data["method"])
+        self.assertEqual(self.request("GET", f"/api/carteira/{pid}/impostos?ano=1990")[0], 400)
+        self.assertEqual(self.request("GET", f"/api/carteira/{pid}/analise")[1]["darfAlert"]["level"], "over")
+        self.assertEqual(self.request("POST", f"/api/carteira/{pid}/impostos/darf", {"month": "2021-08"})[0], 400)
+        self.assertEqual(self.request("POST", f"/api/carteira/{pid}/impostos/darf", {"month": "2021-09"})[0], 200)
+        self.assertEqual(self.request("GET", f"/api/carteira/{pid}/impostos?ano=2021")[1]["months"][0]["status"], "paid")
+        self.assertIsNone(self.request("GET", f"/api/carteira/{pid}/analise")[1]["darfAlert"])
+        self.assertEqual(self.request("POST", f"/api/carteira/{pid}/impostos/prejuizos", {"common": "x"})[0], 400)
+        self.assertEqual(self.request("POST", f"/api/carteira/{pid}/impostos/prejuizos", {"common": "100", "funds": ""})[0], 200)
+
     def test_asset_chart_route(self):
         pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "Gráfico"})[1]["id"]
         self.request("POST", "/api/carteira/acao", {"action": "nova_operacao", "id": pid, "ticker": "PETR4", "market": "b3",

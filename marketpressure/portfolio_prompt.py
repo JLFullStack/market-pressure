@@ -134,7 +134,7 @@ METHOD = """# Como o app calcula os números
 - **Valores em reais**: ativos fora da B3 são convertidos pelo dólar (USDBRL) de cada dia; o preço \
 médio e os indicadores técnicos ficam na moeda do ativo.
 - **Lucro de uma posição** = valor atual + vendas + proventos recebidos − total comprado. Proventos \
-são brutos (JCP tem 15% de imposto; nos EUA, 30% retidos).
+são brutos (JCP tem 17,5% de imposto desde 2026; nos EUA, 30% retidos).
 - **Rentabilidade da carteira**: por cotas (descontando aportes e resgates), comparada ao CDI e ao \
 BOVA11 com os mesmos dias.
 - **Situação**: VENDER quando a reversão de tendência disparou (fechamento abaixo da MM20, MM50 e \

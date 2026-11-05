@@ -159,7 +159,88 @@ alertForm.addEventListener('submit', async (event) => {
     }
 });
 
+// Feriados (holidays.py, rotas /api/configuracoes/feriados). As regras ficam no Python; aqui só a lista e o formulário.
+const holidayForm = document.getElementById('holidayForm');
+const holidayOut = document.getElementById('holidayMsg');
+let holidayEditKey = null;
+let holidayRows = {};
+let holidayDefaultKind = 'municipal';
+const HOLIDAY_BADGE = { nacional: 'badge-info', estadual: 'badge-ok', municipal: 'badge-fill', bancario: 'badge-low' };
+
+function holidayTable(rows, empty) {
+    if (!rows.length) return `<p class="small muted">${empty}</p>`;
+    return `<div class="table-container"><table><thead><tr><th>Data</th><th>Feriado</th><th>Tipo</th><th></th></tr></thead><tbody>${rows.map(r => `<tr>
+        <td>${escapeHTML(r.label)}</td><td>${escapeHTML(r.name)}</td>
+        <td><span class="badge ${HOLIDAY_BADGE[r.kind] || 'badge-low'}">${escapeHTML(r.kindLabel)}</span></td>
+        <td class="r holiday-actions"><button type="button" class="btn-secondary tax-copy" data-holiday-edit="${escapeHTML(r.key)}">Editar</button>
+            <button type="button" class="btn-secondary tax-copy" data-holiday-remove="${escapeHTML(r.key)}">Remover</button></td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+function setHolidayEdit(row) {
+    holidayEditKey = row ? row.key : null;
+    holidayForm.elements.date.value = row ? row.editDate : '';
+    holidayForm.elements.name.value = row ? row.name : '';
+    holidayForm.elements.annual.value = !row || row.annual ? '1' : '0';
+    holidayForm.elements.kind.value = row ? row.kind : holidayDefaultKind;
+    document.getElementById('holidaySubmit').textContent = row ? 'Salvar alteração' : 'Adicionar';
+    document.getElementById('holidayCancel').hidden = !row;
+}
+
+function showHolidays(data) {
+    holidayDefaultKind = data.defaultKind;
+    if (!holidayForm.elements.kind.options.length) {
+        holidayForm.elements.kind.innerHTML = data.kinds.map(k => `<option value="${k.key}">${escapeHTML(k.label)}</option>`).join('');
+        holidayForm.elements.kind.value = holidayDefaultKind;
+    }
+    holidayRows = Object.fromEntries([...data.annual, ...data.dated].map(r => [r.key, r]));
+    document.getElementById('holidayAnnual').innerHTML = holidayTable(data.annual, 'Nenhum feriado de data fixa na lista.');
+    document.getElementById('holidayDated').innerHTML = holidayTable(data.dated, 'Nenhum feriado nesta parte da lista.');
+    const year = document.getElementById('holidayYear');
+    const chosen = year.value;
+    year.innerHTML = data.years.map(y => `<option value="${y}"${String(y) === chosen ? ' selected' : ''}>${y}</option>`).join('');
+}
+
+async function postHoliday(body) {
+    const busy = busyStart('Salvando feriados...');
+    try {
+        const data = await apiPost('/configuracoes/feriados', body);
+        showHolidays(data);
+        setHolidayEdit(null);
+        holidayOut.className = 'form-msg ok';
+        holidayOut.textContent = data.message;
+    } catch (e) {
+        holidayOut.className = 'form-msg error';
+        holidayOut.textContent = e.message;
+    } finally {
+        busy();
+    }
+}
+
+holidayForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    postHoliday({ op: holidayEditKey ? 'edit' : 'add', key: holidayEditKey, date: holidayForm.elements.date.value,
+                  name: holidayForm.elements.name.value, annual: holidayForm.elements.annual.value === '1',
+                  kind: holidayForm.elements.kind.value });
+});
+document.getElementById('holidayCancel').addEventListener('click', () => setHolidayEdit(null));
+document.getElementById('holidayRestore').addEventListener('click', () => postHoliday({ op: 'restore' }));
+document.getElementById('holidayMoving').addEventListener('click', () => postHoliday({ op: 'moving', year: document.getElementById('holidayYear').value }));
+document.getElementById('feriados').addEventListener('click', (ev) => {
+    const btn = ev.target.closest?.('button');
+    if (btn?.dataset.holidayRemove) postHoliday({ op: 'remove', key: btn.dataset.holidayRemove });
+    if (btn?.dataset.holidayEdit) {
+        setHolidayEdit(holidayRows[btn.dataset.holidayEdit]);
+        holidayForm.scrollIntoView({ block: 'center' });
+        holidayForm.elements.name.focus();
+    }
+});
+
 observeReveal();
+apiGet('/configuracoes/feriados').then(showHolidays, (e) => {
+    holidayOut.className = 'form-msg error';
+    holidayOut.textContent = `Não foi possível carregar os feriados (${e.message}).`;
+});
 apiGet('/configuracoes/avisos').then(showAlert, (e) => {
     document.getElementById('alertMsg').className = 'form-msg error';
     document.getElementById('alertMsg').textContent = `Não foi possível carregar o aviso de imposto (${e.message}).`;

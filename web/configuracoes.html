@@ -178,6 +178,56 @@
             <div class="form-msg" id="alertMsg" role="status"></div>
         </div>
     </form>
+
+    <div class="panel" data-reveal id="feriados">
+        <div class="panel-title"><span class="icon-chip tone-warn" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span><h2>Feriados</h2></div>
+        <p class="small muted">Esta lista define os dias sem expediente bancário usados no vencimento do DARF.</p>
+        <div class="tax-facts holiday-facts">
+            <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>
+                <span><strong>O que ela muda</strong>Só o <b>vencimento do DARF</b>: o último dia útil do mês seguinte à venda. Se esse dia estiver na lista, o vencimento antecipa para o dia útil anterior, e a situação, a multa e o alerta acompanham.</span></div>
+            <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-5 4 3 8-8M15 7h5v5"/></svg>
+                <span><strong>O que ela não muda</strong>Os <b>dias de pregão</b>. Screener, Backtest e rentabilidade seguem os dias que a bolsa de fato negociou. O calendário da B3 é outro: em 2026, 24/12 e 31/12 ficam sem sessão de negociação, e 09/07, feriado em São Paulo, teve pregão normal.</span></div>
+            <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h7"/></svg>
+                <span><strong>Os tipos</strong>Servem para <b>organizar</b> a lista; todos antecipam o vencimento. "Só bancário" é o dia que não é feriado nacional, mas em que os bancos não abrem ao público, como Carnaval, Corpus Christi e 31/12.</span></div>
+            <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/></svg>
+                <span><strong>O que manter em dia</strong>Inclua os feriados <b>da sua cidade e do seu estado</b>, que não vêm prontos, e os móveis de cada ano. Na dúvida sobre uma data, pague o DARF antes dela: antecipar não gera custo, atrasar gera multa.</span></div>
+        </div>
+        <h3 class="holiday-title">Onde conferir os calendários</h3>
+        <ul class="holiday-links">
+            <li><a href="https://www.b3.com.br/pt_br/solucoes/plataformas/puma-trading-system/para-participantes-e-traders/calendario-de-negociacao/feriados/" target="_blank" rel="noopener noreferrer">B3: calendário de negociação</a><span class="small muted">Dias com e sem pregão e horários especiais</span></li>
+            <li><a href="https://feriadosbancarios.febraban.org.br/" target="_blank" rel="noopener noreferrer">Febraban: feriados bancários</a><span class="small muted">Dias sem expediente, por ano, com link para os municipais</span></li>
+            <li><a href="https://www.gov.br/receitafederal/pt-br/assuntos/agenda-tributaria" target="_blank" rel="noopener noreferrer">Receita Federal: agenda tributária</a><span class="small muted">Prazos dos tributos federais, mês a mês</span></li>
+            <li><a href="https://cnbsp.org.br/2025/12/30/dou-portaria-ministerio-de-estado-da-gestao-e-da-inovacao-em-servicos-publicos-n-11-460-2025-divulga-os-dias-de-feriados-nacionais-e-estabelece-os-dias-de-ponto-facultativo-no-ano-de-2026/" target="_blank" rel="noopener noreferrer">Portaria federal de 2026</a><span class="small muted">Feriados nacionais e pontos facultativos; sai uma nova a cada ano</span></li>
+            <li><a href="https://www.planalto.gov.br/ccivil_03/leis/l9093.htm" target="_blank" rel="noopener noreferrer">Lei 9.093/1995</a><span class="small muted">O que estados e municípios podem declarar feriado; as datas locais estão no site da prefeitura ou do governo do estado</span></li>
+            <li><a href="https://www.nyse.com/markets/hours-calendars" target="_blank" rel="noopener noreferrer">NYSE: feriados e horários</a><span class="small muted">Para ativos dos EUA, que têm feriados próprios</span></li>
+            <li><a href="https://www.nasdaqtrader.com/trader.aspx?id=calendar" target="_blank" rel="noopener noreferrer">Nasdaq: calendário de feriados</a><span class="small muted">Bolsa americana de muitos ETFs e empresas de tecnologia</span></li>
+        </ul>
+        <h3 class="holiday-title">Adicionar ou alterar</h3>
+        <form id="holidayForm" class="tax-opening" novalidate>
+            <label>Data <input type="date" class="select" name="date"></label>
+            <label>Nome <input class="select" name="name" maxlength="60" autocomplete="off" placeholder="Ex.: aniversário da cidade"></label>
+            <label>Tipo <select class="select" name="kind"></select></label>
+            <label>Repetição
+                <select class="select" name="annual">
+                    <option value="1">Todo ano</option>
+                    <option value="0">Só nesta data</option>
+                </select>
+            </label>
+            <button type="submit" class="btn" id="holidaySubmit">Adicionar</button>
+            <button type="button" class="btn-secondary" id="holidayCancel" hidden>Cancelar</button>
+        </form>
+        <div class="form-msg" id="holidayMsg" role="status" aria-live="polite"></div>
+        <h3 class="holiday-title">Data fixa: repetem todo ano</h3>
+        <div id="holidayAnnual"></div>
+        <button type="button" class="btn-secondary holiday-restore" id="holidayRestore">Restaurar os de data fixa</button>
+        <h3 class="holiday-title">Só nesta data</h3>
+        <p class="small muted">Carnaval, Sexta-feira Santa e Corpus Christi mudam a cada ano e entram por aqui.</p>
+        <div class="tax-opening holiday-moving">
+            <label>Ano <select class="select" id="holidayYear" aria-label="Ano dos feriados móveis"></select></label>
+            <button type="button" class="btn-secondary" id="holidayMoving">Adicionar os feriados móveis do ano</button>
+        </div>
+        <div id="holidayDated"></div>
+    </div>
 </div>
 
 <script src="assets/js/core.js"></script>

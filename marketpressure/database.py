@@ -93,6 +93,10 @@ SCHEMAS = {
     "settings_kinds": _schema(("kind", _str), ("strategy", _str)),
     # aviso de imposto (tax_alert.py): ligado e a partir de quanto (R$) de vendas de ações no mês
     "settings_alerts": _schema(("enabled", _bool), ("warn_at", _f64)),
+    # Sub-aba Impostos (tax_report): DARFs marcados como pagos e prejuízos de antes dos lançamentos
+    "tax_payments": _schema(("portfolio_id", _str), ("month", _str), ("amount", _f64), ("paid_on", _str)),
+    "tax_opening": _schema(("portfolio_id", _str), ("common", _f64), ("funds", _f64)),
+    "holidays": _schema(("date", _str), ("name", _str), ("kind", _str)),   # feriados (holidays.py); date "MM-DD" = todo ano
     # Screener
     "universe": _schema(("ticker", _str), ("name", _str), ("sector", _str), ("kind", _str), ("close", _f64),
                         ("volume", _f64), ("avg_volume", _f64)),

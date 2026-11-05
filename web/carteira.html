@@ -88,6 +88,7 @@
         <button type="button" class="subtab" role="tab" id="tab-aportes" data-tab="aportes" aria-controls="panel-aportes" aria-selected="false" tabindex="-1">Aportes e lançamentos</button>
         <button type="button" class="subtab" role="tab" id="tab-proventos" data-tab="proventos" aria-controls="panel-proventos" aria-selected="false" tabindex="-1">Proventos</button>
         <button type="button" class="subtab" role="tab" id="tab-metas" data-tab="metas" aria-controls="panel-metas" aria-selected="false" tabindex="-1">Metas</button>
+        <button type="button" class="subtab" role="tab" id="tab-impostos" data-tab="impostos" aria-controls="panel-impostos" aria-selected="false" tabindex="-1">Impostos</button>
         <button type="button" class="subtab" role="tab" id="tab-configuracoes" data-tab="configuracoes" aria-controls="panel-configuracoes" aria-selected="false" tabindex="-1">Configurações</button>
     </div>
 
@@ -100,6 +101,7 @@
         </div>
 
         <div id="portfolioContent" data-needs-entries>
+            <div class="tax-alert" id="darfAlert" role="status" hidden></div>
             <div class="tax-alert" id="taxAlert" role="status" hidden></div>
             <div class="panel" data-reveal>
                 <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 16l4-5 3 3 5-7"/></svg></span><h2>Resumo</h2></div>
@@ -655,7 +657,7 @@
             </div>
             <ul class="notes">
                 <li>Valores brutos estimados pela data-com e pelos proventos informados pelo Yahoo Finance (data-ex); podem diferir do extrato da corretora.</li>
-                <li><strong>JCP</strong> tem 15% de IR retido na fonte.</li>
+                <li><strong>JCP</strong> tem 17,5% de IR retido na fonte desde 2026 (15% até 2025).</li>
                 <li><strong>Ativos dos EUA:</strong> dividendos brutos, sem os 30% de IR retidos lá, convertidos pelo câmbio USDBRL da data-ex.</li>
             </ul>
         </div>
@@ -755,6 +757,86 @@
             </dl>
             <p class="method-disclaimer">Sem impostos e custos; a rentabilidade real não é garantida. Ferramenta de estudo — não constitui recomendação de investimento.</p>
         </details>
+    </section>
+
+    <!-- ============================================================ Impostos (tax_report.py) -->
+    <section id="panel-impostos" role="tabpanel" aria-labelledby="tab-impostos" tabindex="0" hidden>
+        <div class="panel" data-reveal data-no-entries>
+            <div class="panel-title"><h2>Impostos</h2></div>
+            <p class="muted">Registre suas operações para ver a apuração, o DARF e o resumo da declaração.</p>
+        </div>
+        <div id="taxContent" data-needs-entries>
+            <div class="panel" data-reveal>
+                <div class="panel-head">
+                    <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg></span><h2>Resumo de impostos</h2></div>
+                    <label class="tax-year">Ano das vendas <select class="select" id="taxYear" aria-label="Ano das vendas"></select></label>
+                </div>
+                <div class="kpis" id="taxKpis"></div>
+                <div id="taxError" class="neg" role="alert" hidden></div>
+            </div>
+
+            <div class="panel" data-reveal id="taxAttentionPanel" hidden>
+                <div class="panel-title"><h2>O que merece atenção</h2></div>
+                <div id="taxAttention" class="tax-list"></div>
+            </div>
+
+            <div class="panel" data-reveal>
+                <div class="panel-title"><h2 id="taxDarfTitle">Emitir o DARF</h2></div>
+                <div id="taxDarf"></div>
+                <div class="form-msg" id="taxMsg" role="status" aria-live="polite"></div>
+            </div>
+
+            <div class="panel" data-reveal>
+                <div class="panel-title"><h2>Apuração mês a mês</h2></div>
+                <div class="table-container">
+                    <table class="sticky-first">
+                        <thead>
+                            <tr>
+                                <th>Mês</th>
+                                <th class="r">Vendas de ações</th>
+                                <th class="r">Lucro isento</th>
+                                <th class="r">Resultado tributável</th>
+                                <th class="r">Prejuízo usado</th>
+                                <th class="r">Imposto</th>
+                                <th class="r">IRRF abatido</th>
+                                <th class="r">DARF</th>
+                                <th>Vencimento</th>
+                                <th>Situação</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="taxMonths"></tbody>
+                    </table>
+                </div>
+                <ul class="notes">
+                    <li><strong>Resultado tributável</strong> soma ações, ETFs, BDRs e fundos imobiliários; "Ver conta" mostra a conta de cada alíquota.</li>
+                    <li><strong>Vendas no exterior</strong> ficam fora desta tabela: o acerto é na declaração anual.</li>
+                    <li><strong>Vencimento:</strong> último dia útil do mês seguinte, pela <a href="configuracoes.html#feriados">lista de feriados em Configurações</a>.</li>
+                </ul>
+            </div>
+
+            <div class="panel" data-reveal>
+                <div class="panel-title"><h2>Prejuízos anteriores</h2></div>
+                <p class="small muted">Informe o saldo que você já tinha antes do primeiro lançamento desta carteira. Ele aparece na sua última declaração.</p>
+                <form id="taxOpeningForm" class="tax-opening">
+                    <label>Ações, ETFs e BDRs (R$) <input class="select" id="taxOpeningCommon" inputmode="decimal" autocomplete="off"></label>
+                    <label>Fundos imobiliários (R$) <input class="select" id="taxOpeningFunds" inputmode="decimal" autocomplete="off"></label>
+                    <button type="submit" class="btn-secondary">Salvar</button>
+                </form>
+                <div class="form-msg" id="taxOpeningMsg" role="status" aria-live="polite"></div>
+            </div>
+
+            <div class="panel" data-reveal>
+                <div class="panel-title"><h2 id="taxDeclarationTitle">Declaração anual</h2></div>
+                <div id="taxDeclaration"></div>
+            </div>
+
+            <details class="panel method" data-reveal>
+                <summary>Como o imposto é calculado</summary>
+                <dl class="method-list" id="taxMethod"></dl>
+                <p class="method-disclaimer">Estimativa feita a partir dos seus lançamentos, para apoiar a declaração. Confira com as notas de corretagem e os informes de rendimentos e, em caso de dúvida, com um contador. As regras podem mudar.</p>
+            </details>
+        </div>
     </section>
 
     <!-- ============================================================ Configurações -->

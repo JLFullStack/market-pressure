@@ -21,7 +21,7 @@ from . import portfolio_prompt
 from . import portfolio_service as svc
 from . import portfolio_store as store
 from . import strategy as st
-from . import tax_alert
+from . import holidays, tax_alert, tax_report
 from .core import PARTIAL_TIMINGS
 
 log = logging.getLogger(__name__)
@@ -258,6 +258,21 @@ def post_alert_settings(req):
     return {**tax_alert.payload(alert), "message": "Aviso salvo. A Carteira já segue esta configuração."}
 
 
+@route("GET", "/api/configuracoes/feriados")
+def get_holidays(req):
+    return holidays.payload()
+
+
+@route("POST", "/api/configuracoes/feriados")
+def post_holidays(req):
+    """Edita a lista de feriados (holidays.change) e devolve a lista nova."""
+    try:
+        message = holidays.change(req.json_object())
+    except ValueError as err:
+        raise HTTPError(400, str(err)) from None
+    return {**holidays.payload(), "message": message}
+
+
 @route("GET", "/api/portfolios")
 def get_portfolios(req):
     return store.read_doc()
@@ -315,6 +330,41 @@ def get_tax_preview(req):
           "quantity": pf.parse_number(req.arg("quantity")), "price": pf.parse_number(req.arg("price")),
           "fees": pf.parse_number(req.arg("fees"), 0), "fx": pf.parse_number(req.arg("fx"), 1)}
     return {"alert": tax_alert.preview(portfolio_of(req), tx)}
+
+
+@route("GET", f"/api/carteira/{PORTFOLIO_ID}/impostos")
+def get_taxes(req):
+    """Sub-aba Impostos: apuração, DARF e declaração do ano (ano=AAAA). Sem cotações, segue sem os proventos."""
+    portfolio = portfolio_of(req, needs_entries=True)
+    try:
+        analysis = svc.full_analysis(portfolio, reuse=True)
+    except RuntimeError:  # UpstreamError e histórico indisponível
+        log.warning("cotações indisponíveis para a declaração; segue sem os proventos", exc_info=True)
+        analysis = None
+    try:
+        return tax_report.payload(portfolio, req.arg("ano") or None, analysis, len(store.read_doc()["portfolios"]))
+    except ValueError as err:
+        raise HTTPError(400, str(err)) from None
+
+
+@route("POST", f"/api/carteira/{PORTFOLIO_ID}/impostos/darf")
+def post_tax_payment(req):
+    """Marca o DARF de um mês como pago, ou desfaz: {month, paid}."""
+    portfolio = portfolio_of(req, needs_entries=True)
+    try:
+        return {"message": tax_report.mark_paid(portfolio, req.json_object()), "darfAlert": tax_report.due_alert(portfolio)}
+    except ValueError as err:
+        raise HTTPError(400, str(err)) from None
+
+
+@route("POST", f"/api/carteira/{PORTFOLIO_ID}/impostos/prejuizos")
+def post_tax_opening(req):
+    """Prejuízos de antes dos lançamentos: {common, funds} em reais."""
+    portfolio = portfolio_of(req, needs_entries=True)
+    try:
+        return {"message": tax_report.save_opening(portfolio, req.json_object()), "darfAlert": tax_report.due_alert(portfolio)}
+    except ValueError as err:
+        raise HTTPError(400, str(err)) from None
 
 
 @route("GET", f"/api/carteira/{PORTFOLIO_ID}/prompt")
