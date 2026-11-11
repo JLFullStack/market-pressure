@@ -1,0 +1,56 @@
+/* Movimento comum a todas as páginas: a transição entre páginas, a entrada ao rolar
+   (core.js: observeReveal) e os keyframes usados em mais de um arquivo. Só transform/opacity
+   e animações de traço em SVG; prefers-reduced-motion desliga. As animações de um componente de
+   uma página só ficam junto dele, no arquivo da página. */
+
+/* #region Entre páginas */
+/* O destaque da aba (.tab-glow, app.css) desliza da aba anterior para a nova. */
+@view-transition { navigation: auto; }
+::view-transition-group(tab-glow) { animation-duration: 0.38s; animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.22s; }
+@media (prefers-reduced-motion: reduce) {
+    @view-transition { navigation: none; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+/* #endregion */
+
+/* #region Entrada ao rolar (core.js: observeReveal) */
+/* Só com .js-reveal no <html>: sem o script nada some. fill-mode "backwards" para a animação não
+   prender o transform depois (o hover dos cartões usa). */
+.js-reveal [data-reveal]:not(.in) { opacity: 0; transform: translateY(28px); }
+[data-reveal].in { animation: reveal-in 0.9s var(--ease-out) backwards; animation-delay: var(--stagger, 0s); }
+/* Quadros de gráfico: não somem nem deslizam; a entrada é a animação do gráfico (core.js: onReveal). */
+.js-reveal [data-reveal="late"]:not(.in) { opacity: 1; transform: none; }
+[data-reveal="late"].in { animation: none; }
+[data-reveal].in.instant, tr[data-reveal].in.instant > td { animation: none; }   /* já à vista na abertura da página (core.js) */
+/* Os efeitos de dentro (barras, linhas, anéis) ligados a um bloco já visível (".in .x") esperam
+   parados enquanto o bloco mais próximo deles (um cartão, uma linha) ainda não apareceu: assim
+   não acontecem fora da tela. */
+.js-reveal [data-reveal]:not(.in) * { animation-play-state: paused !important; }
+/* Linhas de tabela: cada uma surge sozinha ao entrar na tela; o tr só esmaece (transform em tr
+   não é confiável) e as células sobem. */
+.js-reveal tr[data-reveal]:not(.in) { transform: none; }
+.js-reveal tr[data-reveal]:not(.in) > td { transform: translateY(20px); }
+tr[data-reveal].in { animation: fade-in 0.8s ease-out backwards; animation-delay: var(--stagger, 0s); }
+tr[data-reveal].in > td { animation: rise-in 0.8s var(--ease-out) backwards; animation-delay: var(--stagger, 0s); }
+/* Gráficos de preço e de lucro (Lightweight Charts): entram "desenhando" da esquerda para a direita. */
+.js-reveal [data-reveal="wipe"]:not(.in) { opacity: 1; transform: none; clip-path: inset(0 100% 0 0); }
+[data-reveal="wipe"].in { animation: wipe-in 1.3s cubic-bezier(0.65, 0, 0.35, 1) backwards; }
+@media (prefers-reduced-motion: reduce) {
+    [data-reveal], [data-reveal] * { animation-duration: 0.01ms !important; animation-delay: 0s !important; }
+    .js-reveal [data-reveal="wipe"]:not(.in) { clip-path: none; }
+}
+/* #endregion */
+
+/* #region Keyframes comuns */
+@keyframes reveal-in { from { opacity: 0; transform: translateY(28px); } }
+@keyframes rise-in { from { transform: translateY(20px); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes dash-in { from { stroke-dashoffset: 100; } }
+@keyframes grow-x { from { transform: scaleX(0); } }
+@keyframes dot-in { from { transform: scale(0); opacity: 0; } }
+@keyframes wipe-in { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes pop { 40% { transform: scale(1.08); } }
+@keyframes busy-spin { to { transform: rotate(360deg); } }
+@keyframes aurora { to { transform: translate3d(10%, 6%, 0) rotate(10deg); } }
+/* #endregion */

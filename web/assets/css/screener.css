@@ -1,0 +1,121 @@
+/* Aba Screener (analise_quantitativa_b3.html + app.js): progresso do scan, medidores de amplitude
+   por tipo, rankings (medalhas, avatar por tipo, anel do Score, barras da pressão, justificativa)
+   e as orientações. */
+
+/* #region Progresso do scan */
+.progress { height: 4px; background: var(--border-color); border-radius: 2px; overflow: hidden; margin-top: 12px; display: none; }
+.progress-bar {
+    height: 100%; width: 0; transition: width 0.3s var(--ease-out);
+    background: linear-gradient(90deg, var(--blue-gas), var(--cyan), var(--violet), var(--blue-gas)) 0 0 / 200% 100%;
+    animation: progress-flow 1.6s linear infinite;
+}
+@keyframes progress-flow { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+    .progress-bar { animation: none; }
+}
+/* #endregion */
+
+/* #region Medidores de amplitude por tipo (app.js: renderGauges) */
+.section-sub { margin: 24px 0 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+.gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.gauge-card {
+    display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 12px 12px;
+    border: 1px solid var(--border-color); border-radius: 14px; background: rgba(255, 255, 255, 0.015);
+    color: inherit; text-decoration: none; text-align: center;
+    transition: transform 0.25s var(--ease-out), border-color 0.25s, box-shadow 0.25s;
+}
+.gauge-card:hover { transform: translateY(-3px); border-color: var(--g); box-shadow: 0 16px 32px -20px var(--g); }
+.gauge-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.regime-alta { --g: var(--success); }
+.regime-misto { --g: var(--warning); }
+.regime-defensivo { --g: var(--danger); }
+.regime-none { --g: var(--text-muted); }
+.gauge-wrap { position: relative; width: 100%; max-width: 170px; }
+.gauge { display: block; width: 100%; overflow: visible; }
+.gauge path { fill: none; }
+.gauge-track { stroke: rgba(255, 255, 255, 0.06); stroke-width: 10; stroke-linecap: round; }
+.gauge-band { stroke-width: 2.5; opacity: 0.6; }
+.band-defensivo { stroke: var(--danger); }
+.band-misto { stroke: var(--warning); }
+.band-alta { stroke: var(--success); }
+.gauge-val { stroke: var(--g); stroke-width: 10; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: var(--off); filter: drop-shadow(0 0 5px var(--g)); }
+.js-reveal .gauge-card:not(.in) .gauge-val { stroke-dashoffset: 100; }
+.gauge-card.in .gauge-val { animation: dash-in 1.5s var(--ease-out) backwards; animation-delay: calc(var(--stagger, 0s) + 0.3s); }
+.gauge-num { position: absolute; left: 0; right: 0; bottom: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+.gauge-label { font-weight: 600; }
+/* #endregion */
+
+/* #region Rankings: um painel por tipo de ativo (app.js: rankingPanel) */
+.ranking { padding: 0; overflow: hidden; scroll-margin-top: 96px; }
+.ranking-head { padding: 16px 16px 12px; }
+.ranking-head .regime { margin-top: 8px; }
+.ranking-head .panel-title { margin-bottom: 10px; }
+.ranking-head .panel-title .muted { font-weight: 400; }
+.ranking-note { margin-top: 8px; font-size: 13px; color: var(--warning); }
+.regime { margin-top: 14px; font-size: 14px; line-height: 1.5; }
+.regime-badge { margin-right: 6px; vertical-align: 1px; }
+.ranking th, .ranking td { padding-left: 10px; padding-right: 10px; }
+/* Pódio: as três primeiras linhas com a cor da medalha */
+.podium-1 { --medal: #f5c542; }
+.podium-2 { --medal: #c3cbd9; }
+.podium-3 { --medal: #d9915a; }
+.podium { background: linear-gradient(90deg, color-mix(in srgb, var(--medal) 8%, transparent), transparent 45%); }
+.podium > td:first-child { box-shadow: inset 3px 0 0 var(--medal); }
+/* Avatar com a cor do tipo de ativo */
+.av-acoes { --a1: #3b82ff; --a2: #22d3ee; }
+.av-fundos { --a1: #f59e0b; --a2: #f97316; }
+.av-etfs { --a1: #9b7bff; --a2: #ec4899; }
+.av-bdrs { --a1: #10b981; --a2: #22d3ee; }
+/* Nome ou setor em no máximo duas linhas (nome completo no title): os nomes longos de ETFs
+   esticavam a coluna e a linha. */
+.ranking .asset-text .small.muted { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 170px; }
+.ma-pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.03); }
+/* Barras dos componentes da pressão (equalizador) */
+.press { display: inline-flex; align-items: center; gap: 8px; }
+.press-num { font-weight: 700; }
+.eq { display: inline-flex; align-items: flex-end; gap: 3px; height: 28px; padding: 3px 4px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); cursor: help; }
+.eq:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.eq i { display: block; width: 5px; height: 100%; border-radius: 2px; background: var(--c); transform: scaleY(var(--v)); transform-origin: bottom; }
+.eq-volume { --c: #5aa2ff; }
+.eq-momentum { --c: #22d3ee; }
+.eq-trend { --c: #9b7bff; }
+.eq-structure { --c: #ffb057; }
+.js-reveal tr[data-reveal]:not(.in) .eq i { transform: scaleY(0); }
+tr.in .eq i { animation: eq-in 1s var(--ease-out) backwards; animation-delay: calc(var(--stagger, 0s) + var(--k, 0) * 90ms + 0.35s); }
+@keyframes eq-in { from { transform: scaleY(0); } }
+
+/* Justificativa: uma linha por aspecto (título | sinais separados por "·"); um sinal nunca quebra
+   no meio, só entre sinais. */
+.facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12px; line-height: 1.45; min-width: 340px; max-width: 560px; }
+.facts dt { color: var(--text-color); font-weight: 600; white-space: nowrap; }
+.facts dd { margin: 0; color: var(--text-muted); }
+.facts .fact { white-space: nowrap; }
+.facts .fact-sep { color: var(--text-muted); opacity: 0.6; }
+/* No celular a justificativa vira um botão que abre a caixa flutuante (app.js). */
+.facts-btn { display: none; }
+/* A lista inteira só quando a tabela cabe com ela (consulta pela largura da própria tabela, não
+   da tela): abaixo disso vira o botão "Justificativa", e a tabela não precisa rolar para o lado no
+   desktop. No celular, sempre o botão. */
+.ranking .table-container { container-type: inline-size; }
+@container (max-width: 1460px) {
+    .facts { display: none; }
+    .facts-btn { display: inline-flex; }
+}
+/* #endregion */
+
+/* #region Orientações */
+ul.guidelines { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 14px; }
+.guidelines-panel .guidelines li::marker { color: var(--warning); }
+/* #endregion */
+
+/* #region Responsivo */
+@media (max-width: 640px) {
+    .facts { display: none; }
+    .facts-btn { display: inline-flex; }
+    .podium > td:first-child { box-shadow: none; }
+    .gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .gauge-card { padding: 12px 8px 10px; }
+    .gauge-num { font-size: 20px; }
+    .ranking { scroll-margin-top: 16px; }
+}
+/* #endregion */

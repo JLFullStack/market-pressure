@@ -1,0 +1,85 @@
+/* Carteira → Metas: formulário em três grupos, cartão de cada meta (anel de progresso, KPIs,
+   marcos, gráficos em moldura, cenários) e a tabela ano a ano. */
+
+/* #region Formulário */
+/* Três grupos (A meta, Partida e aportes, Premissas), campos alinhados pelo topo. Os grupos são
+   os mesmos cartões do formulário do Backtest (.bt-group, em app.css). */
+.goal-groups { grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr); margin-top: 4px; margin-bottom: 14px; }
+.goal-groups .bt-fields { align-items: start; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.goal-groups .field { white-space: nowrap; }
+.goal-groups .field-hint { white-space: normal; }
+.goal-groups .field .select { width: 100%; }
+#goalPreview { margin-top: 16px; }
+#goalPreview .goal-card { margin-bottom: 0; border-style: dashed; }
+/* #endregion */
+
+/* #region Cartão da meta */
+.goal-card h3 { margin-top: 18px; }
+/* Anel de progresso no cabeçalho */
+.goal-head { display: flex; align-items: center; gap: 14px; }
+.goal-head h2 { margin: 0 0 2px; }
+.goal-ring { width: 64px; height: 64px; flex: none; }
+.goal-ring circle { stroke-width: 4.5; }
+.goal-ring .ring-num { font-size: 13px; }
+.js-reveal .goal-card:not(.in) .ring-val { stroke-dashoffset: 100; }
+.goal-card.in .ring-val { animation: dash-in 1.4s var(--ease-out) 0.25s backwards; }
+.goal-summary { font-size: 15px; margin: 4px 0 12px; }
+.goal-progress { height: 10px; background: rgba(255, 255, 255, 0.06); border-radius: 5px; overflow: hidden; margin-bottom: 6px; }
+.goal-progress div { height: 100%; background: linear-gradient(90deg, #3b82ff, #22d3ee, #4ad991); transform-origin: left; }
+.goal-card.in .goal-progress div { animation: grow-x 1.2s var(--ease-out) 0.3s backwards; }
+.goal-bydate { font-size: 13px; margin: 10px 0 0; }
+/* KPIs em cartões pequenos */
+.goal-kpis { margin-top: 14px; }
+.goal-kpis .kpi-value { font-size: 20px; }
+.goal-kpi { border-radius: 12px; background: rgba(255, 255, 255, 0.02); transition: border-color 0.25s, transform 0.25s var(--ease-out); }
+.goal-kpi:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+/* Marcos 25/50/75/100% */
+.goal-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.goal-chip { border: 1px solid var(--border-color); border-radius: 999px; padding: 4px 10px; font-size: 12px; color: var(--text-muted); background: rgba(255, 255, 255, 0.03); }
+.goal-chip.done { border-color: rgba(46, 160, 67, 0.4); color: var(--success); background: rgba(74, 217, 145, 0.1); }
+/* Gráficos em moldura própria (como os painéis da Visão geral) */
+.chart-card {
+    margin-top: 18px; padding: 14px 16px 10px;
+    border: 1px solid var(--border-color); border-radius: 14px;
+    background: linear-gradient(180deg, rgba(90, 162, 255, 0.05), rgba(255, 255, 255, 0.01) 60%);
+}
+.chart-card-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+.chart-card-head h3 { margin: 0; color: var(--text-color); font-size: 14px; }
+.chart-card .chart-wrap { margin-top: 8px; }
+.goal-chart { height: 320px; }
+.goal-chart-small { height: 240px; }
+.goal-scenarios td.goal-current { color: var(--accent); font-weight: 700; }
+/* Ano a ano (recolhível) */
+.goal-details { margin-top: 16px; }
+.goal-details summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px; transition: color 0.2s; }
+.goal-details summary:hover { color: var(--cyan); }
+.goal-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.goal-details[open] > .table-container { animation: fade-in 0.4s ease-out; }
+/* #endregion */
+
+/* #region Tabela ano a ano */
+.yearly-value { color: var(--text-color); }
+.mix-bar { display: flex; width: 110px; height: 4px; margin: 6px 0 0 auto; border-radius: 2px; overflow: hidden; background: rgba(255, 255, 255, 0.06); transform-origin: left; }
+.mix-bar i { display: block; flex: none; height: 100%; width: calc(var(--w) * 100%); }
+.goal-pct { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.goal-pct-bar { width: 90px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.goal-pct-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #3b82ff, #22d3ee, #4ad991); transform: scaleX(var(--w)); transform-origin: left; }
+tr.in .goal-pct-bar i, tr.in .mix-bar { animation: grow-x 0.9s var(--ease-out) backwards; animation-delay: calc(var(--stagger, 0s) + 0.2s); }
+.instant .goal-pct-bar i, .instant .mix-bar { animation: none; }
+.yearly-reached td { background-color: rgba(74, 217, 145, 0.06); }
+.yearly-reached td:first-child { box-shadow: inset 3px 0 0 var(--success); }
+.yearly-reached .year-pill { color: var(--success); background: rgba(74, 217, 145, 0.14); }
+/* #endregion */
+
+/* #region Responsivo */
+@media (max-width: 1100px) {
+    .goal-groups { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .goal-groups > :first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+    .goal-groups { grid-template-columns: minmax(0, 1fr); }
+    .goal-groups .bt-fields { grid-template-columns: minmax(0, 1fr); }
+    .goal-ring { width: 52px; height: 52px; }
+    :is(.sticky-first, .sticky-two) .yearly-reached td { --tint: rgba(74, 217, 145, 0.06); }
+}
+/* #endregion */

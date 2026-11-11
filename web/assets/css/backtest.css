@@ -1,0 +1,88 @@
+/* Aba Backtest (backtest.html + backtest.js): barra de ações do formulário, cabeçalho dos
+   resultados com o "ANALISAR BACKTEST", KPIs, gráficos, robustez, paginação e as tabelas de
+   lotes e operações. O formulário em grupos (.bt-group…) e o gráfico de preço (.bt-chart) ficam
+   em app.css, porque a Carteira também os usa. */
+
+/* #region Formulário */
+.bt-fields > .bt-wide { grid-column: 1 / -1; }
+.bt-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px;
+              padding-top: 14px; border-top: 1px solid var(--border-color); }
+.bt-actions .btn { min-width: 170px; }
+.bt-robust { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bt-robust-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.bt-robust .select { width: auto; padding: 8px 10px; font-size: 14px; }
+.btn-accent {
+    background-color: rgba(56, 139, 253, 0.15); color: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
+    padding: 9px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.btn-accent:hover { background-color: var(--blue-gas); border-color: var(--blue-gas); color: #fff; }
+.btn-accent:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-accent:disabled { opacity: 0.5; cursor: wait; }
+/* #endregion */
+
+/* #region Cabeçalho dos resultados */
+/* "ANALISAR BACKTEST": no canto superior direito do resultado, em destaque. */
+.bt-result-head, #btResult .panel-head { align-items: flex-start; flex-wrap: nowrap; }
+.bt-result-head > div:first-child, #btResult .panel-head > div:first-child { flex: 1; min-width: 0; }
+.bt-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.bt-analyze { flex: 0 0 auto; }
+.bt-analyze .btn-analyze.copy-analysis { padding: 8px 14px; font-size: 13px; }   /* maior no canto dos resultados */
+/* Avisos recolhíveis */
+.warn-details { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255, 176, 87, 0.3); background: rgba(255, 176, 87, 0.06); }
+.warn-details summary { cursor: pointer; color: var(--warning); font-size: 13px; font-weight: 600; }
+.warn-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.warn-details ul.notes { overflow-wrap: anywhere; }
+/* #endregion */
+
+/* #region KPIs e gráficos */
+.bt-kpis { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.bt-kpis .kpi-value { font-size: 22px; }
+.bt-kpis .kpi-card { padding: 14px; }
+.bt-chart-small { height: 200px; }
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+.chart-grid > .panel { margin-bottom: 16px; }
+.bt-subhead { margin: 18px 0 0; }
+.bt-compare { font-size: 14px; font-weight: 600; margin: 10px 0 4px; }
+.pf-years th, .pf-years td { padding: 10px 12px; }
+/* #endregion */
+
+/* #region Testar robustez */
+.robust-chart { position: relative; height: 320px; margin-top: 10px; }
+.robust-score { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 400; }
+.robust-score span:first-child { min-width: 78px; }
+.robust-bar { flex: 1; height: 6px; min-width: 40px; border-radius: 3px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+.robust-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #4ad991, #22d3ee); transform: scaleX(var(--w)); transform-origin: left; }
+.in .robust-bar i { animation: grow-x 1s var(--ease-out) 0.4s backwards; }
+/* #endregion */
+
+/* #region Tabelas: lote selecionado e paginação */
+.lot-row { cursor: pointer; }
+.lot-row.selected td { background-color: rgba(56, 139, 253, 0.1); }
+.lot-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pager { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.pager[hidden] { display: none; }
+.pager .btn-secondary { padding: 6px 10px; }
+.pager .btn-secondary:disabled { opacity: 0.4; cursor: default; border-color: var(--border-color); color: var(--text-color); }
+.pager-info { font-size: 13px; color: var(--text-muted); padding: 0 4px; }
+.pager-size { margin-left: auto; font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+/* #endregion */
+
+/* #region Responsivo */
+@media (max-width: 640px) {
+    .bt-chart-small { height: 160px; }
+    .robust-chart { height: 260px; }
+    .bt-kpis { grid-template-columns: minmax(0, 1fr); }
+    /* O título ocupa a linha toda; o "ANALISAR BACKTEST" (e o tipo de gráfico) descem para a linha de baixo. */
+    .bt-result-head, #btResult .panel-head { flex-wrap: wrap; }
+    .bt-result-head > div:first-child, #btResult .panel-head > div:first-child { flex: 1 1 100%; }
+    .bt-head-actions { justify-content: flex-start; }
+    .bt-result-head .bt-analyze, .bt-head-actions { width: 100%; }
+    /* Paginação: a página atual numa linha, os quatro botões lado a lado (« e » estreitos,
+       Anterior e Próxima dividindo o resto) e "Por página" embaixo. */
+    .pager { display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 8px; }
+    .pager .btn-secondary { min-height: 40px; padding: 6px 12px; }
+    .pager-info { grid-column: 1 / -1; order: -1; text-align: center; padding: 0; }
+    .pager-size { grid-column: 1 / -1; margin-left: 0; justify-content: center; }
+    :is(.sticky-first, .sticky-two) .lot-row.selected td { --tint: rgba(56, 139, 253, 0.1); }
+}
+/* #endregion */

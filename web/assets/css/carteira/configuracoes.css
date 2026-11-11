@@ -1,0 +1,23 @@
+/* Carteira → Configurações: "Classes e metas" (ativos de cada classe em pílulas) e "Meta por
+   ativo" (os campos e barras de meta ficam em carteira.css, porque a calculadora de aporte também
+   os usa). */
+
+/* #region Classes e metas */
+.member-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.member-chip { padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; color: var(--text-color); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); }
+/* #endregion */
+
+/* #region Responsivo */
+/* No celular cada classe vira um cartão (nome e meta em cima, ativos e regra de venda embaixo,
+   com o rótulo de cada um). */
+@media (max-width: 640px) {
+    .class-config thead { display: none; }
+    .class-config, .class-config tbody { display: block; width: 100%; }
+    .class-config tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 14px 4px; border-bottom: 1px solid var(--border-color); }
+    .class-config td { display: block; padding: 0; border: 0; }
+    .class-config td:nth-child(3), .class-config td:nth-child(4) { grid-column: 1 / -1; }
+    .class-config td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+    .class-config td[colspan] { display: none; }
+    .class-config .target-input { width: 86px; }
+}
+/* #endregion */

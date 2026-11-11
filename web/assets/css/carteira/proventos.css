@@ -1,0 +1,26 @@
+/* Carteira → Proventos: KPIs, gráfico mês a mês (com a frase de vazio) e "Quem mais pagou". */
+
+/* #region Proventos mês a mês (KPIs e gráfico) */
+.dividend-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 8px; }
+.dividend-kpis .kpi-value { font-size: 24px; }
+.chart-wrap + h3, .empty-chart + h3 { margin-top: 22px; }
+.empty-chart { margin: 14px 0 0; padding: 18px; text-align: center; border: 1px dashed var(--border-color); border-radius: 12px; }
+/* #endregion */
+
+/* #region "Quem mais pagou" (proventos por ativo) */
+.rank-bars { display: grid; gap: 8px; max-width: 720px; }
+.rank-bar { display: grid; grid-template-columns: 80px 1fr auto; align-items: center; gap: 10px; font-size: 13px; }
+.rank-bar-label { font-weight: 700; }
+.rank-bar-track { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.rank-bar-track i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #4ad991, #22d3ee); transform: scaleX(var(--w)); transform-origin: left; }
+.in .rank-bar-track i { animation: grow-x 1s var(--ease-out) backwards; animation-delay: calc(var(--k, 0) * 0.08s + 0.2s); }
+.rank-bar-val { min-width: 90px; text-align: right; color: var(--text-muted); }
+/* #endregion */
+
+/* #region Responsivo */
+@media (max-width: 640px) {
+    .dividend-kpis { grid-template-columns: minmax(0, 1fr); }
+    .rank-bar { grid-template-columns: 64px 1fr auto; }
+    .rank-bar-val { min-width: 0; }
+}
+/* #endregion */

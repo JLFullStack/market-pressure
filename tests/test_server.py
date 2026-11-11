@@ -35,7 +35,8 @@ class ServerTest(DatabaseTestCase):
 
     def test_pages_and_assets_are_served(self):
         for path in ("/", "/carteira", "/backtest", "/configuracoes", "/assets/js/core.js", "/assets/js/backtest.js",
-                     "/assets/js/configuracoes.js", "/assets/css/styles.css"):
+                     "/assets/js/configuracoes.js", "/assets/css/app.css",
+                     "/assets/css/carteira/carteira.css"):
             self.assertEqual(self.request("GET", path)[0], 200, path)
 
     def test_code_and_database_are_private(self):

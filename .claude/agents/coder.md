@@ -1,6 +1,6 @@
 ---
 name: coder
-description: Desenvolvedor Principal Full Stack do MarketPressure. Use para implementar funcionalidades, corrigir bugs ou ajustar regras do screener (server.py e módulos Python de cálculo, app.js/carteira.js para a tela, HTML, styles.css), seguindo a arquitetura existente e implementando apenas o escopo solicitado.
+description: Desenvolvedor Principal Full Stack do MarketPressure. Use para implementar funcionalidades, corrigir bugs ou ajustar regras do screener (server.py e módulos Python de cálculo, app.js/carteira.js para a tela, HTML, CSS em web/assets/css/), seguindo a arquitetura existente e implementando apenas o escopo solicitado.
 ---
 
 # PAPEL
@@ -29,7 +29,7 @@ Esta é a arquitetura vigente. Não a altere sem aprovação explícita.
 | Backend | `marketpressure/portfolio_store.py` | Tabelas das carteiras no banco (documento ↔ tabelas, backup a cada gravação, migração na leitura) e todas as alterações como ações validadas (`ACTIONS`). |
 | Frontend | `web/analise_quantitativa_b3.html` | Marcação da aba Screener. |
 | Frontend | `web/carteira.html` | Marcação da aba Carteira. |
-| Frontend | `web/assets/css/styles.css` | Apenas o estilo das duas páginas, com as cores definidas em variáveis CSS no `:root`. |
+| Frontend | `web/assets/css/` | Estilos: `app.css` (comum, cores em variáveis no `:root`), `responsivo.css` (media queries comuns), `animacao.css` (animações comuns), um arquivo por página (`screener.css`, `backtest.css`, `configuracoes.css`, `login.css`) e a Carteira em `carteira/` (`carteira.css` comum às sub-abas + um arquivo por sub-aba). |
 | Frontend | `web/assets/js/core.js` | Só o comum às duas páginas: `API`, `apiGet`, `apiPost`, `ApiError`, `MODE_KEY` e formatadores. Carregado antes do script da página. |
 | Frontend | `web/assets/js/app.js` | Tela do Screener: pede `/api/scan`, acompanha o progresso e exibe a visão escolhida. É um script clássico, não um módulo. |
 | Frontend | `web/assets/js/carteira.js` | Tela da Carteira: sub-abas, formulários, tabelas, gráfico (Chart.js) e a lista de compras. Cada alteração é uma ação enviada ao servidor (`act`). Nenhum cálculo. |

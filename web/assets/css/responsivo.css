@@ -1,0 +1,126 @@
+/* Celular (≤ 640px): o que vale para todas as páginas. As abas viram uma barra fixa embaixo da
+   tela, as tabelas fixam a 1ª (ou as duas primeiras) colunas ao rolar para o lado e os
+   componentes de app.css ficam menores. O que é de uma página só fica no arquivo dela. */
+
+/* #region Página */
+@media (max-width: 640px) {
+    body { padding: 16px; padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+}
+/* #endregion */
+
+/* #region Barra do app */
+/* Abas na barra de baixo */
+@media (max-width: 640px) {
+    /* relative + z-index: as abas (fixas embaixo) ficam dentro da camada da barra; sem ela, os
+       cartões animados (transform) da página seriam desenhados por cima das abas. Sem
+       backdrop-filter aqui: ele prenderia as abas fixas dentro da barra. */
+    .appbar { position: relative; z-index: 900; padding: 10px 14px; min-height: 0; backdrop-filter: none; -webkit-backdrop-filter: none; background-color: var(--panel-bg); }
+    .tabs {
+        position: fixed;
+        left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom));
+        z-index: 900;
+        gap: 0;
+        padding: 5px;
+        border-radius: 20px;
+        background-color: rgba(14, 21, 39, 0.82);
+        backdrop-filter: blur(16px) saturate(140%);
+        -webkit-backdrop-filter: blur(16px) saturate(140%);
+        border: 1px solid var(--border-strong);
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 -6px 24px -6px rgba(0, 0, 0, 0.7), 0 14px 34px -8px rgba(0, 0, 0, 0.9);
+    }
+    .tab { flex: 1 1 0; min-width: 0; padding: 8px 2px 7px; font-size: 11px; border-radius: 15px; color: #a9b8d4; }
+    .tab[aria-current="page"] { color: #fff; }
+    .tab-glow {
+        border-radius: 15px;
+        background: linear-gradient(135deg, rgba(59, 130, 255, 0.55), rgba(155, 123, 255, 0.45));
+        box-shadow: inset 0 0 0 1px rgba(150, 190, 255, 0.45), 0 6px 18px -6px rgba(59, 130, 255, 0.9);
+    }
+    .tab[aria-current="page"]::after { display: none; }
+    .tab-icon { width: 23px; height: 23px; }
+    /* Com cinco abas, "Configurações" não cabe no botão: rótulo curto (o nome inteiro fica no aria-label). */
+    .tab-long { display: none; }
+    .tab-short { display: inline; }
+    /* Acima da barra de abas fixa (~72px de altura). */
+    .scroll-top { right: 16px; bottom: calc(96px + env(safe-area-inset-bottom)); }
+}
+/* #endregion */
+
+/* #region Controles */
+/* Os selects ocupam a linha toda e não passam da tela (opções longas, como a de liquidez, são
+   cortadas dentro do campo). */
+@media (max-width: 640px) {
+    .controls { width: 100%; }
+    .controls > .toggle:has(> .select) { flex: 1 1 100%; min-width: 0; }
+    .controls .select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+    .controls .toggle > .select { flex: 1 1 auto; width: 100%; }
+}
+/* #endregion */
+
+/* #region Componentes de app.css, menores */
+@media (max-width: 640px) {
+    .kpi-value { font-size: 20px; }
+    .chart-wrap { height: 260px; }
+    th, td { padding: 10px; }
+    .bt-chart { height: 340px; }
+    .hero { padding: 18px 16px; }
+    .hero h1 { font-size: 22px; }
+    .kpi-card .kpi-value { font-size: 24px; }
+    .avatar { display: none; }
+    .ring { width: 44px; height: 44px; }
+    .result-head .icon-chip { display: none; }
+    .result-head h2 { font-size: 15px; }
+}
+/* #endregion */
+
+/* #region Tabelas */
+/* Colunas fixas ao rolar para o lado */
+@media (max-width: 640px) {
+    /* .sticky-first fixa a 1ª coluna, .sticky-two as duas primeiras (a 1ª com largura fixa
+       --sticky-w, que é o deslocamento da 2ª). Só a 1ª linha do cabeçalho: numa 2ª linha (Ano a
+       ano do backtest) a 1ª célula já é de outra coluna. Os fundos de th, linhas destacadas e
+       hover são translúcidos; aqui viram uma camada (--tint) sobre o fundo do painel, senão os
+       números rolando apareceriam por baixo. Cada página dá o --tint das suas linhas destacadas. */
+    .sticky-first, .sticky-two { --sticky-w: 46px; }
+    .sticky-first > thead > tr:first-child > th:first-child,
+    .sticky-first > tbody > tr > td:first-child,
+    .sticky-two > thead > tr:first-child > th:nth-child(-n+2),
+    .sticky-two > tbody > tr > td:nth-child(-n+2) {
+        position: sticky; left: 0; z-index: 1;
+        background-color: var(--panel-bg);
+        background-image: linear-gradient(var(--tint, transparent), var(--tint, transparent));
+    }
+    .sticky-first > thead > tr:first-child > th:first-child,
+    .sticky-first > tbody > tr > td:first-child,
+    .sticky-two > thead > tr:first-child > th:nth-child(2),
+    .sticky-two > tbody > tr > td:nth-child(2) {
+        max-width: 42vw;
+        box-shadow: inset -1px 0 0 var(--border-color), 4px 0 6px -4px rgba(1, 4, 9, 0.6);
+    }
+    .sticky-two > thead > tr:first-child > th:first-child,
+    .sticky-two > tbody > tr > td:first-child { width: var(--sticky-w); min-width: var(--sticky-w); max-width: var(--sticky-w); }
+    .sticky-two > thead > tr:first-child > th:nth-child(2),
+    .sticky-two > tbody > tr > td:nth-child(2) { left: var(--sticky-w); }
+    .sticky-two > tbody > tr > td[colspan]:first-child { max-width: none; }
+    /* Célula que ocupa a linha toda (grupo de classe, linha vazia): mais larga que a tela, não
+       pode ser fixa (rolaria junto e cobriria as outras); o texto vai num .sticky-label, que
+       fica fixo dentro dela. */
+    :is(.sticky-first, .sticky-two) > tbody > tr > td[colspan] { position: static; box-shadow: none; }
+    .sticky-label { position: sticky; left: 6px; display: inline-block; }
+    /* As duas colunas fixas ocupam no máximo ~1/3 da tela: menos respiro, a medalha do Rank
+       acima da posição e o setor sob o ticker cortado com reticências. */
+    .sticky-two > thead > tr:first-child > th:nth-child(-n+2),
+    .sticky-two > tbody > tr > td:nth-child(-n+2) { padding-left: 6px; padding-right: 6px; }
+    .sticky-two > tbody > tr > td:first-child:not([colspan]) { white-space: normal; }
+    .sticky-two > thead > tr:first-child > th:nth-child(2),
+    .sticky-two > tbody > tr > td:nth-child(2) { max-width: 26vw; }
+    /* .rank-merge (rankings do Screener, operações do Backtest): a 1ª coluna some e a posição
+       aparece acima do ticker (.rank-inline). */
+    .rank-merge { --sticky-w: 0px; }
+    .rank-merge > thead > tr:first-child > th:first-child,
+    .rank-merge > tbody > tr > td:first-child:not([colspan]) { display: none; }
+    .rank-merge .rank-inline { display: block; }
+    .sticky-two > tbody > tr > td:nth-child(2) .small.muted { max-width: calc(26vw - 12px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    :is(.sticky-first, .sticky-two) th { --tint: rgba(70, 96, 150, 0.12); }
+    :is(.sticky-first, .sticky-two) tr:hover td { --tint: rgba(56, 139, 253, 0.03); }
+}
+/* #endregion */

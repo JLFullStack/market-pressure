@@ -1,0 +1,93 @@
+/* Carteira → Aportes e lançamentos: calculadora de aporte (KPIs, opções, sugestões do Screener,
+   gráficos, tabela por ativo, registrar compras sugeridas), Nova operação, Renda fixa e o
+   histórico de lançamentos em linha do tempo. */
+
+/* #region Calculadora de aporte */
+.aporte-kpis { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 16px; }
+.aporte-kpis .kpi-value { font-size: 24px; }
+.aporte-note { font-size: 13px; line-height: 1.5; margin: 12px 0 4px; }
+.aporte-note p { margin: 4px 0; }
+.aporte-toggles { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; }
+#aportePanel h3 { margin-top: 18px; }
+#aporteChartsBlock, #aportePathBlock, #aporteHistoryBlock, #aporteCandidates { margin-top: 20px; }
+.aporte-details summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px; margin: 10px 0; }
+.aporte-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Tabela por ativo: a coluna Escolher só aparece no modo "escolher" */
+#aporteTable .pick { display: none; }
+#aporteTable.picking .pick { display: table-cell; }
+
+/* Sugestões do Screener para as classes abaixo da meta */
+.cand-group { margin-bottom: 14px; }
+.cand-group p { font-size: 13px; margin: 4px 0 8px; }
+.cand-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 8px; }
+.cand { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 13px; }
+.cand:hover { border-color: var(--text-muted); }
+.cand.chosen { border-color: var(--accent); background: rgba(56, 139, 253, 0.08); }
+.cand input { margin-top: 3px; }
+.cand-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cand-name { color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Gráficos: barras por classe, três roscas (Atual, Após, Meta) e a caixa flutuante delas */
+.aporte-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; margin-bottom: 16px; }
+.aporte-chart h4 { margin: 0; font-size: 13px; font-weight: 600; }
+.donuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.donuts figure { margin: 0; text-align: center; }
+.donuts figcaption { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.donut-wrap { position: relative; height: 150px; }
+.donut-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px; }
+.chart-tip { position: fixed; z-index: 1000; pointer-events: none; white-space: nowrap; font-size: 12px; line-height: 1.6;
+    background: var(--panel-bg); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); }
+.chart-tip[hidden] { display: none; }
+
+/* Registrar compras sugeridas: lista de revisão */
+.aporte-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.aporte-actions .form-msg { margin-top: 0; }
+.subpanel { border-top: 1px solid var(--border-color); margin-top: 18px; padding-top: 16px; }
+.subpanel .panel-title { margin-bottom: 12px; }
+.num-input { width: 110px; text-align: right; }
+.batch-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.batch-error td { background-color: rgba(248, 81, 73, 0.08); }
+/* #endregion */
+
+/* #region Nova operação: aviso de imposto da venda digitada */
+#txTaxAlert { margin: 12px 0 0; }
+/* #endregion */
+
+/* #region Histórico de lançamentos */
+.history-toggle { margin-top: 12px; }
+/* Linha do tempo: ponto colorido pelo sentido do dinheiro */
+.history-table td { padding-top: 12px; padding-bottom: 12px; }
+.tl-in { --tl: var(--success); }
+.tl-out { --tl: var(--danger); }
+.tl-update, .tl-other { --tl: var(--cyan); }
+.history-table td:first-child { position: relative; padding-left: 34px; }
+.history-table td:first-child::before {
+    content: ""; position: absolute; left: 17px; top: 0; bottom: 0; width: 2px;
+    background: linear-gradient(180deg, rgba(90, 162, 255, 0.35), rgba(155, 123, 255, 0.2));
+}
+.history-table tbody tr:first-child td:first-child::before { top: 50%; }
+.history-table tbody tr:last-child td:first-child::before { bottom: 50%; }
+.history-table tbody tr:only-child td:first-child::before { display: none; }
+.tl { display: flex; align-items: center; gap: 12px; }
+.tl-dot {
+    position: absolute; left: 12px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%;
+    background: var(--tl); box-shadow: 0 0 0 3px var(--panel-bg), 0 0 10px var(--tl);
+}
+tr.in .tl-dot { animation: dot-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; animation-delay: calc(var(--stagger, 0s) + 0.3s); }
+.instant .tl-dot { animation: none; }
+.tl-row:hover .tl-dot { transform: scale(1.25); transition: transform 0.2s var(--ease-out); }
+.entry-pill { display: inline-flex; align-items: center; gap: 4px; }
+.entry-arrow { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.history-table tr.in > td { animation-name: slide-in; }
+@keyframes slide-in { from { transform: translateX(-18px); opacity: 0; } }
+/* #endregion */
+
+/* #region Responsivo */
+@media (max-width: 640px) {
+    .num-input { width: 90px; }
+    /* Aporte → Por ativo: fora do modo "escolher" o Ativo encosta na borda. */
+    #aporteTable { --sticky-w: 0px; }
+    #aporteTable.picking { --sticky-w: 76px; }
+}
+/* #endregion */

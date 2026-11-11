@@ -1,0 +1,132 @@
+/* Aba Carteira (carteira.html + carteira.js): o que mais de uma sub-aba usa. Sub-abas, avisos
+   de imposto, barra de alocação e rosca, metas por ativo, linhas de grupo das tabelas, avatar da
+   classe e o botão de ícone. Cada sub-aba tem o próprio arquivo nesta pasta, carregado depois
+   deste. */
+
+/* #region Sub-abas */
+/* Mesmo visual da barra do topo, menores. No celular a barra rola horizontalmente dentro dela
+   (a página não). O sublinhado é um box-shadow interno porque a rolagem cortaria uma borda com
+   margem negativa. */
+.subtabs {
+    position: relative; display: flex; gap: 2px; margin-bottom: 16px; overflow-x: auto;
+    padding: 5px; border-radius: 14px; border: 1px solid var(--border-color);
+    background: rgba(14, 21, 39, 0.7); box-shadow: var(--shadow);
+}
+.subtab {
+    position: relative; z-index: 1;
+    flex: 0 0 auto;
+    background: none;
+    border: none;
+    border-radius: 10px;
+    padding: 9px 14px;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+.subtab:hover { color: var(--text-color); }
+.subtab[aria-selected="true"] { color: #fff; }
+.subtabs:not(.has-pill) .subtab[aria-selected="true"] { background: linear-gradient(135deg, rgba(59, 130, 255, 0.3), rgba(155, 123, 255, 0.24)); }
+.subtab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+.subtabs .slide-pill { border-radius: 10px; }
+[role="tabpanel"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
+
+.warn-text { color: var(--warning); }
+/* #endregion */
+
+/* #region Aviso de imposto (tax_alert.py) */
+/* Vendas de ações do mês perto (near) ou acima (over) do limite da isenção; info = venda de ETF,
+   BDR ou fundo, que não tem a isenção. Na Visão geral, na Nova operação e em Impostos. */
+.tax-alert { border: 1px solid var(--border-color); border-left: 4px solid var(--warning); border-radius: 8px;
+             background: rgba(255, 166, 87, 0.08); padding: 12px 14px; margin: 0 0 16px; font-size: 14px; line-height: 1.5; }
+.tax-alert p { margin: 4px 0 0; color: var(--text-muted); }
+.tax-alert strong { color: var(--text-color); }
+.tax-alert.tax-over { border-left-color: var(--danger); background: rgba(255, 123, 114, 0.08); }
+.tax-alert.tax-info { border-left-color: var(--accent); background: rgba(56, 139, 253, 0.08); }
+.tax-alert a { color: var(--accent); font-weight: 600; }
+/* #endregion */
+
+/* #region Alocação: barra, rosca e cor da classe */
+.swatch-box { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.alloc-bar { position: relative; height: 8px; background: rgba(255, 255, 255, 0.06); border-radius: 4px; min-width: 120px; }
+.alloc-bar .now { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #3b82ff, #22d3ee); border-radius: 4px; transform-origin: left; }
+.in .alloc-bar .now, .in .alloc-bar .after { animation: grow-x 1s var(--ease-out) 0.2s backwards; }
+.alloc-bar .goal { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text-color); }
+/* Barra dupla do painel Aporte: faixa de cima = % atual, de baixo = % após a sugestão. */
+.alloc-bar.dual { height: 14px; background: transparent; }
+.alloc-bar.dual::before, .alloc-bar.dual::after { content: ""; position: absolute; left: 0; right: 0; height: 6px; background: var(--border-color); border-radius: 3px; }
+.alloc-bar.dual::before { top: 0; }
+.alloc-bar.dual::after { bottom: 0; }
+.alloc-bar.dual .now { bottom: auto; height: 6px; z-index: 1; }
+.alloc-bar.dual .after { position: absolute; left: 0; bottom: 0; height: 6px; background: var(--success); border-radius: 3px; z-index: 1; transform-origin: left; }
+.alloc-bar.dual .goal { z-index: 2; }
+.instant .alloc-bar .now, .instant .alloc-bar .after { animation: none; }
+/* Rosca ao lado da tabela (Visão geral: alocação; Configurações: metas das classes) */
+.alloc-grid { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: center; }
+.alloc-donut { margin: 0; text-align: center; }
+.donut-box { position: relative; height: 220px; }
+/* O texto do centro fica atrás do gráfico (canvas transparente): o tooltip, desenhado no canvas,
+   passa por cima dele. */
+.donut-center { position: absolute; inset: 0; z-index: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.donut-box > canvas { position: relative; z-index: 1; }
+.donut-center strong { font-size: 16px; }
+.alloc-donut figcaption { margin-top: 8px; }
+.avatar.solo { background: linear-gradient(135deg, var(--a1), color-mix(in srgb, var(--a1) 55%, #ffffff)); }
+/* #endregion */
+
+/* #region Tabelas agrupadas por classe (Aporte, Meta por ativo) */
+.group-row td { background-color: rgba(70, 96, 150, 0.12); padding-top: 10px; padding-bottom: 10px; }
+/* #endregion */
+
+/* #region Meta por ativo (Configurações e o campo de meta da calculadora) */
+.target-input { width: 80px; text-align: right; border-radius: 9px; font-weight: 600; }
+.target-input:placeholder-shown { color: var(--text-muted); }
+.target-chip { margin-left: 8px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; color: var(--accent); background: rgba(90, 162, 255, 0.12); }
+.target-cmp { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 5px; min-width: 160px; }
+.target-bar { position: relative; display: block; width: 160px; height: 7px; border-radius: 4px; background: rgba(255, 255, 255, 0.06); }
+.target-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; border-radius: 4px; background: linear-gradient(90deg, #3b82ff, #22d3ee); transform: scaleX(var(--w)); transform-origin: left; }
+.target-bar.above i { background: linear-gradient(90deg, #ff8a5b, #ffb057); }
+.target-bar b { position: absolute; top: -4px; bottom: -4px; width: 2px; border-radius: 1px; background: var(--text-color); box-shadow: 0 0 6px rgba(255, 255, 255, 0.5); }
+tr.in .target-bar i { animation: grow-x 0.9s var(--ease-out) backwards; animation-delay: calc(var(--stagger, 0s) + 0.2s); }
+.instant .target-bar i { animation: none; }
+.target-mode { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.target-mode.auto { color: var(--text-muted); background: rgba(148, 163, 184, 0.12); }
+.target-mode.fixed { color: var(--violet); background: rgba(155, 123, 255, 0.15); }
+/* #endregion */
+
+/* #region Botão de ícone (excluir lançamento, fechar o card do gráfico) */
+.icon-btn {
+    display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0;
+    border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer;
+    transition: color 0.2s, background-color 0.2s, border-color 0.2s, transform 0.15s var(--ease-out);
+}
+.icon-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn:active { transform: scale(0.9); }
+.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Excluir: sempre vermelho (fundo e borda suaves); no hover acende, a tampa da lixeira abre e o
+   botão ganha brilho. */
+.icon-danger { color: #ff6b6b; background-color: rgba(255, 107, 107, 0.1); border-color: rgba(255, 107, 107, 0.28); }
+.icon-danger:hover, .icon-danger:focus-visible {
+    color: #fff; background: linear-gradient(135deg, #ff6b6b, #e5484d); border-color: transparent;
+    box-shadow: 0 6px 16px -6px rgba(255, 90, 90, 0.85);
+}
+.icon-danger svg .lid { transform-origin: 20px 7px; transition: transform 0.25s var(--ease-out); }
+.icon-danger:hover svg .lid, .icon-danger:focus-visible svg .lid { transform: rotate(18deg) translateY(-1px); }
+/* #endregion */
+
+/* #region Responsivo */
+@media (max-width: 760px) {
+    .alloc-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+    .subtabs { border-radius: 12px; }
+    .subtab { padding: 9px 11px; }
+    .donut-box { height: 200px; }
+    .target-cmp { min-width: 110px; }
+    .target-bar { width: 110px; }
+    :is(.sticky-first, .sticky-two) .group-row td { --tint: rgba(70, 96, 150, 0.12); }
+}
+/* #endregion */

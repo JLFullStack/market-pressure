@@ -1,0 +1,704 @@
+/* Estilos compartilhados por todas as páginas: cores, base, barra do app, botões, formulários,
+   tabelas, cartões de KPI, cabeçalho (hero), ajuda flutuante e os componentes que mais de uma
+   página usa. Cada página carrega, nesta ordem: app.css, responsivo.css, animacao.css e depois
+   os próprios arquivos (screener.css, backtest.css, carteira/…). As media queries e animações de
+   um componente de uma página só ficam no arquivo dessa página. */
+
+/* #region Cores e medidas (variáveis) */
+:root {
+    --bg-color: #070b16;
+    --panel-bg: #0e1527;
+    --panel-raised: #131c33;
+    --border-color: #1f2b46;
+    --border-strong: #2d3d62;
+    --text-color: #dce5f5;
+    --text-muted: #8a99b6;
+    --blue-gas: #2f6bff;
+    --accent: #5aa2ff;
+    --cyan: #22d3ee;
+    --violet: #9b7bff;
+    --danger: #ff7b72;
+    --success: #4ad991;
+    --warning: #ffb057;
+    --radius: 14px;
+    --glow: 0 0 0 1px rgba(90, 162, 255, 0.35), 0 10px 32px -10px rgba(47, 107, 255, 0.55);
+    --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px -18px rgba(0, 0, 0, 0.8);
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    color-scheme: dark;
+}
+/* #endregion */
+
+/* #region Base */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+body {
+    font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, Inter, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+}
+/* Halos de cor fixos atrás da página (estáticos: não custam nada depois de pintados). */
+body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background:
+        radial-gradient(900px 520px at 8% -8%, rgba(47, 107, 255, 0.16), transparent 70%),
+        radial-gradient(700px 480px at 100% 0%, rgba(155, 123, 255, 0.11), transparent 70%),
+        radial-gradient(800px 600px at 60% 110%, rgba(34, 211, 238, 0.07), transparent 70%);
+}
+.num { font-variant-numeric: tabular-nums; }
+::selection { background: rgba(90, 162, 255, 0.35); }
+
+.container { max-width: 1600px; margin: 0 auto; }
+
+.panel {
+    background-color: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+}
+
+.header-panel {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+h2 { margin: 0 0 14px; font-size: 16px; letter-spacing: -0.005em; }
+h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 600; }
+
+.subtitle { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+
+.controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+.pos { color: var(--success); }
+.neg { color: var(--danger); }
+.r { text-align: right; }
+.c { text-align: center; }
+.nowrap { white-space: nowrap; }
+.muted { color: var(--text-muted); }
+.small { font-size: 12px; }
+
+.status-badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid rgba(56, 139, 253, 0.3);
+    background-color: rgba(56, 139, 253, 0.15);
+    color: var(--accent);
+}
+.status-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+.status-badge.ok { background-color: rgba(46, 160, 67, 0.15); color: var(--success); border-color: rgba(46, 160, 67, 0.3); }
+.status-badge.warn { background-color: rgba(219, 109, 40, 0.15); color: var(--warning); border-color: rgba(219, 109, 40, 0.3); }
+
+.banner {
+    background-color: rgba(219, 109, 40, 0.1);
+    border: 1px solid #db6d28;
+    color: var(--warning);
+    padding: 14px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    display: none;
+}
+
+.empty-row { text-align: center; color: var(--text-muted); padding: 40px !important; }
+/* #endregion */
+
+/* #region Botões */
+.btn {
+    background: linear-gradient(135deg, #3b7bff, #2f5bff 55%, #6a5cff);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 6px 18px -8px rgba(47, 107, 255, 0.8);
+    transition: transform 0.15s var(--ease-out), box-shadow 0.2s, filter 0.2s;
+}
+.btn:hover { filter: brightness(1.12); box-shadow: 0 8px 24px -8px rgba(47, 107, 255, 0.95); }
+.btn:active, .btn-secondary:active, .btn-accent:active, .btn-analyze:active { transform: scale(0.96); }
+.btn:disabled { opacity: 0.5; cursor: wait; }
+
+.btn-secondary {
+    background: transparent;
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background-color 0.2s, transform 0.15s var(--ease-out);
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); background-color: rgba(90, 162, 255, 0.08); }
+.btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-ghost { display: inline-flex; align-items: center; gap: 6px; }
+.btn-ghost svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.btn-danger:hover { border-color: var(--danger); color: var(--danger); background-color: rgba(255, 123, 114, 0.08); }
+.link-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 12px; padding: 4px; }
+.link-btn:hover { text-decoration: underline; }
+
+/* Botões com ícone (Atualizar do Screener e da Carteira) */
+.btn-icon { display: inline-flex; align-items: center; gap: 8px; }
+.refresh-icon { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.5s var(--ease-out); }
+.btn-icon:hover .refresh-icon { transform: rotate(180deg); }
+.btn-icon:disabled .refresh-icon { animation: busy-spin 1s linear infinite; }
+
+/* Botões das análises por IA (ANALISAR ATIVO, CARTEIRA, BACKTEST) e o diálogo de copiar à mão */
+.copy-analysis { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+.copy-analysis:disabled { opacity: 0.7; cursor: wait; }
+.copy-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.copy-wrap > .tip { margin-left: 0; }
+.btn-analyze {
+    background-color: rgba(56, 139, 253, 0.15); color: var(--accent); border: 1px solid var(--accent); border-radius: 8px;
+    font-weight: 700; letter-spacing: 0.3px; cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, transform 0.15s var(--ease-out), box-shadow 0.2s;
+}
+.btn-analyze::before { content: "✦ "; }
+.btn-analyze:hover { background-color: var(--blue-gas); border-color: var(--blue-gas); color: #fff; box-shadow: 0 6px 18px -8px rgba(47, 107, 255, 0.9); }
+.btn-analyze:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-analyze.copied, .btn-analyze.copied:disabled { opacity: 1; background-color: rgba(74, 217, 145, 0.14); border-color: var(--success); color: var(--success); animation: pop 0.35s var(--ease-out); }
+.btn-analyze.copy-failed { opacity: 1; border-color: var(--danger); color: var(--danger); }
+.copy-dialog {
+    width: min(720px, calc(100vw - 32px));
+    background: var(--panel-bg);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+}
+.copy-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+.copy-dialog h3 { margin: 0 0 6px; }
+.copy-dialog textarea {
+    width: 100%; height: 50vh; box-sizing: border-box; resize: vertical;
+    background: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color);
+    border-radius: 6px; padding: 8px; font: 12px/1.5 monospace;
+}
+.copy-dialog-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+
+.inline-link { color: var(--accent); text-decoration: none; font-weight: 600; }
+.inline-link:hover { text-decoration: underline; }
+.inline-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+/* #endregion */
+
+/* #region Barra do app */
+/* Marca, abas em pílula com ícone e rótulo, usuário. Fica presa no topo ao rolar (vidro fosco só
+   aqui). O destaque da aba é um elemento só (.tab-glow, criado por core.js: setupSlidingPill) que
+   desliza até a aba sob o mouse e volta para a atual; entre páginas, a transição de visualização
+   do navegador (@view-transition, em animacao.css) o leva de uma aba à outra. No celular as abas
+   viram uma barra flutuante embaixo da tela (responsivo.css). */
+.appbar {
+    position: sticky; top: 12px; z-index: 800;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 18px;
+    padding: 6px 8px 6px 14px;
+    background-color: rgba(14, 21, 39, 0.72);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid var(--border-color);
+    border-radius: 18px;
+    box-shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.8);
+    view-transition-name: appbar;
+}
+.brand {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 15px; color: var(--text-color); white-space: nowrap; letter-spacing: -0.01em;
+}
+/* Logo: barras subindo num quadrado em degradê, desenhado só em CSS (a marcação é a mesma nas páginas). */
+.brand::before {
+    content: "";
+    width: 30px; height: 30px; flex: none; border-radius: 9px;
+    background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M6 17v-3M10 17V9M14 17v-5M18 17V6'/%3E%3C/svg%3E") center / 18px no-repeat,
+        linear-gradient(135deg, #3b82ff, #22d3ee 55%, #9b7bff);
+    box-shadow: 0 4px 14px -4px rgba(59, 130, 255, 0.8);
+}
+.tabs { position: relative; display: flex; gap: 2px; padding: 4px; border-radius: 14px; background: rgba(255, 255, 255, 0.025); }
+.tab {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 92px;
+    padding: 8px 12px;
+    border-radius: 11px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 12.5px;
+    transition: color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+}
+.tab-icon {
+    width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    transition: transform 0.3s var(--ease-out);
+}
+.tab-short { display: none; }
+.tab:hover { color: var(--text-color); }
+.tab:hover .tab-icon { transform: translateY(-2px) scale(1.08); }
+.tab:active .tab-icon { transform: scale(0.9); }
+.tab[aria-current="page"] { color: #fff; }
+.tab[aria-current="page"] .tab-icon { stroke: var(--cyan); filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.55)); }
+/* Sem a pílula (antes do script), a aba atual tem o próprio fundo. */
+.tabs:not(.has-pill) .tab[aria-current="page"] { background: linear-gradient(135deg, rgba(59, 130, 255, 0.28), rgba(155, 123, 255, 0.22)); }
+.tab-glow {
+    position: absolute; z-index: 0; top: 0; left: 0;
+    border-radius: 11px;
+    background: linear-gradient(135deg, rgba(59, 130, 255, 0.3), rgba(155, 123, 255, 0.24));
+    box-shadow: inset 0 0 0 1px rgba(120, 170, 255, 0.28), 0 6px 22px -8px rgba(59, 130, 255, 0.75);
+    pointer-events: none;
+    view-transition-name: tab-glow;
+}
+.tab-glow.moving { transition: transform 0.38s var(--ease-out), width 0.38s var(--ease-out), height 0.38s var(--ease-out), opacity 0.2s; }
+.tab-glow.hovering { opacity: 0.6; }
+/* Linha brilhante sob a aba atual (desktop) */
+.tab[aria-current="page"]::after {
+    content: "";
+    position: absolute; left: 30%; right: 30%; bottom: 1px; height: 2px; border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+    .tab-glow.moving, .tab-icon { transition: none; }
+}
+.tab:focus-visible, .btn:focus-visible, .btn-secondary:focus-visible, .link-btn:focus-visible, .seg button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+/* Usuário e "Sair" (versão publicada) */
+.tabs-user { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); min-width: 0; padding-right: 8px; }
+.tabs-user #userName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabs-user .link-btn { color: var(--accent); font-size: 13px; }
+/* #endregion */
+
+/* #region Pílula deslizante (core.js: setupSlidingPill) */
+/* Os grupos (.tabs, .subtabs, .seg) já são position: relative; as abas do celular são fixed. */
+.slide-pill {
+    position: absolute; z-index: 0; top: 0; left: 0; pointer-events: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(59, 130, 255, 0.38), rgba(155, 123, 255, 0.3));
+    box-shadow: inset 0 0 0 1px rgba(120, 170, 255, 0.3), 0 4px 16px -6px rgba(59, 130, 255, 0.7);
+}
+.slide-pill.moving { transition: transform 0.35s var(--ease-out), width 0.35s var(--ease-out), height 0.35s var(--ease-out), opacity 0.2s; }
+.slide-pill.hovering { opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) { .slide-pill.moving { transition: none; } }
+
+/* Grupo de botões segmentados (períodos, Candles/Linha…) */
+.seg { position: relative; display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(7, 11, 22, 0.5); }
+.seg button { position: relative; z-index: 1; background: transparent; color: var(--text-muted); border: none; border-radius: 7px; padding: 5px 11px; font-size: 13px; font-weight: 600; cursor: pointer; transition: color 0.2s; }
+.seg button:hover { color: var(--text-color); }
+.seg button[aria-pressed="true"] { color: #fff; }
+.seg:not(.has-pill) button[aria-pressed="true"] { background: linear-gradient(135deg, rgba(59, 130, 255, 0.35), rgba(155, 123, 255, 0.28)); }
+/* #endregion */
+
+/* #region Spinner com fundo escurecido (core.js: busyStart) */
+.busy-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(1, 4, 9, 0.6);
+    backdrop-filter: blur(2px);
+    cursor: progress;
+    animation: busy-fade 0.15s ease-out;
+    transition: opacity 0.18s ease-in;
+}
+.busy-overlay.leaving { opacity: 0; }
+.busy-box {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    min-width: 220px; max-width: calc(100vw - 32px);
+    padding: 24px 28px;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(1, 4, 9, 0.5);
+    text-align: center;
+}
+.busy-spinner {
+    width: 40px; height: 40px;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--accent);
+    border-right-color: var(--violet);
+    border-radius: 50%;
+    animation: busy-spin 0.8s linear infinite;
+}
+.busy-text { font-size: 14px; color: var(--text-color); }
+@keyframes busy-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+    .busy-spinner { animation-duration: 2.4s; }
+    .busy-overlay { animation: none; }
+}
+/* #endregion */
+
+/* #region Voltar ao topo (core.js: setupScrollTop) */
+/* Surge com fade e leve subida depois de rolar. Botão em degradê com brilho; no hover sobe, o
+   brilho cresce e a seta dá um pulo para cima. */
+.scroll-top {
+    position: fixed; right: 20px; bottom: 20px; z-index: 950;
+    width: 46px; height: 46px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #3b82ff, #22d3ee 60%, #9b7bff);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 8px 22px -6px rgba(59, 130, 255, 0.75), 0 0 0 4px rgba(59, 130, 255, 0.12);
+    cursor: pointer;
+    opacity: 0; visibility: hidden; transform: translateY(12px);
+    transition: opacity 0.25s ease, transform 0.25s var(--ease-out), box-shadow 0.25s, filter 0.25s, visibility 0s linear 0.25s;
+    /* Sem o realce quadrado que o navegador desenha ao tocar/clicar (tap highlight e o contorno de
+       foco do clique); o contorno continua para quem navega pelo teclado (:focus-visible). */
+    -webkit-appearance: none; appearance: none; padding: 0; -webkit-tap-highlight-color: transparent;
+}
+.scroll-top.visible { opacity: 1; visibility: visible; transform: none; transition: opacity 0.25s ease, transform 0.25s var(--ease-out), box-shadow 0.25s, filter 0.25s, visibility 0s; }
+.scroll-top svg { transition: transform 0.3s var(--ease-out); }
+.scroll-top.visible:hover { transform: translateY(-3px); filter: brightness(1.12); box-shadow: 0 12px 28px -6px rgba(34, 211, 238, 0.8), 0 0 0 6px rgba(34, 211, 238, 0.18); }
+.scroll-top:hover svg { animation: arrow-hop 0.7s var(--ease-out) infinite; }
+/* Telas de toque (sem hover): o brilho e a seta pulando ficam sempre ligados enquanto o botão
+   aparece, em vez de só depois do primeiro toque (o :hover "gruda" no toque). */
+@media (hover: none) {
+    .scroll-top.visible { filter: brightness(1.12); box-shadow: 0 12px 28px -6px rgba(34, 211, 238, 0.8), 0 0 0 6px rgba(34, 211, 238, 0.18); }
+    .scroll-top.visible svg { animation: arrow-hop 1.1s var(--ease-out) infinite; }
+}
+.scroll-top.visible:active { transform: scale(0.92); }
+@keyframes arrow-hop { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-4px); } }
+.scroll-top:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.scroll-top:focus:not(:focus-visible) { outline: none; }
+@media (prefers-reduced-motion: reduce) {
+    .scroll-top, .scroll-top.visible { transition: none; transform: none; }
+    .scroll-top:hover svg, .scroll-top.visible svg { animation: none; }
+}
+/* #endregion */
+
+/* #region Barras de rolagem */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    border: 3px solid transparent; border-radius: 999px; background-clip: padding-box;
+    background-color: #2d3d62;
+}
+::-webkit-scrollbar-thumb:hover { background-color: #4a6aa8; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.table-container::-webkit-scrollbar-thumb { background-image: linear-gradient(90deg, #3b82ff, #22d3ee 60%, #9b7bff); background-color: transparent; }
+/* Firefox (sem ::-webkit-scrollbar): no Chrome e no Edge, scrollbar-color anularia o estilo acima. */
+@supports not selector(::-webkit-scrollbar) {
+    * { scrollbar-width: thin; scrollbar-color: #2d3d62 transparent; }
+    .table-container { scrollbar-color: #3b6fd8 rgba(255, 255, 255, 0.03); }
+}
+/* #endregion */
+
+/* #region Formulários */
+.toggle { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+.select {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 13px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.select:hover { border-color: var(--border-strong); }
+.select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(90, 162, 255, 0.2); }
+
+/* Formulários em grade (Nova operação, Renda fixa, calculadora, Mover ativo, Conta): todos os
+   campos alinhados pelo topo, com a mesma altura (texto, lista, data e botão); a dica embaixo de
+   um campo não empurra os vizinhos e o botão fica na linha dos campos (desce a altura do rótulo). */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: start; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); font-weight: 600; min-width: 0; }
+.field .select { width: 100%; padding: 8px 10px; font-size: 14px; }
+.field-hint { font-size: 11px; font-weight: 400; min-height: 14px; }
+.form-msg { margin-top: 10px; font-size: 13px; min-height: 18px; }
+.form-msg.error { color: var(--danger); }
+.form-msg.ok { color: var(--success); }
+.form-grid .field .select, .form-grid .field input.select { height: 40px; padding-top: 0; padding-bottom: 0; line-height: 38px; }
+.form-grid .field select.select { padding-right: 28px; }
+.form-grid .field { line-height: 16px; }
+.form-grid > div:not(.field), .form-grid > button {
+    display: flex; align-items: center; gap: 8px; margin-top: 20px;
+}
+.form-grid > div:not(.field) > .btn, .form-grid > div:not(.field) > .btn-secondary, .form-grid > button {
+    height: 40px; padding-top: 0; padding-bottom: 0; white-space: nowrap;
+}
+.form-grid .field-hint { line-height: 1.35; }
+
+/* Formulário em grupos (cartões fieldset): o do Backtest (Ativos, Dinheiro, Alocação, Saída,
+   Período e filtros) e o das Metas da Carteira. Fundo escuro e sólido, borda azul e filete de
+   luz no topo, para se destacarem do fundo em degradê do cabeçalho; acendem no hover e com um
+   campo em foco. */
+.bt-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 14px; }
+.bt-group {
+    border: 1px solid rgba(90, 162, 255, 0.24); border-radius: 12px; padding: 10px 14px 14px; margin: 0; min-width: 0;
+    background: linear-gradient(180deg, rgba(19, 28, 51, 0.96), rgba(10, 15, 30, 0.94));
+    box-shadow: inset 0 1px 0 rgba(120, 170, 255, 0.14), 0 10px 24px -16px rgba(0, 0, 0, 0.9);
+    transition: border-color 0.25s, box-shadow 0.25s;
+}
+.bt-group:hover, .bt-group:focus-within {
+    border-color: rgba(90, 162, 255, 0.55);
+    box-shadow: inset 0 1px 0 rgba(120, 170, 255, 0.22), 0 14px 30px -16px rgba(59, 130, 255, 0.75);
+}
+.bt-group > legend { padding: 2px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cyan); background: rgba(34, 211, 238, 0.1); }
+.bt-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; align-items: end; }
+.bt-checks { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+/* Cada campo tem o rótulo numa linha só, com o "?" ao lado. */
+.field .tip-label, .toggle .tip-label { white-space: nowrap; }
+
+/* Linha de campos que pede o valor e tem o botão ao lado (Prejuízos anteriores em Impostos,
+   Feriados em Configurações) e o botão pequeno das listas dessas duas abas. */
+.tax-opening { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-top: 10px; }
+.tax-opening label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--text-muted); }
+.tax-copy { padding: 4px 10px; font-size: 12px; white-space: nowrap; }
+
+/* Interruptor (checkbox estilizado) */
+.switch { position: relative; }
+.switch > input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.switch-track { position: relative; flex: none; width: 34px; height: 20px; border-radius: 999px; background: var(--border-strong); transition: background 0.25s; }
+.switch-track::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); transition: transform 0.25s var(--ease-out);
+}
+.switch > input:checked + .switch-track { background: linear-gradient(135deg, #3b82ff, #22d3ee); }
+.switch > input:checked + .switch-track::after { transform: translateX(14px); }
+.switch > input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* #endregion */
+
+/* #region Tabelas */
+/* position: relative prende os .sr-only (absolutos) da tabela dentro da rolagem; sem ele
+   escapam do recorte e alargam a página no celular (a barra de abas de baixo sai da tela).
+   overflow-y: hidden: as células que sobem ao aparecer (tr[data-reveal]) não criam uma barra
+   vertical passageira na tabela. */
+.table-container { position: relative; overflow-x: auto; overflow-y: hidden; padding: 0; }
+
+table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+th {
+    background-color: rgba(70, 96, 150, 0.12);
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 12px;
+    padding: 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+td { padding: 14px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+tbody tr { transition: background-color 0.15s; }
+tr:hover { background-color: rgba(90, 162, 255, 0.05); }
+.total-row td { border-bottom: 2px solid var(--border-color); }
+/* Rankings do Screener e Operações do Backtest: a posição (ou o nº da operação) repetida acima
+   do ticker, mostrada só no celular, onde a 1ª coluna some (.rank-merge, em responsivo.css). */
+.rank-inline { display: none; font-weight: 700; font-size: 12px; margin-bottom: 2px; white-space: nowrap; }
+
+.ticker-link { color: var(--accent); text-decoration: none; font-weight: 700; }
+.ticker-link:hover { text-decoration: underline; }
+
+/* Ativo: avatar redondo em degradê + ticker e nome */
+.asset { display: flex; align-items: center; gap: 10px; }
+.asset-text { min-width: 0; }
+.avatar {
+    width: 34px; height: 34px; flex: none; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.02em; color: #fff;
+    background: linear-gradient(135deg, var(--a1), var(--a2));
+    box-shadow: 0 4px 12px -6px var(--a1);
+}
+/* #endregion */
+
+/* #region Badges, pílulas e chips */
+.badge { display: inline-block; padding: 4px 9px; font-size: 12px; font-weight: 600; border-radius: 999px; text-transform: uppercase; white-space: nowrap; letter-spacing: 0.02em; }
+.badge-hot { background-color: rgba(248, 81, 73, 0.15); color: var(--danger); border: 1px solid rgba(248, 81, 73, 0.3); }
+.badge-fill { background-color: rgba(219, 109, 40, 0.15); color: var(--warning); border: 1px solid rgba(219, 109, 40, 0.3); }
+.badge-low { background-color: rgba(139, 148, 158, 0.15); color: var(--text-muted); border: 1px solid rgba(139, 148, 158, 0.3); }
+.badge-ok { background-color: rgba(46, 160, 67, 0.15); color: var(--success); border: 1px solid rgba(46, 160, 67, 0.3); }
+.badge-info { background-color: rgba(56, 139, 253, 0.15); color: var(--accent); border: 1px solid rgba(56, 139, 253, 0.3); }
+
+/* Indicação (COMPRAR, VENDER, MANTER, AGUARDAR): badge clicável; o motivo abre na .tip-box */
+.signal-badge { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; font-weight: 700; cursor: help; white-space: nowrap; }
+.signal-badge:hover, .signal-badge:focus-visible { filter: brightness(1.25); outline: 2px solid currentColor; outline-offset: 2px; }
+.signal-info { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border: 1px solid currentColor; border-radius: 50%; font-size: 9px; font-style: italic; font-family: Georgia, serif; line-height: 1; opacity: 0.8; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--border-color); color: var(--text-muted); }
+.chip strong { color: var(--text-color); font-weight: 600; }
+
+/* Variação em pílula (posições da Carteira, resultados do Backtest) e o ano em pílula */
+.delta-pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: rgba(255, 255, 255, 0.05); }
+.delta-pill.pos { background: rgba(74, 217, 145, 0.13); }
+.delta-pill.neg { background: rgba(255, 123, 114, 0.13); }
+.year-pill { display: inline-block; min-width: 30px; padding: 2px 8px; border-radius: 999px; text-align: center; font-size: 12px; font-weight: 700; color: var(--accent); background: rgba(90, 162, 255, 0.12); }
+
+/* Amostras de cor das legendas */
+.swatch-line { display: inline-block; width: 14px; height: 2px; }
+.swatch-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+/* #endregion */
+
+/* #region Painéis */
+.panel-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 4px; }
+.panel-head h2 { margin: 0; }
+.panel-title { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.panel-title h2 { margin: 0; }
+.icon-chip {
+    width: 32px; height: 32px; flex: none; border-radius: 10px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, rgba(59, 130, 255, 0.25), rgba(155, 123, 255, 0.2));
+    color: var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(120, 170, 255, 0.25);
+}
+.icon-chip svg, .kpi-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.icon-chip.tone-warn { background: rgba(255, 176, 87, 0.14); color: var(--warning); box-shadow: inset 0 0 0 1px rgba(255, 176, 87, 0.3); }
+
+/* Título de um resultado (Backtest, card do gráfico da Carteira): ícone, título e pílulas */
+.result-head { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.result-head > div { min-width: 0; }
+.result-head h2 { margin-bottom: 4px; }
+.result-head .chips { margin-top: 6px; }
+.result-head .chip { font-size: 11.5px; }
+
+/* Cabeçalho das páginas (hero) */
+.hero {
+    position: relative; overflow: hidden; padding: 24px;
+    background: linear-gradient(135deg, rgba(47, 107, 255, 0.14), rgba(14, 21, 39, 0) 50%), var(--panel-bg);
+    border-color: rgba(90, 162, 255, 0.22);
+}
+.hero > :not(.hero-aurora) { position: relative; }
+/* Brilho que passeia devagar atrás do cabeçalho: só transform (fica na GPU). */
+.hero-aurora {
+    position: absolute; inset: -50%; pointer-events: none; will-change: transform;
+    background:
+        radial-gradient(closest-side, rgba(47, 107, 255, 0.22), transparent) 25% 35% / 45% 45% no-repeat,
+        radial-gradient(closest-side, rgba(155, 123, 255, 0.16), transparent) 75% 55% / 40% 40% no-repeat,
+        radial-gradient(closest-side, rgba(34, 211, 238, 0.10), transparent) 55% 30% / 30% 30% no-repeat;
+    animation: aurora 22s ease-in-out infinite alternate;
+}
+.eyebrow { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cyan); }
+.hero h1 {
+    font-size: 28px; line-height: 1.2;
+    background: linear-gradient(90deg, #ffffff, #b9d3ff 55%, #cdbcff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.live-pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; letter-spacing: 0.06em; color: var(--success); background: rgba(74, 217, 145, 0.12); border: 1px solid rgba(74, 217, 145, 0.3); }
+.live-dot { position: relative; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.live-dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: currentColor; animation: live-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@keyframes live-ping { 75%, 100% { transform: scale(2.8); opacity: 0; } }
+.toolbar { margin-top: 18px; padding: 10px 14px; gap: 10px 22px; border-radius: 12px; background: rgba(7, 11, 22, 0.45); border: 1px solid var(--border-color); }
+@media (prefers-reduced-motion: reduce) {
+    .hero-aurora, .live-dot::after { animation: none; }
+}
+/* #endregion */
+
+/* #region KPIs */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.kpi { border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; background: rgba(255, 255, 255, 0.015); }
+.kpi-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
+.kpi-value { font-size: 24px; font-weight: 700; margin-top: 6px; }
+.kpi-note { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+/* KPIs em cartões coloridos (tom por cartão; o do BOVA11 fica verde ou vermelho pelo sinal).
+   Cada cartão tem o próprio data-reveal: no celular (empilhados) cada um aparece ao entrar na
+   tela; no desktop os que entram juntos vêm em cascata (--stagger, core.js). */
+.kpi-cards { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.kpi-card {
+    position: relative; overflow: hidden; padding: 16px;
+    border-radius: 14px; border-color: var(--tone-border);
+    background: linear-gradient(160deg, var(--tone-bg), rgba(255, 255, 255, 0.01) 70%);
+    transition: transform 0.25s var(--ease-out), box-shadow 0.25s, border-color 0.25s;
+}
+.kpi-card::before { content: ""; position: absolute; left: 14px; right: 14px; top: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--tone), transparent); }
+.kpi-card:hover { transform: translateY(-3px); border-color: var(--tone); box-shadow: 0 16px 34px -18px var(--tone); }
+.kpi-top { display: flex; align-items: center; gap: 10px; }
+.kpi-icon { width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center; color: var(--tone); background: var(--tone-bg); }
+.kpi-card .kpi-label { letter-spacing: 0.04em; }
+.kpi-card .kpi-value { font-size: 30px; margin-top: 12px; letter-spacing: -0.02em; }
+.tone-blue { --tone: #5aa2ff; --tone-bg: rgba(59, 130, 255, 0.16); --tone-border: rgba(90, 162, 255, 0.25); }
+.tone-cyan { --tone: #22d3ee; --tone-bg: rgba(34, 211, 238, 0.12); --tone-border: rgba(34, 211, 238, 0.22); }
+.tone-violet { --tone: #9b7bff; --tone-bg: rgba(155, 123, 255, 0.15); --tone-border: rgba(155, 123, 255, 0.25); }
+.tone-green { --tone: #4ad991; --tone-bg: rgba(74, 217, 145, 0.11); --tone-border: rgba(74, 217, 145, 0.22); }
+.tone-red { --tone: #ff7b72; --tone-bg: rgba(255, 123, 114, 0.11); --tone-border: rgba(255, 123, 114, 0.22); }
+/* Sparkline (core.js: drawSpark) */
+.spark { display: block; width: 100%; height: 44px; margin-top: 10px; overflow: visible; }
+.spark-line { fill: none; stroke-width: 1.8; stroke-linejoin: round; stroke-dasharray: 100; stroke-dashoffset: 0; }
+.in .spark-line { animation: dash-in 1.8s var(--ease-out) 0.6s backwards; }
+.in .spark-area { animation: fade-in 1.6s ease-out 0.8s backwards; }
+
+/* Anel de progresso (Score Composto do Screener, metas da Carteira) */
+.ring { position: relative; display: inline-grid; place-items: center; width: 50px; height: 50px; }
+.ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 4; }
+.ring-track { stroke: rgba(255, 255, 255, 0.07); }
+.ring-val { stroke: url(#ringGrad); stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: var(--off); }
+.js-reveal tr[data-reveal]:not(.in) .ring-val { stroke-dashoffset: 100; }
+tr.in .ring-val { animation: dash-in 1.3s var(--ease-out) backwards; animation-delay: calc(var(--stagger, 0s) + 0.3s); }
+.ring-num { font-size: 13px; font-weight: 700; }
+/* #endregion */
+
+/* #region Gráficos */
+.chart-wrap { position: relative; height: 340px; margin-top: 12px; }
+.chart-wrap.chart-small { height: 260px; }
+/* Gráficos de preço e de lucro (Lightweight Charts) do Backtest e do card do gráfico da Carteira */
+.bt-chart { position: relative; height: 460px; margin-top: 10px; border-radius: 12px; background: linear-gradient(180deg, rgba(90, 162, 255, 0.04), transparent 70%); }
+.bt-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+.bt-legend span { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); }
+/* #endregion */
+
+/* #region Ícone de ajuda "?" e a caixa flutuante (core.js: setupTips) */
+.tip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 15px; height: 15px; margin-left: 4px; vertical-align: middle;
+    border: 1px solid var(--text-muted); border-radius: 50%;
+    font-size: 10px; font-weight: 700; line-height: 1; color: var(--text-muted);
+    text-transform: none; cursor: help;
+}
+.tip-label { display: inline-flex; align-items: baseline; gap: 4px; max-width: 100%; }
+.tip-label > .tip { flex: none; margin-left: 0; }
+.tip-text { min-width: 0; }
+.tip:hover, .tip:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
+.tip-box {
+    position: fixed; z-index: 1100; max-width: min(340px, calc(100vw - 16px));
+    padding: 8px 10px; border-radius: 6px;
+    background: #1f2630; border: 1px solid var(--border-color); box-shadow: 0 6px 18px rgba(1, 4, 9, 0.5);
+    color: var(--text-color); font-size: 12px; font-weight: 400; line-height: 1.45;
+    text-transform: none; pointer-events: none;
+}
+.tip-title { display: block; margin-bottom: 8px; font-size: 12px; letter-spacing: 0.02em; }
+.tip-box p { margin: 0; }
+.tip-box p + p { margin-top: 8px; }
+/* #endregion */
+
+/* #region Textos explicativos longos */
+/* Metodologia recolhível, organizada por tópicos (dl.method-list), e notas de rodapé das tabelas
+   como lista espaçada (ul.notes). */
+details.method > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-color); }
+details.method > summary::-webkit-details-marker { display: none; }
+details.method > summary::before { content: "▸"; color: var(--accent); transition: transform 0.15s; }
+details.method[open] > summary::before { transform: rotate(90deg); }
+details.method > summary .muted { font-size: 12px; font-weight: 400; }
+details.method > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+.method-list { margin: 16px 0 0; max-width: 980px; display: grid; gap: 14px; font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+.method-list dt { color: var(--text-color); font-weight: 600; margin-bottom: 2px; }
+.method-list dd { margin: 0; }
+.method-list dd p { margin: 0; }
+.method-list dd p + p { margin-top: 6px; }
+.method-list dd ul { margin: 4px 0 0; padding-left: 18px; }
+.method-list dd li + li { margin-top: 3px; }
+.method-list dd ul + p, .method-list dd p + ul { margin-top: 6px; }
+.method-list > div { min-width: 0; overflow-wrap: anywhere; }
+.method-disclaimer { margin: 16px 0 0; font-size: 12px; color: var(--text-muted); font-style: italic; }
+ul.notes { margin: 12px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.55; color: var(--text-muted); }
+ul.notes li + li { margin-top: 6px; }
+ul.notes strong { color: var(--text-color); font-weight: 600; }
+/* #endregion */
