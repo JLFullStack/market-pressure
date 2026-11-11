@@ -11,10 +11,11 @@ import time
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from .core import (ENTRY, EXIT, REENTRY_DISTANCE, add_up, trend_strength, weak_close, closed_candles, compute_indicators, day_of, entry_stats,
+from ..comum.core import (ENTRY, EXIT, REENTRY_DISTANCE, add_up, trend_strength, weak_close, closed_candles, compute_indicators, day_of, entry_stats,
                   entry_warnings, evaluate_setup, exit_signal,
                   fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_qty, iso_day_in, js_round, today_iso)
 
+# region Classes, mercados e constantes
 # Classes da carteira: fixas e as mesmas da aba Configurações. "group" é o grupo da regra de
 # venda (strategy.py); a situação de cada posição segue a regra da classe do ativo. Renda fixa
 # (títulos) não tem regra. O usuário só muda as metas e a classe de cada ativo.
@@ -64,12 +65,13 @@ JCP_TAX = 0.175
 APORTE_MODES = ("todos", "escolher", "pullback")
 EPS = 1e-9
 
+# endregion
 
+
+# region Utilitários
 def targets_off(target_sum):
     """As metas das classes não somam 100% (tolerância de 0,01 p.p.)."""
     return abs(target_sum - 100) > 0.01
-
-# ================================================================ Funções puras
 
 
 def market_of(portfolio, ticker):
@@ -131,7 +133,10 @@ def normalize_ticker(t):
     t = re.sub(r"\.SA$", "", str(t or "").upper().strip())
     return re.sub(r"[^A-Z0-9]", "", t)
 
+# endregion
 
+
+# region Classe de cada ativo
 def find_class(classes, pattern):
     """Primeira classe cujo nome casa com a expressão (ou None)."""
     return next((c["name"] for c in classes if re.search(pattern, c["name"], re.I)), None)
@@ -167,7 +172,10 @@ def fixed_income_class(classes=None):
     """Classe padrão dos títulos de renda fixa."""
     return FIXED_INCOME_CLASS
 
+# endregion
 
+
+# region Migração do documento
 def _number(v):
     try:
         v = float(v)
@@ -223,7 +231,10 @@ def normalize_doc(doc):
     return {**doc, "version": max(2, doc.get("version") or 1),
             "portfolios": [normalize_portfolio(p) for p in doc.get("portfolios") or []]}
 
+# endregion
 
+
+# region Posições e vendas
 # Ordem cronológica estável. No mesmo dia, entradas vêm antes de saídas (compra antes de
 # venda; aporte e resgate antes de "valor atual", que já inclui o movimento do dia).
 SAME_DAY_ORDER = {"compra": 0, "venda": 1, "aporte": 0, "resgate": 0, "valor_atual": 1}
@@ -341,7 +352,10 @@ def quantity_at(transactions, ticker, iso):
             q += signed_qty(tx)
     return q
 
+# endregion
 
+
+# region Cotações e câmbio
 def close_on_or_before(candles, iso):
     """Fechamento (sem ajuste) do dia iso ou do pregão anterior mais próximo."""
     days = [day_of(c["date"]) for c in candles]
@@ -382,7 +396,10 @@ def convert_history(hist, fx_candles):
                  for d in hist["dividends"]]
     return {"candles": candles, "dividends": dividends}
 
+# endregion
 
+
+# region Proventos
 def dividends_received(transactions, ticker, hist):
     """Proventos recebidos de um ticker. A data do Yahoo é a data-ex; tem direito quem possuía o
     ativo ao fim do pregão anterior a ela (a data-com), ou seja, operações com data < data-ex."""
@@ -485,7 +502,10 @@ def split_pending_dividends(dividends, rows):
         (pending if unpaid else received).append(d)
     return received, pending
 
+# endregion
 
+
+# region Lotes abertos e venda parcial
 def open_lots(transactions, ticker, candles, target=EXIT["partialTarget"], fraction=EXIT["partialFraction"],
               timing="alvo", ind=None):
     """Compras (lotes) ainda abertas de um ticker e quanto falta vender de cada uma pela saída
@@ -568,7 +588,10 @@ def partial_to_sell(lots, market, strategy=DEFAULT_STRATEGY):
             "timing": partial_timing(strategy),
             "target": strategy["target"] * 100, "fraction": partial_fraction(strategy) * 100}
 
+# endregion
 
+
+# region Situação das posições
 def _hit_text(partial, strategy, money):
     """"A compra de 28/09/2026 a R$ 49,13 atingiu +10% em 05/10/2026 (alvo de R$ 54,04)"; no momento
     "forca", também o fechamento em que a alta perdeu força."""
@@ -770,7 +793,10 @@ def setup_now(candles, market, mode, now=None, memo=None, bench6m=None, check_en
             if s["ok"] and check_entry else [])
     return {"enough": True, "ok": bool(s["ok"]), "ma": s["ma"], "close": use[-1]["c"], "wait": wait}
 
+# endregion
 
+
+# region Card do gráfico
 # Gráfico de um ativo da carteira (card flutuante das Posições): alvos a até TARGET_MERGE um do
 # outro viram um nível só, para muitas compras próximas não encherem o gráfico de linhas.
 TARGET_MERGE = 0.015
@@ -881,7 +907,10 @@ def indicators_memo(candles, memo):
         memo[len(candles)] = compute_indicators(candles)
     return memo[len(candles)]
 
+# endregion
 
+
+# region Renda fixa
 def fixed_income_value_at(entries, iso):
     """Valor de um título de renda fixa ao fim do dia iso: último "valor atual" informado até a
     data, mais aportes e menos resgates posteriores a ele; antes do primeiro, o líquido aportado."""
@@ -921,7 +950,10 @@ def fixed_income_summary(item, iso):
         "lastUpdate": updates[-1]["date"] if updates else None,
     }
 
+# endregion
 
+
+# region Série diária, períodos e patrimônio
 def align_to_calendar(candles, cal, field):
     """Valores de um campo dos candles alinhados ao calendário (último conhecido até cada dia)."""
     out = [None] * len(cal)
@@ -1175,7 +1207,10 @@ def patrimony_bars(series):
             groups.append(group(name, name, s["value"], s["cost"], s["flow"]))
     return {"months": months, "days": [dates[k] for k in day_idx], "periods": periods, "groups": groups}
 
+# endregion
 
+
+# region Alocação e meta por ativo
 def class_allocation(classes, holdings, total):
     """Valor e % de cada classe (na ordem das classes da carteira) e a diferença para a meta.
     holdings: [{ cls, value }] (posições abertas e títulos de renda fixa)."""
@@ -1214,7 +1249,10 @@ def asset_targets(classes, items):
                             f"({fmt_num(c['target'], 2)}%).")
     return targets, warnings
 
+# endregion
 
+
+# region Plano de aporte
 def split_cents(amount, weights):
     """Divide amount (R$) proporcionalmente aos pesos, em centavos, pelo método do maior resto:
     a soma das partes é exatamente amount. Pesos todos zero = partes iguais."""
@@ -1569,7 +1607,10 @@ def contribution_items(portfolio, analysis, mode, candidates=(), priority=()):
     targets, warnings = asset_targets(portfolio["classes"], items)
     return [{**i, "target": targets[i["key"]]["target"], "autoTarget": targets[i["key"]]["auto"]} for i in items], warnings
 
+# endregion
 
+
+# region Análise completa
 def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, strategy=None):
     """Consolida a carteira: posições, renda fixa, proventos, alocação, KPIs e série de rentabilidade.
     histories: { TICKER: histórico na moeda do ativo, USDBRL: câmbio, BOVA11 }. Ativos fora da
@@ -1673,7 +1714,10 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, str
                  "last12": last12},
     }
 
+# endregion
 
+
+# region Validação e lista de compras
 def validate_transaction(portfolio, tx, today=None):
     """Validação de uma nova operação. Retorna a mensagem de erro ou None."""
     today = today or today_iso()
@@ -1773,7 +1817,10 @@ def batch_totals(rows, amount):
     return {"rows": totals, "total": total, "complete": complete,
             "included": sum(1 for r in parsed if r.get("include")), "diff": amount - total}
 
+# endregion
 
+
+# region Consultas ao documento
 def validate_class_name(classes, name, previous=None):
     """Validação do nome de uma classe (nova ou renomeada). Retorna a mensagem de erro ou None."""
     if not name:
@@ -1804,3 +1851,5 @@ def net_flows(portfolio):
 
 def has_entries(portfolio):
     return bool(portfolio.get("transactions")) or any(f.get("entries") for f in portfolio.get("fixedIncome") or [])
+
+# endregion

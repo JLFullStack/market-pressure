@@ -2,7 +2,7 @@
 
 import unittest
 
-from marketpressure import goals
+from marketpressure.carteira import goals
 
 TODAY = "2026-10-13"
 

@@ -1,4 +1,4 @@
-/* Aba Screener (analise_quantitativa_b3.html + app.js): progresso do scan, medidores de amplitude
+/* Aba Screener (analise_quantitativa_b3.html + screener.js): progresso do scan, medidores de amplitude
    por tipo, rankings (medalhas, avatar por tipo, anel do Score, barras da pressão, justificativa)
    e as orientações. */
 
@@ -15,7 +15,7 @@
 }
 /* #endregion */
 
-/* #region Medidores de amplitude por tipo (app.js: renderGauges) */
+/* #region Medidores de amplitude por tipo (screener.js: renderGauges) */
 .section-sub { margin: 24px 0 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
 .gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
 .gauge-card {
@@ -45,7 +45,7 @@
 .gauge-label { font-weight: 600; }
 /* #endregion */
 
-/* #region Rankings: um painel por tipo de ativo (app.js: rankingPanel) */
+/* #region Rankings: um painel por tipo de ativo (screener.js: rankingPanel) */
 .ranking { padding: 0; overflow: hidden; scroll-margin-top: 96px; }
 .ranking-head { padding: 16px 16px 12px; }
 .ranking-head .regime { margin-top: 8px; }
@@ -91,7 +91,7 @@ tr.in .eq i { animation: eq-in 1s var(--ease-out) backwards; animation-delay: ca
 .facts dd { margin: 0; color: var(--text-muted); }
 .facts .fact { white-space: nowrap; }
 .facts .fact-sep { color: var(--text-muted); opacity: 0.6; }
-/* No celular a justificativa vira um botão que abre a caixa flutuante (app.js). */
+/* No celular a justificativa vira um botão que abre a caixa flutuante (screener.js). */
 .facts-btn { display: none; }
 /* A lista inteira só quando a tabela cabe com ela (consulta pela largura da própria tabela, não
    da tela): abaixo disso vira o botão "Justificativa", e a tabela não precisa rolar para o lado no

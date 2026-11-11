@@ -7,8 +7,8 @@ import logging
 
 from . import portfolio as pf
 from . import portfolio_service as svc
-from . import screener
-from . import strategy as st
+from ..screener import screener
+from ..configuracoes import strategy as st
 
 log = logging.getLogger(__name__)
 

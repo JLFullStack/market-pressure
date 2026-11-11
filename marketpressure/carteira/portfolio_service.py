@@ -9,12 +9,12 @@ import threading
 import time
 from datetime import date
 
-from . import database as db
+from ..comum import database as db
 from . import goals as gl
-from . import market_data, runtime
-from . import strategy as st
+from ..comum import market_data, runtime
+from ..configuracoes import strategy as st
 from . import tax_alert, tax_report
-from .core import add_up, day_of, fmt_brl, fmt_date, session_in_progress, today_iso
+from ..comum.core import add_up, day_of, fmt_brl, fmt_date, session_in_progress, today_iso
 from .portfolio import (APORTE_MODES, BENCHMARK, CLASS_GROUP, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
                         analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_history,
                         contribution_items, contribution_path, contribution_plan, dividends_by_month, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
@@ -26,6 +26,7 @@ from .portfolio import asset_chart as pf_asset_chart
 log = logging.getLogger(__name__)
 
 
+# region Estrutura (sem cotações)
 def structure(portfolio):
     """Partes da página que dependem só da carteira (sem cotações): classes e o que há nelas,
     histórico de lançamentos, opções dos seletores e as classes padrão dos formulários."""
@@ -86,7 +87,10 @@ def suggested_class(ticker, market):
             log.warning("não foi possível ler a lista de ativos salva; classe pelo código", exc_info=True)
     return suggest_class(ticker, market, kind=u.get("kind"), international=market_data.international_etf(u.get("name")))
 
+# endregion
 
+
+# region Cotações e históricos
 def quote_history(ticker, market):
     """Histórico usado na carteira; erro se o Yahoo não tiver cotações."""
     hist = market_data.history(ticker, market)
@@ -139,7 +143,10 @@ def load_cdi(portfolio, histories):
     first = dates[0] if dates[0] > start else start
     return market_data.cdi(date.fromisoformat(add_months(first, -1)))["rates"]
 
+# endregion
 
+
+# region Análise (com cache por carteira)
 # Última análise de cada carteira, reaproveitada pela calculadora de aporte enquanto a carteira
 # não muda (a análise carrega cotações e calcula indicadores; o aporte é recalculado a cada tecla).
 _analysis_cache: dict[str, tuple[str, dict]] = {}
@@ -190,7 +197,10 @@ def _chart(series):
                           **{key: rebase_series(series[key], start) for key in ("portfolio", "cdi", "bova")}}
     return {"truncated": series["truncated"], "firstDay": series["dates"][0], "periods": periods}
 
+# endregion
 
+
+# region Meta por ativo e payload da análise
 def _asset_target_groups(portfolio, analysis):
     items, warnings = contribution_items(portfolio, analysis, "fechamento")
     total = analysis["kpis"]["total"]
@@ -230,7 +240,10 @@ def analysis_payload(portfolio):
         "darfAlert": tax_report.due_alert(portfolio),
     }
 
+# endregion
 
+
+# region Aporte
 def contribution(portfolio, amount, mode, base, selected, options=None, candidates=(), priority=()):
     """Plano de aporte para os campos do painel, com as linhas prontas para "Registrar compras",
     o plano de vários aportes (por classe) e o histórico de aportes dos últimos 12 meses.
@@ -252,7 +265,10 @@ def contribution(portfolio, amount, mode, base, selected, options=None, candidat
             "path": contribution_path(plan["classRows"], amount),
             "history": contribution_history(a["series"], portfolio["classes"])}
 
+# endregion
 
+
+# region Proventos
 def received_dividends(analysis, rows, failed=()):
     """Os proventos que já foram pagos, tirando da análise (que conta pela data-ex) os anunciados
     em rows e ainda não pagos. failed: ativos sem a data de pagamento agora, que contam pela data-ex."""
@@ -288,7 +304,10 @@ def receivables(portfolio):
             "net": add_up(r["net"] for r in rows), "expected": add_up(r["total"] for r in rows if not r["confirmed"]),
             "jcpTax": JCP_TAX, "received": received_dividends(full_analysis(portfolio, reuse=True), rows, failed)}
 
+# endregion
 
+
+# region Metas
 def _portfolio_data(portfolio, today):
     """O que as metas que partem da carteira usam: patrimônio atual, série diária, aporte médio
     real e rentabilidade real anualizada. Sem lançamentos, tudo vazio; cotações indisponíveis =
@@ -343,7 +362,10 @@ def goal_preview(portfolio, goal):
     data = _portfolio_data(portfolio, today) if goal["usePortfolio"] else _portfolio_data({}, today)
     return {"warning": data["warning"], "portfolioValue": data["value"], "goal": _goal_view(goal, data, today)}
 
+# endregion
 
+
+# region Card do gráfico
 def asset_chart(portfolio, ticker):
     """Card "Operações no gráfico" de uma posição: o gráfico do ativo com os lançamentos e os
     alvos das compras abertas pela regra da classe dele (portfolio.asset_chart). LookupError se o
@@ -376,3 +398,5 @@ def held_lots(portfolio, tickers):
             if lots:
                 out[t] = lots
     return out
+
+# endregion

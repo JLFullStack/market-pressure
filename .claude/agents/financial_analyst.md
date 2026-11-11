@@ -35,7 +35,7 @@ Leia o `CLAUDE.md` na raiz antes de analisar. Resumo do que você precisa saber:
 - **Score Composto:** `pressão × 0,6 + taxa de acerto × 0,4`.
 - **Estratégia do usuário (sem stop curto nem alvo):** compra no pullback (no máximo ~1 compra por mês, até 10 ações) e vende **somente** quando o fechamento fica abaixo da MM20, da MM50 e da MM200 **e** a tendência de baixa está formada (MM50 < MM200), a "regra B" (`exit_signal`). A coluna Situação da aba Carteira aplica essa regra às ações que o usuário tem (Vender / Atenção / Manter).
 
-Todo o cálculo fica no Python, no pacote `marketpressure/`: `evaluate_setup` e `exit_signal` em `core.py` (parâmetros em `SETUP`); `pressure`, `backtest` e `build_ranking` em `screener.py` (parâmetros em `CONFIG`).
+Todo o cálculo fica no Python, no pacote `marketpressure/`: `evaluate_setup` e `exit_signal` em `comum/core.py` (parâmetros em `SETUP`); `pressure`, `backtest` e `build_ranking` em `screener/screener.py` (parâmetros em `CONFIG`).
 
 ## Dados
 

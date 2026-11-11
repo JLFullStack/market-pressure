@@ -8,7 +8,8 @@ import json
 import urllib.parse
 from unittest import mock
 
-from marketpressure import browser, core, database, market_data, runtime
+from marketpressure import browser
+from marketpressure.comum import core, database, market_data, runtime
 
 from .support import DAY, DatabaseTestCase, candles
 from .test_browser import BrowserTestCase
@@ -101,7 +102,7 @@ class StoredHistoryTest(DatabaseTestCase):
         data = series(1001)
         self.load(data, at(data[-1], 12))
         split = series(1001, factor=0.5)  # desdobramento 2:1: o Yahoo ajusta todo o passado
-        with self.assertLogs("marketpressure.market_data", "INFO"):
+        with self.assertLogs("marketpressure.comum.market_data", "INFO"):
             hist, ranges = self.load(split, at(split[-1], 19))
         self.assertEqual(ranges, ["1mo", "10y"])
         self.assertEqual(hist["candles"], split)
@@ -177,13 +178,13 @@ class UniverseFallbackTest(DatabaseTestCase):
     def test_without_yahoo_the_saved_yahoo_list_is_used_and_kept(self):
         saved = self.load(lambda: self.YAHOO)
         self.assertEqual({a["kind"] for a in saved}, {"acoes", "fundos"})
-        with self.assertLogs("marketpressure.market_data", "WARNING"):
+        with self.assertLogs("marketpressure.comum.market_data", "WARNING"):
             assets = self.load(None)
         self.assertEqual(assets, saved)
         self.assertEqual(database.read_table("universe"), saved)  # não sobrescreve com a reserva
 
     def test_without_yahoo_and_without_a_saved_yahoo_list_brapi_is_used(self):
-        with self.assertLogs("marketpressure.market_data", "WARNING"):
+        with self.assertLogs("marketpressure.comum.market_data", "WARNING"):
             assets = self.load(None)
         self.assertEqual([a["ticker"] for a in assets], ["PETR4"])
         self.assertFalse(database.exists("universe"))

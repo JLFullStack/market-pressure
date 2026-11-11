@@ -8,7 +8,7 @@ Variáveis já definidas no ambiente têm prioridade sobre o .env.
 import os
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = Path(__file__).resolve().parents[2]  # marketpressure/comum/config.py → raiz do projeto
 
 
 def _load_env_file(path: Path):

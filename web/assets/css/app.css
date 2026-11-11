@@ -197,7 +197,7 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
 
 /* #region Barra do app */
 /* Marca, abas em pílula com ícone e rótulo, usuário. Fica presa no topo ao rolar (vidro fosco só
-   aqui). O destaque da aba é um elemento só (.tab-glow, criado por core.js: setupSlidingPill) que
+   aqui). O destaque da aba é um elemento só (.tab-glow, criado por animacao.js: setupSlidingPill) que
    desliza até a aba sob o mouse e volta para a atual; entre páginas, a transição de visualização
    do navegador (@view-transition, em animacao.css) o leva de uma aba à outra. No celular as abas
    viram uma barra flutuante embaixo da tela (responsivo.css). */
@@ -289,7 +289,7 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
 .tabs-user .link-btn { color: var(--accent); font-size: 13px; }
 /* #endregion */
 
-/* #region Pílula deslizante (core.js: setupSlidingPill) */
+/* #region Pílula deslizante (animacao.js: setupSlidingPill) */
 /* Os grupos (.tabs, .subtabs, .seg) já são position: relative; as abas do celular são fixed. */
 .slide-pill {
     position: absolute; z-index: 0; top: 0; left: 0; pointer-events: none;
@@ -610,7 +610,7 @@ tr:hover { background-color: rgba(90, 162, 255, 0.05); }
 
 /* KPIs em cartões coloridos (tom por cartão; o do BOVA11 fica verde ou vermelho pelo sinal).
    Cada cartão tem o próprio data-reveal: no celular (empilhados) cada um aparece ao entrar na
-   tela; no desktop os que entram juntos vêm em cascata (--stagger, core.js). */
+   tela; no desktop os que entram juntos vêm em cascata (--stagger, animacao.js). */
 .kpi-cards { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
 .kpi-card {
     position: relative; overflow: hidden; padding: 16px;
@@ -629,7 +629,7 @@ tr:hover { background-color: rgba(90, 162, 255, 0.05); }
 .tone-violet { --tone: #9b7bff; --tone-bg: rgba(155, 123, 255, 0.15); --tone-border: rgba(155, 123, 255, 0.25); }
 .tone-green { --tone: #4ad991; --tone-bg: rgba(74, 217, 145, 0.11); --tone-border: rgba(74, 217, 145, 0.22); }
 .tone-red { --tone: #ff7b72; --tone-bg: rgba(255, 123, 114, 0.11); --tone-border: rgba(255, 123, 114, 0.22); }
-/* Sparkline (core.js: drawSpark) */
+/* Sparkline (animacao.js: drawSpark) */
 .spark { display: block; width: 100%; height: 44px; margin-top: 10px; overflow: visible; }
 .spark-line { fill: none; stroke-width: 1.8; stroke-linejoin: round; stroke-dasharray: 100; stroke-dashoffset: 0; }
 .in .spark-line { animation: dash-in 1.8s var(--ease-out) 0.6s backwards; }

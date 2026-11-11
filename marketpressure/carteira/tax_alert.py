@@ -18,13 +18,14 @@ valor a partir do qual avisar. As contas ficam em portfolio.stock_sales (pura).
 
 import logging
 
-from . import database as db
-from . import market_data
+from ..comum import database as db
+from ..comum import market_data
 from . import portfolio as pf
-from .core import fmt_brl, today_iso
+from ..comum.core import fmt_brl, today_iso
 
 log = logging.getLogger(__name__)
 
+# region Constantes
 TABLE = "settings_alerts"
 LIMIT = pf.STOCK_EXEMPTION
 DEFAULT = {"enabled": True, "warnAt": 15_000}
@@ -36,9 +37,10 @@ NO_EXEMPTION = ("Vendas de ETFs, BDRs e fundos não têm a isenção de R$ 20 mi
 PARTIAL_HINT = ("Uma venda parcial pode ficar para o mês seguinte para caber na isenção; a venda pela reversão de "
                 "tendência (VENDER) não deve esperar por causa do imposto.")
 
+# endregion
 
-# ---------------------------------------------------------------- Configuração
 
+# region Configuração
 def from_form(body):
     """Formulário → (configuração, erro). warnAt em reais."""
     enabled = body.get("enabled") is not False
@@ -75,9 +77,10 @@ def payload(s=None):
             "text": (f"Avisa quando as vendas de ações do mês passarem de {fmt_brl(s['warnAt'])} "
                      f"(o limite da isenção é {fmt_brl(LIMIT)})." if s["enabled"] else "Aviso desligado.")}
 
+# endregion
 
-# ---------------------------------------------------------------- Status do mês
 
+# region Status do mês
 def month_label(month):
     return f"{MONTHS[int(month[5:7]) - 1]} de {month[:4]}"
 
@@ -152,7 +155,10 @@ def status(portfolio, open_positions=None, settings=None, month=None):
             "pct": m["sold"] / LIMIT * 100, "level": level, "indicated": indicated, "show": show,
             "title": _sold_line(month, m["sold"]), "lines": lines}
 
+# endregion
 
+
+# region Venda digitada e registrada
 def preview(portfolio, tx, settings=None):
     """Formulário "Nova operação": como o mês da venda digitada fica com ela. tx = {ticker, market,
     type, date, quantity, price, fx}; None quando não é uma venda completa ou o aviso está desligado."""
@@ -201,7 +207,10 @@ def after_sale(portfolio, tx):
             "title": _sold_line(month, m["sold"]),
             "lines": [_over_line(m["gain"]) if level == "over" else f"Faltam {fmt_brl(LIMIT - m['sold'])} para o limite da isenção."]}
 
+# endregion
 
+
+# region Texto do ANALISAR CARTEIRA
 def prompt_line(portfolio, open_positions):
     """Linha do "ANALISAR CARTEIRA" sobre o imposto do mês (vazia com o aviso desligado)."""
     st = status(portfolio, open_positions)
@@ -212,3 +221,4 @@ def prompt_line(portfolio, open_positions):
     text += " ".join(st["lines"]) if st["lines"] else "Ainda longe do limite."
     return text + " " + NO_EXEMPTION + " Considere o imposto ao sugerir vendas parciais e o mês delas, nunca para adiar uma VENDER."
 
+# endregion

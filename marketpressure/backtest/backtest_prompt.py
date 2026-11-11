@@ -14,10 +14,11 @@ novo pela rota.
 import json
 import threading
 
-from . import screener as sc
-from . import strategy as st
-from .core import add_up, fmt_brl, fmt_date, fmt_num, today_iso
+from ..screener import screener as sc
+from ..configuracoes import strategy as st
+from ..comum.core import add_up, fmt_brl, fmt_date, fmt_num, today_iso
 
+# region Cache dos resultados
 CACHE_SIZE = 6          # resultados guardados (os últimos de cada tipo)
 MAX_TRADES = 250        # compras listadas no prompt da carteira
 MAX_LOTS = 200          # lotes listados no prompt de um ativo
@@ -44,7 +45,10 @@ def recall(key):
     with _cache_lock:
         return _cache.get(key)
 
+# endregion
 
+
+# region Textos fixos
 ROLE = """# Seu papel
 
 Você é um analista quantitativo e investidor renomado, com mais de 50 anos de experiência no \
@@ -158,7 +162,10 @@ mudança pequena) altera o caixa, que altera as compras seguintes, e outra sequ�
 um período para outro. Uma melhoria só é confiável se ganhar em vários inícios ou janelas (botão \
 "Testar robustez"), não só no período inteiro."""
 
+# endregion
 
+
+# region Partes comuns
 def _method():
     c = sc.CONFIG
     pct = lambda v: fmt_num(v * 100, 0)
@@ -281,9 +288,10 @@ def _guide(kind):
     """Papel, tarefa, regras da estratégia, o que dá para testar e o que já foi testado: o começo de todo prompt."""
     return [ROLE, "", TASK.format(rules_focus=RULES_FOCUS[kind]), "", _method(), "", _options(), "", TESTED, ""]
 
+# endregion
 
-# ---------------------------------------------------------------- Um ativo
 
+# region Um ativo
 def build_single(view, exit_mode):
     """Prompt do modo "Um ativo" (view = screener.backtest_view)."""
     s, b, cur = view["stats"], view["onlyB"], view["currency"]
@@ -332,9 +340,10 @@ def build_single(view, exit_mode):
                      f"{'AGUARDAR: ' + '; '.join(r['wait']) if r['wait'] else 'COMPRAR'} |")
     return "\n".join(lines)
 
+# endregion
 
-# ---------------------------------------------------------------- Carteira
 
+# region Carteira
 METRIC_ROWS = (
     ("Patrimônio final", "final", "brl"), ("Total aportado", "contributed", "brl"), ("Lucro", "profit", "brl"),
     ("Lucro sobre o aportado", "profitPct", "pct"), ("Retorno ao ano (TIR)", "irr", "pct"),
@@ -422,9 +431,10 @@ def build_portfolio(result):
                      f"{_pct(t['return'])} | {fmt_brl(t['profit'])} | {fmt_brl(t['dividends'])} | {t['days']} | {_pct(t['maxGain'])} | {t['status']} |")
     return "\n".join(lines)
 
+# endregion
 
-# ---------------------------------------------------------------- Robustez
 
+# region Robustez
 def build_robustness(result):
     """Prompt do teste de robustez (result = portfolio_backtest.robustness)."""
     p, rows, c = result["params"], result["rows"], result["cards"]
@@ -459,7 +469,10 @@ def build_robustness(result):
                        f"{'—' if r['excess'] is None else fmt_num(r['excess'], 1) + ' p.p.'} | {_pct(r['rule']['maxDrawdown'])} |")
     return "\n".join(lines)
 
+# endregion
 
+
+# region Entradas usadas pela api
 TITLES = {"ativo": "Análise do backtest de {ticker}", "carteira": "Análise do backtest de carteira",
           "robustez": "Análise do teste de robustez"}
 
@@ -486,3 +499,4 @@ def run_portfolio(params, fn):
         remember(key, result)
     return result
 
+# endregion

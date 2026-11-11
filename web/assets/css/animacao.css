@@ -1,5 +1,5 @@
 /* Movimento comum a todas as páginas: a transição entre páginas, a entrada ao rolar
-   (core.js: observeReveal) e os keyframes usados em mais de um arquivo. Só transform/opacity
+   (animacao.js: observeReveal) e os keyframes usados em mais de um arquivo. Só transform/opacity
    e animações de traço em SVG; prefers-reduced-motion desliga. As animações de um componente de
    uma página só ficam junto dele, no arquivo da página. */
 
@@ -14,15 +14,15 @@
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 /* #endregion */
 
-/* #region Entrada ao rolar (core.js: observeReveal) */
+/* #region Entrada ao rolar (animacao.js: observeReveal) */
 /* Só com .js-reveal no <html>: sem o script nada some. fill-mode "backwards" para a animação não
    prender o transform depois (o hover dos cartões usa). */
 .js-reveal [data-reveal]:not(.in) { opacity: 0; transform: translateY(28px); }
 [data-reveal].in { animation: reveal-in 0.9s var(--ease-out) backwards; animation-delay: var(--stagger, 0s); }
-/* Quadros de gráfico: não somem nem deslizam; a entrada é a animação do gráfico (core.js: onReveal). */
+/* Quadros de gráfico: não somem nem deslizam; a entrada é a animação do gráfico (animacao.js: onReveal). */
 .js-reveal [data-reveal="late"]:not(.in) { opacity: 1; transform: none; }
 [data-reveal="late"].in { animation: none; }
-[data-reveal].in.instant, tr[data-reveal].in.instant > td { animation: none; }   /* já à vista na abertura da página (core.js) */
+[data-reveal].in.instant, tr[data-reveal].in.instant > td { animation: none; }   /* já à vista na abertura da página (animacao.js) */
 /* Os efeitos de dentro (barras, linhas, anéis) ligados a um bloco já visível (".in .x") esperam
    parados enquanto o bloco mais próximo deles (um cartão, uma linha) ainda não apareceu: assim
    não acontecem fora da tela. */

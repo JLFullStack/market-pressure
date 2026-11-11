@@ -10,11 +10,12 @@ Christi) mudam a cada ano e são incluídos por um botão, ano a ano.
 import logging
 from datetime import date, timedelta
 
-from . import database as db
-from .core import fmt_date, today_iso
+from ..comum import database as db
+from ..comum.core import fmt_date, today_iso
 
 log = logging.getLogger(__name__)
 
+# region Constantes
 TABLE = "holidays"
 # Tipo de cada feriado: só organiza a lista; todos antecipam o vencimento do DARF. "bancario" = não
 # é feriado nacional (ponto facultativo na portaria federal do ano), mas os bancos não abrem ao público.
@@ -31,7 +32,10 @@ YEAR_RANGE = (2000, 2100)
 MOVING_YEARS = 2     # anos oferecidos no botão dos feriados móveis, a partir do atual
 NAME_MAX = 60
 
+# endregion
 
+
+# region Datas e feriados móveis
 def is_holiday(iso, keys):
     """O dia "AAAA-MM-DD" está em keys (datas "MM-DD" e "AAAA-MM-DD")?"""
     return iso in keys or iso[5:] in keys
@@ -66,7 +70,10 @@ def _sorted(rows):
     # Primeiro os anuais (por mês e dia), depois os de um ano só (por data).
     return sorted(rows, key=lambda r: (len(r["date"]), r["date"]))
 
+# endregion
 
+
+# region Lista salva
 def load():
     """Os feriados em vigor: [{date, name, kind}]."""
     try:
@@ -103,7 +110,10 @@ def _parse_key(body):
 def _label(key):
     return fmt_date(key) if len(key) == 10 else f"{key[3:]}/{key[:2]}"
 
+# endregion
 
+
+# region Alterações e página
 def change(body):
     """{op: add, date, name, annual, kind} | {op: edit, key, date, name, annual, kind} | {op: remove, key} |
     {op: moving, year} | {op: restore} → mensagem. ValueError com a mensagem quando é inválido."""
@@ -162,3 +172,5 @@ def payload():
     return {"annual": [r for r in rows if r["annual"]], "dated": [r for r in rows if not r["annual"]],
             "years": [year + k for k in range(MOVING_YEARS)],
             "kinds": [{"key": k, "label": v} for k, v in KINDS.items()], "defaultKind": DEFAULT_KIND}
+
+# endregion

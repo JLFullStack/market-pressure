@@ -3,7 +3,8 @@
 import unittest
 from unittest import mock
 
-from marketpressure import portfolio as pf, database, portfolio_store as store
+from marketpressure.carteira import portfolio as pf, portfolio_store as store
+from marketpressure.comum import database
 from tests.support import DatabaseTestCase
 
 

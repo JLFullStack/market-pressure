@@ -2,7 +2,8 @@
 
 import unittest
 
-from marketpressure import database as db, portfolio as pf, tax_report as tr
+from marketpressure.comum import database as db
+from marketpressure.carteira import portfolio as pf, tax_report as tr
 
 from .support import DatabaseTestCase
 

@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from marketpressure import portfolio as pf
+from marketpressure.carteira import portfolio as pf
 
 
 def tx(date, kind, qty, price, ticker="PETR4", fees=0, fx=1):
@@ -369,7 +369,7 @@ class PendingDividendsTest(unittest.TestCase):
         self.assertEqual(pf.split_pending_dividends(self.DIVIDENDS, [expected])[1], [])
 
     def test_received_payload_leaves_the_pending_out(self):
-        from marketpressure import portfolio_service as ps
+        from marketpressure.carteira import portfolio_service as ps
         out = ps.received_dividends({"dividends": self.DIVIDENDS[:2]}, [self.ROW])
         self.assertEqual(out["total"], 0.5)
         self.assertEqual(out["totals"], [("CXSE3", 0.5)])
@@ -381,7 +381,7 @@ class PendingDividendsTest(unittest.TestCase):
 
 class AssetTargetRowTest(unittest.TestCase):
     def test_above_target_flag(self):
-        from marketpressure import portfolio_service as ps
+        from marketpressure.carteira import portfolio_service as ps
         row = lambda value, target: ps._asset_target_row(
             {"key": "X", "label": "X", "value": value, "target": target, "autoTarget": True}, 1000)
         self.assertTrue(row(300, 25)["above"])          # 30% com meta de 25%

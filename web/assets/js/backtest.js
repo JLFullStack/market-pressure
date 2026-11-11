@@ -1,5 +1,5 @@
-// Aba Backtest. Depende de core.js (apiGet e formatadores) e do Lightweight Charts (CDN),
-// carregados antes deste script.
+// Aba Backtest. Depende de core.js (apiGet e formatadores), animacao.js (efeitos), graficos.js
+// (tema e gráfico de preço) e do Lightweight Charts e Chart.js (CDN), carregados antes deste script.
 //
 // O backtest inteiro é calculado no Python:
 //   GET  /api/backtest?ticker=&market=&target=&fraction=&strict=&from=&to=&amount=  (screener.backtest_view)
@@ -12,7 +12,8 @@
 //        -> botão "ANALISAR BACKTEST": o texto para a IA, com os parâmetros do resultado mostrado
 // Aqui só se desenham os gráficos e as tabelas.
 
-// Cores, marcadores e o gráfico de preço (COLORS, MARKER, chartOptions, priceChart) ficam em core.js.
+//#region Constantes e estado
+// Cores, marcadores e o gráfico de preço (COLORS, MARKER, chartOptions, priceChart) ficam em graficos.js.
 const PAGE_SIZE_KEY = 'marketpressure_backtest_por_pagina'; // linhas por página das tabelas de lotes e de operações
 // Linhas do gráfico do modo Carteira, por estratégia (chave do servidor).
 const PF_COLORS = { rule: '#5aa2ff', onlyB: '#ffb057', bova: '#4ad991', ivvb: '#a78bfa', mix: '#22d3ee', cdi: '#94a3b8' };
@@ -42,7 +43,9 @@ const signClass = (v) => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
 const state = { data: null, type: 'candles', price: null, equity: null, series: {}, seq: 0, mode: 'ativo', pfChart: null,
                 pf: null, robust: null, robustChart: null, pfPrice: null, query: null, pfBody: null, robustBody: null, pfSeq: 0, pageSize: 25,
                 pages: { lots: 0, trades: 0 }, selected: { lots: null, trades: null }, charts: {}, chartSeq: {} };
+//#endregion
 
+//#region Início e formulário
 document.addEventListener('DOMContentLoaded', init);
 
 function init() {
@@ -166,7 +169,9 @@ function setMsg(text, kind = '') {
     $('btMsg').innerText = text || '';
     $('btMsg').className = `form-msg ${kind}`;
 }
+//#endregion
 
+//#region Um ativo
 async function run() {
     const params = new URLSearchParams({
         ticker: $('btTicker').value.trim(), market: $('btMarket').value,
@@ -201,9 +206,9 @@ async function run() {
     $('pfResult').hidden = true;
     render(data);
 }
+//#endregion
 
-// ---------------------------------------------------------------- Renderização
-
+//#region Renderização
 function render(d) {
     replayReveal($('btResult')); // resultado novo: os blocos entram de novo ao aparecer
     $('btTitle').innerText = `${d.ticker} — ${d.name}`;
@@ -288,7 +293,7 @@ function kpi(label, value, note = '', cls = '', help = '') {
     return `<div class="kpi kpi-card${tone}"><div class="kpi-label">${label} ${help ? tip(help) : ''}</div>${shown}<div class="kpi-note">${note}</div></div>`;
 }
 
-// Número que conta até o valor (formato do contador de core.js); "—" sem valor.
+// Número que conta até o valor (formato do contador de animacao.js); "—" sem valor.
 const cnt = (v, f = 'pct', d = 1) => v === null || v === undefined ? '—' : { n: v, f, d };
 
 // Os cartões sem sinal ganham tons alternados; todos entram um a um a cada resultado novo.
@@ -329,9 +334,9 @@ const barOptions = (yTick, extra = {}) => ({
     },
     ...extra
 });
+//#endregion
 
-// ---------------------------------------------------------------- Tooltips
-
+//#region Tooltips
 function renderKpis(d) {
     const s = d.stats;
     const brl = (v) => v === null || v === undefined ? '—' : fmtBRL(v);
@@ -430,9 +435,9 @@ function renderLotsChart(d) {
         })
     });
 }
+//#endregion
 
-// ---------------------------------------------------------------- Paginação
-
+//#region Paginação
 // Tabelas paginadas: lotes (um ativo) e operações (carteira). A quantidade por página é a mesma
 // nas duas e fica salva; a página e a linha selecionada de cada uma ficam em state.pages/selected.
 const PAGERS = {
@@ -483,9 +488,9 @@ function pageRows(name, items) {
     }
     return rows;
 }
+//#endregion
 
-// ---------------------------------------------------------------- Modo Carteira
-
+//#region Modo Carteira
 function portfolioBody() {
     return {
         universe: $('pfUniverse').value, tickers: $('pfTickers').value, initial: $('pfInitial').value, monthly: $('pfMonthly').value,
@@ -911,3 +916,4 @@ function onLotClick(ev) {
     state.price.timeScale().setVisibleRange(lot.range);
     $('priceChart').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+//#endregion

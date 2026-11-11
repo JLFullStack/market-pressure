@@ -6,7 +6,7 @@
 //                    B3); só os hosts de SOURCES. O token da brapi (segredo BRAPI_TOKEN) é
 //                    acrescentado aqui e nunca chega ao navegador. Respostas ficam no cache
 //                    do Cloudflare pelo tempo de cada fonte.
-//   /db              banco no D1 (binding DB): cada tabela de marketpressure/database.py é um
+//   /db              banco no D1 (binding DB): cada tabela de marketpressure/comum/database.py é um
 //                    texto JSON numa linha de mp_tables. GET ?names=a,b lê; PUT grava várias
 //                    juntas (uma transação) e, com backup, copia a versão anterior para mp_backup.
 //                    As tabelas das carteiras são de cada usuário (schema.js: SHARED_TABLES).
@@ -142,7 +142,7 @@ async function proxy(request, url, env, user) {
     });
 }
 
-// Lista de ativos (screener do Yahoo, marketpressure/market_data.py: load_yahoo_list). Diferente
+// Lista de ativos (screener do Yahoo, marketpressure/comum/market_data.py: load_yahoo_list). Diferente
 // dos candles, exige o cookie de fc.yahoo.com e o "crumb" da sessão; guardados por uma hora
 // neste isolate e renovados uma vez se o Yahoo recusar. O corpo (a consulta) vem do Python.
 const YAHOO_SCREENER = "https://query1.finance.yahoo.com/v1/finance/screener";

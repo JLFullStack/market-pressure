@@ -1,7 +1,7 @@
 // Tabelas do D1 da versão publicada, usadas pelo Worker (index.js, auth.js) e pelo script que
 // cria usuários (scripts/create-user.mjs). Criadas no primeiro uso, sem migrações.
 //
-//   mp_tables / mp_backup  tabelas de marketpressure/database.py, uma linha por tabela (texto JSON)
+//   mp_tables / mp_backup  tabelas de marketpressure/comum/database.py, uma linha por tabela (texto JSON)
 //   mp_users               contas (só o administrador cria; não há cadastro pela tela de login)
 //   mp_sessions            sessões abertas (id = SHA-256 do token do cookie, nunca o token)
 //   mp_login_attempts      falhas de login recentes por CPF/e-mail e por IP (bloqueio temporário)
@@ -15,7 +15,7 @@ export const SCHEMA = [
 ];
 
 // Tabelas do screener, comuns a todos os usuários, e os históricos salvos de cada ativo
-// (history_{mercado}_{ticker}, ver marketpressure/market_data.py), também comuns. As demais
+// (history_{mercado}_{ticker}, ver marketpressure/comum/market_data.py), também comuns. As demais
 // (carteiras) são de cada usuário e ficam em mp_tables com o nome "{id do usuário}/{tabela}";
 // o Python não sabe disso. Todos os usuários leem as comuns; só o administrador e a atualização
 // diária gravam nelas (index.js), porque um valor errado ali apareceria para todo mundo.

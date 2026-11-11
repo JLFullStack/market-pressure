@@ -1,6 +1,6 @@
 """Backtest de carteira (portfolio_backtest): um único caixa para vários ativos."""
 
-from marketpressure import portfolio_backtest as pb
+from marketpressure.backtest import portfolio_backtest as pb
 from tests.support import DatabaseTestCase, raw_history
 
 
@@ -15,7 +15,7 @@ class PortfolioBacktestTest(DatabaseTestCase):
         pb._signals_cache.clear()
         # Ativos com ondas de períodos diferentes, para os sinais não caírem todos no mesmo dia.
         periods = {"PETR4": 40, "VALE3": 33, "ITUB4": 47, "BOVA11": 40}
-        from marketpressure import market_data
+        from marketpressure.comum import market_data
         market_data.raw_history = lambda t, market="b3": raw_history(t, period=periods.get(t, 40))
 
     def test_cash_is_shared_and_profit_adds_up(self):
@@ -53,7 +53,7 @@ class PortfolioBacktestTest(DatabaseTestCase):
         self.assertIsNone(result["compare"])
 
     def test_illiquid_assets_never_enter_the_ranking(self):
-        from marketpressure import market_data
+        from marketpressure.comum import market_data
         normal = market_data.raw_history
 
         def thin(t, market="b3"):
@@ -92,7 +92,7 @@ class RobustnessTest(DatabaseTestCase):
         super().setUp()
         pb._signals_cache.clear()
         periods = {"PETR4": 40, "VALE3": 33, "ITUB4": 47, "BOVA11": 40}
-        from marketpressure import market_data
+        from marketpressure.comum import market_data
         market_data.raw_history = lambda t, market="b3": raw_history(t, n=1300, period=periods.get(t, 40))
 
     def test_one_row_per_start_year_until_the_same_end(self):
@@ -136,7 +136,7 @@ class RobustnessTest(DatabaseTestCase):
             pb.robustness(params(janela="5"))
 
     def test_analysis_prompt(self):
-        from marketpressure import backtest_prompt as bp
+        from marketpressure.backtest import backtest_prompt as bp
         result = pb.robustness(params(janela="2"))
         text = bp.robustness(result)["text"]
         self.assertIn("janelas de 2 anos", text)
@@ -183,7 +183,7 @@ class ComparisonsAndTaxTest(DatabaseTestCase):
         super().setUp()
         pb._signals_cache.clear()
         periods = {"PETR4": 40, "VALE3": 33, "ITUB4": 47, "BOVA11": 40, "IVVB11": 55}
-        from marketpressure import market_data
+        from marketpressure.comum import market_data
         market_data.raw_history = lambda t, market="b3": raw_history(t, period=periods.get(t, 40))
 
     def test_ivvb_and_index_mix_get_the_same_flows(self):
@@ -244,7 +244,7 @@ class YearlyTest(DatabaseTestCase):
         self.assertAlmostEqual(sum(r["profit"] for r in y), 2310 - 2000)
 
     def test_run_has_years_for_every_strategy(self):
-        from marketpressure import market_data
+        from marketpressure.comum import market_data
         market_data.raw_history = lambda t, market="b3": raw_history(t)
         pb._signals_cache.clear()
         result = pb.run(pb.parse_params({"universe": "lista", "tickers": "PETR4", "initial": "10000", "cdi": False}))
@@ -275,7 +275,7 @@ class AdviceAndClassesTest(DatabaseTestCase):
                 params(**body)
 
     def test_single_asset_marks_the_buys_the_indication_would_skip(self):
-        from marketpressure import screener
+        from marketpressure.screener import screener
         view = screener.backtest_view("PETR4", "b3")
         self.assertTrue(all(isinstance(lot["wait"], list) for lot in view["lots"]))
         adv = view["stats"]["advice"]

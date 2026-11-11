@@ -6,8 +6,10 @@ import json
 import urllib.parse
 from unittest import mock
 
-from marketpressure import browser, database, market_data, runtime, screener
-from marketpressure import portfolio_store as store
+from marketpressure import browser
+from marketpressure.comum import database, market_data, runtime
+from marketpressure.screener import screener
+from marketpressure.carteira import portfolio_store as store
 from tests.support import DatabaseTestCase
 
 
@@ -202,7 +204,7 @@ class BrowserBridgeTest(BrowserTestCase):
         job.start = browser._request_scan
         with mock.patch.object(screener, "scan_job", job), \
                 mock.patch.object(screener, "load_universe", side_effect=market_data.UpstreamError("brapi fora")), \
-                self.assertLogs("marketpressure.screener", "WARNING"):
+                self.assertLogs("marketpressure.screener.screener", "WARNING"):
             browser.handle("GET", "/api/scan")
             browser.take_scan_request()
             self.assertEqual(browser.scan_begin(), "null")

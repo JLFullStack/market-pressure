@@ -2,6 +2,7 @@
 // gestão de usuários. As regras (CPF, e-mail, tamanho da senha, permissões) ficam no Worker
 // (worker/auth.js); aqui só se enviam os formulários e se mostram as respostas.
 
+//#region Acesso à API
 const $ = (id) => document.getElementById(id);
 
 // {status, data} de uma rota /auth (o Worker; não passa pelo Python).
@@ -39,9 +40,9 @@ async function submit(form, msgEl, method, path, body, onOk) {
     showMsg(msgEl, ok, ok ? data.message : (data.message || `HTTP ${status}`));
     if (ok && onOk) await onOk();
 }
+//#endregion
 
-// ---------------------------------------------------------------- Minha conta
-
+//#region Minha conta
 $('passwordForm').addEventListener('submit', (event) => {
     event.preventDefault();
     const form = event.target;
@@ -51,9 +52,9 @@ $('passwordForm').addEventListener('submit', (event) => {
     }
     submit(form, $('passwordMsg'), 'POST', '/password', { current: form.current.value, password: form.password.value });
 });
+//#endregion
 
-// ---------------------------------------------------------------- Usuários (administrador)
-
+//#region Usuários (administrador)
 async function loadUsers() {
     const { status, data } = await authCall('GET', '/users');
     const body = $('usersBody');
@@ -101,9 +102,9 @@ $('resetForm').addEventListener('submit', (event) => {
     const form = event.target;
     submit(form, $('resetMsg'), 'POST', '/users/password', { id: $('resetUser').value, password: form.elements.password.value });
 });
+//#endregion
 
-// ---------------------------------------------------------------- Início
-
+//#region Início
 if (!IN_BROWSER) {
     $('localNote').hidden = false;
 } else {
@@ -116,3 +117,4 @@ if (!IN_BROWSER) {
         }
     });
 }
+//#endregion

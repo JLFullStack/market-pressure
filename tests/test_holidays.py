@@ -1,6 +1,8 @@
 """Calendário de feriados: padrões de data fixa, edição, móveis e efeito no vencimento do DARF."""
 
-from marketpressure import database as db, holidays as hd, tax_report as tr
+from marketpressure.comum import database as db
+from marketpressure.configuracoes import holidays as hd
+from marketpressure.carteira import tax_report as tr
 
 from .support import DatabaseTestCase
 

@@ -4,15 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MarketPressure — Entrar</title>
+    <!-- #region Estilos -->
     <link rel="stylesheet" href="assets/css/app.css">
     <link rel="stylesheet" href="assets/css/responsivo.css">
     <link rel="stylesheet" href="assets/css/animacao.css">
     <link rel="stylesheet" href="assets/css/login.css">
+    <!-- #endregion -->
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
 <body class="login-page">
 
 <main class="login-shell">
+    <!-- #region Lado da marca -->
     <!-- Lado da marca: só decoração (animações em CSS; esta página não carrega core.js). -->
     <section class="login-hero" aria-hidden="true">
         <div class="login-aurora"></div>
@@ -38,7 +41,9 @@
             <li><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-7"/></svg><span><strong>Backtest</strong>a estratégia testada em 10 anos de história</span></li>
         </ul>
     </section>
+    <!-- #endregion -->
 
+    <!-- #region Formulário de login -->
     <form class="panel login-card" id="loginForm" novalidate>
         <span class="brand login-card-brand">MarketPressure</span>
         <h1>Entrar</h1>
@@ -65,8 +70,11 @@
 
         <p class="footnote login-note">Acesso restrito a usuários cadastrados. Para ter acesso, fale com o administrador.</p>
     </form>
+    <!-- #endregion -->
 </main>
 
+<!-- #region Scripts -->
 <script src="assets/js/login.js"></script>
+<!-- #endregion -->
 </body>
 </html>

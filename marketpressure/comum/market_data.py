@@ -33,6 +33,7 @@ from .core import day_of, in_session_hours, iso_day_in, last_close
 
 log = logging.getLogger(__name__)
 
+# region Constantes
 CACHE_TTL_SECONDS = config.CACHE_TTL_SECONDS
 CDI_TTL_SECONDS = config.CDI_TTL_SECONDS
 CDI_MAX_WINDOW_DAYS = 3650  # a API do BCB aceita no máximo 10 anos por consulta
@@ -44,7 +45,10 @@ YAHOO_SYMBOL = {"b3": "{}.SA", "us": "{}", "crypto": "{}-USD", "fx": "{}=X"}
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
 PROXY = "/proxy?url="  # repasse do Worker do Cloudflare (só no navegador)
 
+# endregion
 
+
+# region Cache e requisições
 class UpstreamError(RuntimeError):
     """Falha de uma fonte externa (brapi, Yahoo, BCB, B3): rede, HTTP ou resposta sem dados."""
 
@@ -124,13 +128,16 @@ def http_json(url, body=None, opener=None):
         raise UpstreamError(f"falha ao consultar {urllib.parse.urlsplit(url).hostname}: {err}") from None
 
 
-# ---------------------------------------------------------------- Lista de ativos (Yahoo)
 #
 # A lista vem do screener do Yahoo (bolsa SAO), que, ao contrário dos candles (v8/chart), exige
 # o cookie de fc.yahoo.com e o "crumb" da sessão. No servidor local, _yahoo_session os obtém;
 # publicado, o Worker faz isso no /proxy (POST para YAHOO_SCREENER). A brapi complementa com o
 # setor das ações e é a reserva quando o Yahoo falha.
 
+# endregion
+
+
+# region Lista de ativos (Yahoo e brapi)
 YAHOO_SCREENER = "https://query1.finance.yahoo.com/v1/finance/screener"
 YAHOO_PAGE = 250
 YAHOO_MIN_SHARES = 1000   # média de 3 meses (em cotas) mínima: descarta símbolos sem negócios
@@ -319,7 +326,10 @@ def load_universe():
 def universe():
     return cached("universe", load_universe)
 
+# endregion
 
+
+# region Histórico do Yahoo
 def history_url(ticker: str, market: str = "b3", range_: str = "10y") -> str:
     symbol = YAHOO_SYMBOL[market].format(ticker)
     return (f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}"
@@ -347,7 +357,6 @@ def parse_chart(data: dict, ticker: str) -> dict:
     return {"candles": candles, "dividends": dividends}
 
 
-# ---------------------------------------------------------------- Histórico salvo no banco
 #
 # O histórico de cada ativo fica salvo (database: tabela history_{mercado}_{ticker}, Parquet
 # no servidor e D1 na versão publicada). A atualização diária (update.py, depois do fechamento)
@@ -365,6 +374,10 @@ def parse_chart(data: dict, ticker: str) -> dict:
 # são comparados; qualquer diferença (desdobramento, grupamento, bonificação, provento novo,
 # correção) baixa de novo os 10 anos. Só candles de pregões já fechados são salvos.
 
+# endregion
+
+
+# region Histórico salvo no banco
 HISTORY_DAYS = 3652            # 10 anos: candles mais antigos são descartados
 FULL_RANGE = "10y"             # download completo
 LEGACY_HISTORY_DAYS = 1826     # histórico salvo antes, cortado em 5 anos
@@ -574,7 +587,10 @@ def raw_history(ticker: str, market: str = "b3") -> dict:
     # O mercado entra na chave: BTC (cripto) e um eventual BTC da B3 são ativos diferentes.
     return cached(f"history:{market}:{ticker}", lambda: load_history(ticker, market))
 
+# endregion
 
+
+# region Dias de cripto e câmbio
 def _noon(iso: str) -> int:
     """Meio-dia de Brasília (15:00 UTC) do dia iso, em unix (s)."""
     return int(datetime.fromisoformat(iso).replace(hour=15, tzinfo=timezone.utc).timestamp())
@@ -591,7 +607,10 @@ def restamp_days(hist: dict, zone: str) -> dict:
     dividends = [{**d, "date": _noon(iso_day_in(d["date"], zone))} for d in hist["dividends"]]
     return {"candles": sorted(by_day.values(), key=lambda c: c["date"]), "dividends": dividends}
 
+# endregion
 
+
+# region Limpeza: candles ruins e desdobramentos
 BAD_CANDLE_RATIO = 0.5  # fechamento 50%+ longe dos vizinhos dos dois lados = dado corrompido
 BAD_CANDLE_NEIGHBORS = 5
 # Desdobramento não ajustado (adjust_splits): salto que bate com 1 para k (ou k para 1) a até 3%,
@@ -663,7 +682,10 @@ def adjust_splits(candles: list, dividends: list, ticker: str = "") -> tuple:
         dividends = [{**d, "amount": d["amount"] / k} if d["date"] < cur["date"] else d for d in dividends]
     return candles, dividends
 
+# endregion
 
+
+# region Histórico pronto
 def history(ticker: str, market: str = "b3") -> dict:
     """Histórico completo de um ticker na moeda do mercado: candles e proventos (data-ex e valor
     por cota). Preços sem ajuste por proventos (o Yahoo já ajusta desdobramentos), como o
@@ -684,7 +706,10 @@ def history(ticker: str, market: str = "b3") -> dict:
         raise UpstreamError(f"sem cotações para {ticker}")
     return restamp_days(hist, "UTC" if market == "crypto" else "Europe/London")
 
+# endregion
 
+
+# region CDI
 def load_cdi(start: date) -> dict:
     """Taxas diárias do CDI (% ao dia) desde start, em janelas de até 10 anos (limite do BCB)."""
     rates: list[dict] = []
@@ -704,7 +729,10 @@ def load_cdi(start: date) -> dict:
 def cdi(start: date) -> dict:
     return cached(f"cdi:{start}", lambda: load_cdi(start), CDI_TTL_SECONDS)
 
+# endregion
 
+
+# region Proventos anunciados (B3)
 def b3_call(method: str, params: dict):
     """API pública da B3 (a mesma da página de empresas listadas): parâmetros em JSON base64."""
     payload = base64.b64encode(json.dumps(params).encode()).decode()
@@ -764,3 +792,5 @@ def load_proventos(ticker: str) -> dict:
 
 def proventos(ticker: str) -> dict:
     return cached(f"proventos:{ticker}", lambda: load_proventos(ticker), PROVENTOS_TTL_SECONDS)
+
+# endregion

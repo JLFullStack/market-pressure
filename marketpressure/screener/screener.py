@@ -13,13 +13,14 @@ import math
 import threading
 import time
 
-from . import database as db
-from . import strategy as st
-from . import market_data, runtime
-from .core import (ENTRY, EXIT, REENTRY_DISTANCE, SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
+from ..comum import database as db
+from ..configuracoes import strategy as st
+from ..comum import market_data, runtime
+from ..comum.core import (ENTRY, EXIT, REENTRY_DISTANCE, SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
                   entry_stats, entry_warnings, evaluate_setup, exit_signal, fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_sessions,
                   in_session_hours, last_close, session_in_progress, weak_close)
 
+# region Configuração
 CONFIG = {
     # Universo: ativos da lista do Yahoo (market_data.load_universe) de quatro tipos, cada um com
     # o seu ranking (KINDS), com volume financeiro médio (fechamento × volume) dos últimos pregões
@@ -101,6 +102,10 @@ CONFIG = {
 
 log = logging.getLogger(__name__)
 
+# endregion
+
+
+# region Tipos e liquidez
 SCAN_VERSION = 9  # mude se o formato das análises mudar (descarta a varredura salva no banco)
 MODES = ("fechamento", "intradiario")
 KINDS = ("acoes", "fundos", "etfs", "bdrs")  # tipos de ativo (market_data.asset_kind), um ranking cada
@@ -120,9 +125,10 @@ def liquidity_floor(kind, choice="padrao"):
     value = LIQUIDITY.get(choice)
     return min_avg_volume(kind) if value is None else value
 
-# ---------------------------------------------------------------- Auxiliares de pressure()
+# endregion
 
 
+# region Auxiliares de pressure()
 def percentile_in_window(values, i, n):
     """Percentil (0-1) do valor em i dentro da janela [i-n+1, i]."""
     below = count = 0
@@ -150,9 +156,10 @@ def max_in(values, a, b):
 def mean_in(values, a, b):
     return avg(_window(values, a, b))
 
+# endregion
 
-# ---------------------------------------------------------------- Pressão e backtest
 
+# region Pressão
 def pressure(ind, i, setup, live=False, weights=None):
     """Pressão da "garrafa de gás": gás comprador acumulado no pullback desde o topo (topIdx).
     live: pregão em andamento — o volume parcial do dia é ignorado (volume usa e = i − 1).
@@ -218,7 +225,10 @@ def pressure(ind, i, setup, live=False, weights=None):
         },
     }
 
+# endregion
 
+
+# region Backtest do ativo
 def backtest_lots(ind, strict, target=None, fraction=None, start=None, timing="alvo"):
     """Repete a estratégia no histórico do ativo, lote a lote: compra na abertura seguinte ao sinal
     do setup e recompra a cada pullback novo enquanto a posição está aberta; o mesmo pullback não
@@ -336,7 +346,10 @@ def backtests(ind):
         out[name + "Rev"] = summarize_lots(lots, 0.0, ind)
     return out
 
+# endregion
 
+
+# region Análise de um ativo
 def analyze_asset(candles, confirm_previous=False, kind="acoes"):
     weights = CONFIG["pressureWeights"].get(kind, CONFIG["pressureWeights"]["default"])
     ind = compute_indicators(candles)
@@ -397,7 +410,10 @@ def analyze_ticker(asset, now=None):
     fechamento = analyze_asset(candles[:-1], False, kind) if live else intradiario
     return {**asset, "kind": kind, "traded": traded, "fechamento": fechamento, "intradiario": intradiario}
 
+# endregion
 
+
+# region ETFs duplicados
 def _returns(ticker):
     """{data: retorno diário} dos últimos etfCorrelationWindow pregões (histórico em cache)."""
     candles = market_data.history(ticker)["candles"][-(CONFIG["etfCorrelationWindow"] + 1):]
@@ -433,9 +449,10 @@ def mark_duplicates(analyses):
         else:
             kept.append((a["ticker"], returns))
 
+# endregion
 
-# ---------------------------------------------------------------- Varredura
 
+# region Varredura
 def load_universe():
     """Candidatos ao universo: ativos dos tipos de KINDS com volume financeiro médio de 3 meses
     (fechamento × avg_volume da lista; sem ela, o volume do dia) acima de prefilterRatio do piso
@@ -472,7 +489,10 @@ def build_scan(analyses, failures):
     return {"version": SCAN_VERSION, "timestamp": int(time.time() * 1000), "universeSize": len(analyses) + len(failures),
             "analyses": analyses, "failures": failures}
 
+# endregion
 
+
+# region Ranking
 def rule_group(a):
     """Grupo da regra de venda de um ativo do ranking (strategy.group_of: BDRs e ETFs do exterior
     são "internacionais")."""
@@ -580,7 +600,10 @@ def ranking_view(analyses, strict, kinds=None, benchmark6m=None):
         "avgWinRate": avg(a["bt"]["winRate"] for a in top) if top else None,
     }
 
+# endregion
 
+
+# region Indicação
 def recent_negative(bt, kind):
     """O backtest recente do ativo perdeu dinheiro em média (com adviceMinTrades compras ou mais)
     num grupo em que isso pesou nas compras isoladas (fora de adviceIgnoreKinds)."""
@@ -694,7 +717,10 @@ def with_advice(payload, lots, strategy_for):
              for mode, view in payload["views"].items()}
     return {**payload, "views": views}
 
+# endregion
 
+
+# region Visões e payload
 def above_floor(scan, liquidity="padrao"):
     """Análises dos ativos com liquidez acima do piso escolhido (liquidity_floor)."""
     return [a for a in scan["analyses"]
@@ -748,7 +774,10 @@ def scan_payload(scan, liquidity="padrao", kinds=None):
         "views": views(scan, liquidity, kinds),
     }
 
+# endregion
 
+
+# region Scan salvo e ScanJob
 ASSET_COLUMNS = (("ticker", "ticker"), ("name", "name"), ("sector", "sector"), ("kind", "kind"),
                  ("duplicate_of", "duplicateOf"), ("traded", "traded"))
 
@@ -882,11 +911,10 @@ class ScanJob:
 
 scan_job = ScanJob()
 
+# endregion
 
-# ---------------------------------------------------------------- KPI do BOVA11
 
-# ---------------------------------------------------------------- Aba Backtest
-
+# region Aba Backtest (um ativo)
 BACKTEST_MARKETS = {"b3": "R$", "us": "US$"}
 KIND_LABEL = {"acoes": "Ação", "fundos": "Fundo listado (FII, Fiagro, FI-Infra)", "etfs": "ETF", "bdrs": "BDR",
               "us": "Ativo dos EUA"}
@@ -1162,7 +1190,10 @@ def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False,
         "lots": rows, "stats": stats, "onlyB": only_b,
     }
 
+# endregion
 
+
+# region KPI do BOVA11
 def bova_kpi(mode):
     """Variação do BOVA11 nos últimos bovaLookback pregões e posição do fechamento frente às
     três médias, na base escolhida (na base "fechamento", sem o candle do pregão em andamento),
@@ -1185,3 +1216,5 @@ def bova_kpi(mode):
         "above": [n for n in mas if c > ind[n.lower()][i]],
         "below": [n for n in mas if c <= ind[n.lower()][i]],
     }
+
+# endregion

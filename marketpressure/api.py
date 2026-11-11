@@ -11,22 +11,26 @@ import math
 import re
 from datetime import date
 
-from . import ai_prompt, aporte
-from . import backtest_prompt as bp
-from . import goals as gl
-from . import market_data, screener
-from . import portfolio as pf
-from . import portfolio_backtest as pb
-from . import portfolio_prompt
-from . import portfolio_service as svc
-from . import portfolio_store as store
-from . import strategy as st
-from . import holidays, tax_alert, tax_report
-from .core import PARTIAL_TIMINGS
+from .screener import ai_prompt
+from .carteira import aporte
+from .backtest import backtest_prompt as bp
+from .carteira import goals as gl
+from .comum import market_data
+from .screener import screener
+from .carteira import portfolio as pf
+from .backtest import portfolio_backtest as pb
+from .carteira import portfolio_prompt
+from .carteira import portfolio_service as svc
+from .carteira import portfolio_store as store
+from .configuracoes import strategy as st
+from .configuracoes import holidays
+from .carteira import tax_alert, tax_report
+from .comum.core import PARTIAL_TIMINGS
 
 log = logging.getLogger(__name__)
 
 
+# region Erros e respostas
 class HTTPError(Exception):
     def __init__(self, status, message, **extra):
         super().__init__(message)
@@ -43,7 +47,10 @@ def clean(value):
         return [clean(v) for v in value]
     return value
 
+# endregion
 
+
+# region Registro das rotas e pedido
 ROUTES = []  # (método, regex do caminho, função)
 
 
@@ -92,9 +99,10 @@ def valid_ticker(ticker, min_length=1):
 
 PORTFOLIO_ID = r"(?P<id>[0-9A-Za-z-]+)"
 
-# Screener
+# endregion
 
 
+# region Screener
 @route("GET", "/api/scan")
 def get_scan(req):
     liquidity = req.arg("liquidez", "padrao")
@@ -157,7 +165,10 @@ def get_scan_prompt(req):
 def get_bova(req):
     return screener.bova_kpi(req.arg("mode", "fechamento"))
 
+# endregion
 
+
+# region Backtest de um ativo
 def percent_arg(req, name, default, low, high):
     """Parâmetro em % (aceita vírgula) → fração; fora de [low, high] = 400."""
     value = pf.parse_number(req.arg(name), default)
@@ -222,9 +233,10 @@ def get_backtest_prompt(req):
     """Botão "ANALISAR BACKTEST" do modo Um ativo: {title, text}, com os mesmos parâmetros."""
     return bp.single(single_backtest(backtest_args(req)), req.arg("saida", "config"))
 
-# Configurações
+# endregion
 
 
+# region Configurações (estratégia, aviso de imposto e feriados)
 @route("GET", "/api/configuracoes")
 def get_settings(req):
     return st.payload()
@@ -239,8 +251,6 @@ def post_settings(req):
     st.save(strategy)
     return {**st.payload(strategy),
             "message": "Estratégia salva. A Carteira, o Screener e o Backtest já seguem a regra de cada tipo."}
-
-# Carteira
 
 
 @route("GET", "/api/configuracoes/avisos")
@@ -272,7 +282,10 @@ def post_holidays(req):
         raise HTTPError(400, str(err)) from None
     return {**holidays.payload(), "message": message}
 
+# endregion
 
+
+# region Carteira
 @route("GET", "/api/portfolios")
 def get_portfolios(req):
     return store.read_doc()
@@ -383,7 +396,10 @@ def post_contribution(req):
     """Calculadora de aporte: {amount, mode, base, selected, candidates, cap, advice, maxAssets, reuse}."""
     return aporte.plan(portfolio_of(req, needs_entries=True), req.json_object())
 
+# endregion
 
+
+# region Backtest de carteira e robustez
 @route("POST", "/api/backtest/carteira")
 def post_portfolio_backtest(req):
     """Aba Backtest, modo Carteira: o setup em vários ativos com um único caixa (portfolio_backtest)."""
@@ -415,7 +431,10 @@ def portfolio_backtest(req, fn):
     except ValueError as err:
         raise HTTPError(400, str(err)) from None
 
+# endregion
 
+
+# region Carteira: metas, cotação e lista de compras
 @route("GET", f"/api/carteira/{PORTFOLIO_ID}/metas")
 def get_goals(req):
     return svc.goals_payload(portfolio_of(req))
@@ -440,9 +459,10 @@ def post_batch_totals(req):
     body = req.json_object()
     return pf.batch_totals(body.get("rows") or [], pf.parse_number(body.get("amount"), 0) or 0)
 
-# Dados brutos
+# endregion
 
 
+# region Dados brutos
 @route("GET", "/api/universe")
 def get_universe(req):
     return market_data.universe()
@@ -469,10 +489,10 @@ def get_cdi(req):
 def get_proventos(req):
     return market_data.proventos(valid_ticker(req.params["ticker"], min_length=5))
 
+# endregion
 
-# ---------------------------------------------------------------- Despacho
 
-
+# region Despacho
 def find_route(method, path):
     allowed = False
     for route_method, pattern, handler in ROUTES:
@@ -502,3 +522,5 @@ def call(method, path, query, read_body):
     except Exception as err:
         log.exception("erro interno em %s %s", method, path)
         return 500, {"message": f"erro interno do servidor: {err}"}
+
+# endregion

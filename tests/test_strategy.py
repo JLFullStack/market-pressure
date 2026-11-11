@@ -2,8 +2,10 @@
 
 import unittest
 
-from marketpressure import api, database as db, screener
-from marketpressure import strategy as st
+from marketpressure import api
+from marketpressure.comum import database as db
+from marketpressure.screener import screener
+from marketpressure.configuracoes import strategy as st
 
 from .support import DatabaseTestCase
 
@@ -105,7 +107,7 @@ class RuleByKindTest(DatabaseTestCase):
         self.assertEqual(bts["loose"]["trades"], bts["looseForca"]["trades"])
 
     def test_portfolio_backtest_follows_the_configured_rules(self):
-        from marketpressure import portfolio_backtest as pb
+        from marketpressure.backtest import portfolio_backtest as pb
         p = pb.parse_params({"universe": "acoes", "saida": "config"})
         self.assertEqual(p["rules"]["internacionais"][1], 0.0)    # padrão dos internacionais: só a reversão
         self.assertEqual(p["rules"]["acoes"], (0.1, 0.5, "forca"))

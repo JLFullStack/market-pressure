@@ -1,8 +1,10 @@
-// Aba Screener. Depende de core.js (apiGet, formatadores), carregado antes deste script.
+// Aba Screener. Depende de core.js (apiGet, formatadores) e animacao.js (efeitos), carregados
+// antes deste script.
 // A varredura, os indicadores, o setup, a pressão, o backtest e o ranking são feitos pelo
 // servidor (screener.py); a página pede o resultado, acompanha o progresso e exibe a visão
 // escolhida (base × candle de rejeição) sem buscar de novo.
 
+//#region Estado e início
 const POLL_MS = 700; // intervalo entre as consultas de progresso da varredura
 const PORTFOLIO_KEY = "marketpressure_carteira_atual"; // carteira escolhida na aba Carteira
 let lastScan = null;
@@ -35,9 +37,9 @@ document.addEventListener("DOMContentLoaded", () => {
 function currentPortfolio() {
     try { return localStorage.getItem(PORTFOLIO_KEY) || ''; } catch (e) { return ''; }
 }
+//#endregion
 
-// ---------------------------------------------------------------- Varredura
-
+//#region Varredura
 // Versão publicada: refazer a varredura é só do administrador; os demais usam a da atualização
 // automática. Escondido até saber o perfil; o Worker recusa o resto de qualquer forma.
 if (IN_BROWSER) {
@@ -112,9 +114,9 @@ function setProgress(fraction) {
     wrap.style.display = fraction === null ? 'none' : 'block';
     document.getElementById('progressBar').style.width = `${(fraction || 0) * 100}%`;
 }
+//#endregion
 
-// ---------------------------------------------------------------- Renderização
-
+//#region Renderização
 function render(scan) {
     const strict = document.getElementById('requireCandle').checked;
     const mode = document.getElementById('baseMode').value;
@@ -175,9 +177,9 @@ function renderKpis(scan, view, strict) {
     document.getElementById('kpiBest').innerText = best ? best.a.ticker : '—';
     document.getElementById('kpiBestNote').innerText = best ? `SC ${fmtNum(best.a.score)} · ${KIND_SHORT[best.kind]}` : '';
 }
+//#endregion
 
-// ---------------------------------------------------------------- Medidores de amplitude
-
+//#region Medidores de amplitude
 // Meio círculo de raio r em volta de (GAUGE_CX, GAUGE_CY): 0% à esquerda, 100% à direita, por cima.
 const GAUGE_CX = 60, GAUGE_CY = 60;
 function gaugePoint(v, r) {
@@ -339,9 +341,9 @@ function tableRows(top, kind) {
         </tr>
     `).join('');
 }
+//#endregion
 
-// ---------------------------------------------------------------- Copiar análise
-
+//#region Copiar análise
 // "ANALISAR ATIVO": o texto vem pronto do servidor (ai_prompt.py), na visão que a página mostra
 // (copyServerText, em core.js).
 async function copyAnalysis(btn) {
@@ -361,9 +363,9 @@ async function copyAnalysis(btn) {
         banner.style.display = 'block';
     }
 }
+//#endregion
 
-// ---------------------------------------------------------------- KPI do BOVA11
-
+//#region KPI do BOVA11
 async function renderBova(mode) {
     const value = document.getElementById('kpiBova');
     const note = document.getElementById('kpiBovaNote');
@@ -386,3 +388,4 @@ async function renderBova(mode) {
         note.innerText = `BOVA11 indisponível (${e.message})`;
     }
 }
+//#endregion

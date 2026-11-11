@@ -12,6 +12,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
+# region Pregão e setup
 SESSION_END_HOUR = 18  # após as 18h (Brasília) o candle do dia é tratado como fechado
 SESSION_START_HOUR = 10  # abertura da B3 (Brasília): antes disso não há candle do dia
 
@@ -23,13 +24,16 @@ SETUP = {
     "mm200SlopeLookback": 20,  # MM200 hoje > MM200 de N pregões atrás
 }
 
-# ---------------------------------------------------------------- Fusos e relógio da B3
 # O Windows não traz a base de fusos (zoneinfo) e o projeto não usa pacotes externos, então os
 # três fusos usados são calculados aqui. Brasília é UTC−3 fixo: não tem horário de verão desde 2019,
 # e nos anos anteriores do histórico o candle diário da B3 vem às 10h (13h UTC), longe da
 # meia-noite, então o dia não muda; Londres segue a regra europeia (último domingo de março e de
 # outubro, à 01:00 UTC).
 
+# endregion
+
+
+# region Fusos e relógio da B3
 SAO_PAULO = timezone(timedelta(hours=-3))
 
 
@@ -112,9 +116,10 @@ def adjusted_candles(candles: list) -> list:
         out.append({**c, "o": c["o"] * f, "h": c["h"] * f, "l": c["l"] * f, "c": c["c"] * f})
     return out
 
+# endregion
 
-# ---------------------------------------------------------------- Indicadores
 
+# region Indicadores
 def sma(values, n):
     out = [None] * len(values)
     total = 0.0
@@ -251,7 +256,10 @@ def compute_indicators(candles):
         "atr14": atr(candles, 14),
     })
 
+# endregion
 
+
+# region Saída, recompra e força da alta
 # Saída parcial de cada compra (lote): quando a máxima atinge +partialTarget sobre o preço da
 # compra, vende-se partialFraction do lote; o restante sai pela regra B (exit_signal). Os
 # backtests da carteira (aportes mensais, prioridade pelo Score) deram a "50% em +10% + B" como
@@ -344,9 +352,10 @@ def exit_signal(ind, i):
         return False
     return c < mm20 and c < mm50 and c < mm200 and mm50 < mm200
 
+# endregion
 
-# ---------------------------------------------------------------- Setup "Garrafa de Gás"
 
+# region Setup "Garrafa de Gás"
 def candle_pattern(c):
     rng = c["h"] - c["l"]
     if rng <= 0:
@@ -411,9 +420,10 @@ def evaluate_setup(ind, i, confirm_previous=False):
     return {"trend": trend, "pullback": pullback, "ma": ma, "pattern": pattern, "topIdx": top,
             "ok": ok, "okStrict": ok and pattern is not None}
 
+# endregion
 
-# ---------------------------------------------------------------- Aritmética e formatadores
 
+# region Aritmética e formatadores
 def add_up(values):
     """Soma da esquerda para a direita, como o reduce do JavaScript (o sum() do Python 3.12+
     compensa erros de arredondamento e pode diferir na última casa)."""
@@ -485,3 +495,5 @@ def fmt_sessions(sessions):
 
 def fmt_date(iso):
     return f"{iso[8:10]}/{iso[5:7]}/{iso[0:4]}" if iso else "—"
+
+# endregion

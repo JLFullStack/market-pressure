@@ -12,9 +12,10 @@ com a taxa de retirada anual informada (renda × 12 ÷ taxa).
 import math
 from datetime import date
 
-from .core import fmt_brl, fmt_date, fmt_duration, fmt_num
+from ..comum.core import fmt_brl, fmt_date, fmt_duration, fmt_num
 from .portfolio import add_months, is_iso_date, lower_bound, parse_number
 
+# region Constantes
 KINDS = {"patrimonio": "Patrimônio", "renda": "Renda mensal"}
 MAX_MONTHS = 1200          # projeção até 100 anos
 MAX_TABLE_YEARS = 60       # linhas da tabela ano a ano
@@ -26,7 +27,10 @@ TRACK_MONTHS = 12          # janela do aporte médio real
 MIN_RETURN_DAYS = 90       # rentabilidade real da carteira só com pelo menos 3 meses de série
 DAYS_PER_MONTH = 365.25 / 12
 
+# endregion
 
+
+# region Textos
 def duration_text(months):
     """32 → "2 anos e 8 meses"; 12 → "1 ano"; 0 → "já alcançada"."""
     return "já alcançada" if months <= 0 else fmt_duration(months)
@@ -36,7 +40,10 @@ def _month_label(iso):
     """2031-07-13 → "07/2031"."""
     return f"{iso[5:7]}/{iso[:4]}"
 
+# endregion
 
+
+# region Formulário
 def goal_from_form(body, today, goal_id=None):
     """Meta a partir dos campos do formulário (números podem vir como texto digitado). Devolve
     (meta, None) ou (None, mensagem de erro)."""
@@ -79,7 +86,10 @@ def goal_from_form(body, today, goal_id=None):
             "initial": initial, "usePortfolio": use_portfolio, "monthly": monthly, "rate": rate,
             "inflation": inflation, "adjust": bool(body.get("adjust", True)), "targetDate": target_date}, None
 
+# endregion
 
+
+# region Projeção
 def target_capital(goal):
     """Patrimônio necessário (valores de hoje)."""
     if goal["kind"] == "renda":
@@ -137,7 +147,10 @@ def required_monthly(start, real_month, inflation_month, adjust, goal_value, mon
             lo = mid
     return hi
 
+# endregion
 
+
+# region Acompanhamento pela carteira
 def _days(d0, d1):
     return (date.fromisoformat(d1) - date.fromisoformat(d0)).days
 
@@ -233,7 +246,10 @@ def projections(goal, current, today, contribution=None, real_return=None):
                            "o ritmo atual da carteira, se continuar"))
     return out
 
+# endregion
 
+
+# region Resumo da meta
 def project(goal, current, today):
     """Tudo o que o cartão da meta mostra. current = patrimônio de partida (o inicial informado, ou
     o valor atual da carteira quando a meta usa a carteira)."""
@@ -334,3 +350,5 @@ def project(goal, current, today):
         "scenarios": {"rates": scenario_rates, "rows": cells},
         "yearly": yearly, "warnings": warnings,
     }
+
+# endregion

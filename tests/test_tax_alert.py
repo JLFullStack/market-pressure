@@ -3,7 +3,7 @@
 import unittest
 from unittest import mock
 
-from marketpressure import portfolio as pf, portfolio_store as store, tax_alert
+from marketpressure.carteira import portfolio as pf, portfolio_store as store, tax_alert
 from tests.support import DatabaseTestCase
 
 

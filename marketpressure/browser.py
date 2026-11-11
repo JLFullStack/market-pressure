@@ -13,8 +13,11 @@ a página continua consultando /api/scan e recebe o progresso.
 import json
 import urllib.parse
 
-from . import api, market_data, runtime, screener
+from . import api
+from .comum import market_data, runtime
+from .screener import screener
 
+# region Rotas e perfil
 _scan = {"requested": False, "universe": [], "analyses": [], "failures": []}
 
 
@@ -43,10 +46,10 @@ def set_role(admin):
     varredura salva pela atualização diária (ver runtime.SHARED_WRITES)."""
     runtime.SHARED_WRITES = bool(admin)
 
+# endregion
 
-# ---------------------------------------------------------------- Varredura em etapas
 
-
+# region Varredura em etapas
 def _request_scan():
     _scan["requested"] = True
 
@@ -102,3 +105,5 @@ def scan_end():
     finally:
         _scan.update(universe=[], analyses=[], failures=[])
         market_data.prefetch_stored([])
+
+# endregion

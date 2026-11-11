@@ -20,7 +20,7 @@ import logging
 import os
 import sys
 
-from . import config, runtime
+from .comum import config, runtime
 
 log = logging.getLogger("marketpressure.update")
 
@@ -30,7 +30,8 @@ EXTRA_HISTORIES = (("BOVA11", "b3"), ("USDBRL", "fx"))
 
 def run():
     """Atualiza os históricos e salva a varredura; devolve a varredura."""
-    from . import market_data, screener  # depois de use_remote: o screener lê o banco ao ser importado
+    from .comum import market_data  # depois de use_remote: o screener lê o banco ao ser importado
+    from .screener import screener
 
     for ticker, market in EXTRA_HISTORIES:
         try:

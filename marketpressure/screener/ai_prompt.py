@@ -8,13 +8,15 @@ tipo, o BOVA11, a estratégia de saída salva e as compras abertas da carteira.
 
 import logging
 
-from . import market_data, screener
-from . import strategy as st
-from .core import (adjusted_candles, closed_candles, compute_indicators, day_of, fmt_brl, fmt_date, fmt_num,
+from ..comum import market_data
+from . import screener
+from ..configuracoes import strategy as st
+from ..comum.core import (adjusted_candles, closed_candles, compute_indicators, day_of, fmt_brl, fmt_date, fmt_num,
                    fmt_pct_value, fmt_qty, local_time)
 
 log = logging.getLogger(__name__)
 
+# region Textos fixos
 MODE_LABEL = {"fechamento": "último fechamento (pregões encerrados)",
               "intradiario": "intradiário (inclui o pregão em andamento, se houver)"}
 BOTTLE_LABEL = {"cheia": "Cheia (pressão ≥ 75%)", "quase": "Quase cheia (pressão de 60% a 75%)",
@@ -162,7 +164,10 @@ estratégia recompra apenas em outro recuo) ou, fora dos internacionais, quando 
 em 20 pregões, retorno de 12 meses negativo ou recuo até a MM200) ou o ativo rendeu menos que o Ibovespa em 6 meses; COMPRAR \
 com prioridade (o motivo começa por "Prioridade") no Top 5 do tipo ou com Score ≥ 65; senão COMPRAR, com um alerta quando o backtest dos últimos 3 anos é negativo. O app não usa stop loss."""
 
+# endregion
 
+
+# region Formatação e dados
 def _pct(v, d=1, sign=True):
     """Número já em % → "+1,2%"."""
     if v is None:
@@ -269,7 +274,10 @@ def _history_line(bt):
         parts.append("nenhuma compra encerrada nos últimos 3 anos")
     return "; ".join(parts)
 
+# endregion
 
+
+# region Montagem do texto
 def build(scan, payload, ticker, mode, strict, lots, settings):
     """Texto da análise de `ticker` (que precisa estar no ranking da visão escolhida) em Markdown.
     scan: a varredura completa; payload: scan_payload na liquidez e nas regras por tipo escolhidas;
@@ -379,3 +387,5 @@ def build(scan, payload, ticker, mode, strict, lots, settings):
               "- O backtest não considera custos, impostos nem proventos, e empresas que saíram da bolsa não entram nele.",
               "- O app olha só preço e volume: nada de balanço, notícias ou valuation. Complete com o que você souber."]
     return "\n".join(lines) + "\n"
+
+# endregion

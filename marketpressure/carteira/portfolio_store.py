@@ -12,13 +12,14 @@ com a versão anterior em data/backup/). Se a validação falha, nada é gravado
 import threading
 import uuid
 
-from . import database as db
+from ..comum import database as db
 from . import goals as gl
 from . import portfolio as pf
 from . import portfolio_service as svc
 from . import tax_alert
-from .core import fmt_brl, fmt_qty, today_iso
+from ..comum.core import fmt_brl, fmt_qty, today_iso
 
+# region Tabelas e documento
 DOC_VERSION = 2
 PORTFOLIO_TABLES = ("portfolios", "portfolio_classes", "portfolio_assets", "transactions",
                     "fixed_income", "fixed_income_entries", "portfolio_goals")
@@ -48,7 +49,10 @@ def _optional(item, key, value):
         item[key] = _num(value)
     return item
 
+# endregion
 
+
+# region Leitura e gravação
 def read_raw() -> dict:
     """Monta o documento a partir das tabelas (vazio se ainda não há carteiras)."""
     with _lock:
@@ -116,7 +120,10 @@ def valid_document(document) -> bool:
             and isinstance(document.get("portfolios"), list)
             and all(isinstance(p, dict) for p in document["portfolios"]))
 
+# endregion
 
+
+# region Auxiliares das ações
 def get_portfolio(portfolio_id):
     p = next((p for p in read_doc()["portfolios"] if p.get("id") == portfolio_id), None)
     if not p:
@@ -126,9 +133,6 @@ def get_portfolio(portfolio_id):
 
 def new_id():
     return str(uuid.uuid4())
-
-
-# ---------------------------------------------------------------- Ações
 
 
 def _find(doc, portfolio_id):
@@ -157,7 +161,10 @@ def _percent(value, message):
         raise ActionError(message)
     return v
 
+# endregion
 
+
+# region Ações: carteiras
 def create_portfolio(doc, body):
     name = str(body.get("name") or "").strip()
     if not name:
@@ -181,7 +188,10 @@ def delete_portfolio(doc, body):
     doc["portfolios"] = [p for p in doc["portfolios"] if p["id"] != body.get("id")]
     return {"id": doc["portfolios"][0]["id"] if doc["portfolios"] else None}
 
+# endregion
 
+
+# region Ações: lançamentos
 def add_transaction(doc, body):
     """Formulário "Nova operação". Números chegam como digitados; preço e taxas na moeda do ativo."""
     cur = _find(doc, body.get("id"))
@@ -259,7 +269,10 @@ def delete_entry(doc, body):
             cur["fixedIncome"] = [f for f in cur["fixedIncome"] if f["id"] != item_id]
     return {}
 
+# endregion
 
+
+# region Ações: classes e metas
 def set_class_target(doc, body):
     cur = _find(doc, body.get("id"))
     cls = next((c for c in cur["classes"] if c["name"] == body.get("cls")), None)
@@ -351,7 +364,10 @@ def set_asset_target(doc, body):
         target["target"] = value
     return {}
 
+# endregion
 
+
+# region Ações: lista de compras
 def register_batch(doc, body):
     """Lista "Registrar compras sugeridas": valida cada linha incluída com as regras dos formulários
     avulsos; se alguma falha, nada é gravado e os erros voltam por linha. Senão, todas entram de
@@ -391,7 +407,10 @@ def register_batch(doc, body):
         done = "registrado" if len(included) == 1 else "registrados"
     return {"message": f"{' e '.join(parts)} {done}."}
 
+# endregion
 
+
+# region Ações: metas
 def _goal(cur, goal_id):
     goal = next((g for g in cur["goals"] if g["id"] == goal_id), None)
     if not goal:
@@ -422,7 +441,10 @@ def delete_goal(doc, body):
     cur["goals"] = [g for g in cur["goals"] if g["id"] != goal["id"]]
     return {"message": f'Meta "{goal["name"]}" excluída.'}
 
+# endregion
 
+
+# region Despacho das ações
 ACTIONS = {
     "criar_carteira": create_portfolio,
     "renomear_carteira": rename_portfolio,
@@ -453,3 +475,5 @@ def apply_action(body: dict) -> dict:
         result = handler(doc, body)
         saved = pf.normalize_doc(write_doc(doc))
     return {"doc": saved, **result}
+
+# endregion

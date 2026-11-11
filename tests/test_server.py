@@ -7,7 +7,9 @@ import unittest
 from http.server import ThreadingHTTPServer
 from unittest import mock
 
-from marketpressure import core, market_data, screener, server
+from marketpressure.comum import core, market_data
+from marketpressure.screener import screener
+from marketpressure import server
 from tests import support
 from tests.support import DatabaseTestCase
 

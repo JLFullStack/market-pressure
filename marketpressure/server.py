@@ -48,12 +48,15 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import api, config, screener
+from . import api
+from .comum import config
+from .screener import screener
 from .api import HTTPError, clean
-from .core import in_session_hours
+from .comum.core import in_session_hours
 
 log = logging.getLogger(__name__)
 
+# region Arquivos e origens
 PAGES = {
     "/": "analise_quantitativa_b3.html",
     "/index.html": "analise_quantitativa_b3.html",
@@ -87,10 +90,10 @@ def origin_allowed(origin):
     """Sem Origin (mesma origem num GET, curl, testes) ou origem local."""
     return not origin or bool(ALLOWED_ORIGIN.match(origin))
 
+# endregion
 
-# ---------------------------------------------------------------- HTTP
 
-
+# region HTTP
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.dispatch("GET")
@@ -165,7 +168,10 @@ class Handler(BaseHTTPRequestHandler):
         if not self.path.startswith(QUIET_PATHS):
             log.info("%s %s", self.address_string(), fmt % args)
 
+# endregion
 
+
+# region Atualização diária e início
 DAILY_CHECK_SECONDS = 10 * 60
 
 
@@ -196,3 +202,5 @@ def main():
         pass
     finally:
         server.server_close()
+
+# endregion

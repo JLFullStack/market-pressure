@@ -1,6 +1,6 @@
 // Monta dist/ para o Cloudflare (npm run build; o wrangler deploy roda antes de publicar):
 // as páginas de web/ (index.html = Screener), o pacote marketpressure/, que o navegador
-// executa no Pyodide (py/marketpressure/*.py, listados em py/manifest.json), e o próprio
+// executa no Pyodide (py/marketpressure/**/*.py, listados em py/manifest.json), e o próprio
 // Pyodide (pyodide/, do pacote npm), servido pelo mesmo domínio: sem depender de CDN, que
 // redes corporativas e bloqueadores costumam barrar.
 import { createHash } from "node:crypto";
@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = join(root, "dist");
-// Só o servidor HTTP local fica de fora (no navegador as rotas vêm de browser.py).
+// Só o servidor HTTP local e a atualização diária ficam de fora (no navegador as rotas vêm de
+// browser.py). Caminhos relativos ao pacote, com "/" (subpacotes: comum/, screener/, carteira/...).
 const SKIP = new Set(["__main__.py", "server.py", "update.py"]);
 
 // Esvazia dist/ sem apagar a pasta (no Windows o wrangler dev a mantém aberta).
@@ -22,10 +23,14 @@ cpSync(join(dist, "analise_quantitativa_b3.html"), join(dist, "index.html"));
 const pkg = join(dist, "py", "marketpressure");
 mkdirSync(pkg, { recursive: true });
 const hash = createHash("sha256");
-const files = readdirSync(join(root, "marketpressure")).filter(f => f.endsWith(".py") && !SKIP.has(f)).sort();
+const files = readdirSync(join(root, "marketpressure"), { recursive: true })
+    .map(f => f.replaceAll("\\", "/"))
+    .filter(f => f.endsWith(".py") && !f.includes("__pycache__") && !SKIP.has(f))
+    .sort();
 for (const file of files) {
     const text = readFileSync(join(root, "marketpressure", file));
     hash.update(file).update(text);
+    mkdirSync(dirname(join(pkg, file)), { recursive: true });
     writeFileSync(join(pkg, file), text);
 }
 const PYODIDE_FILES = ["pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"];

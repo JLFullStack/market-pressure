@@ -21,7 +21,10 @@ const ready = (async () => {
     await Promise.all(manifest.files.map(async (file) => {
         const response = await fetch(new URL(`marketpressure/${file}?v=${manifest.version}`, PY_BASE));
         if (!response.ok) throw new Error(`não foi possível carregar ${file} (HTTP ${response.status})`);
-        pyodide.FS.writeFile(`${dir}/${file}`, await response.text());
+        const text = await response.text();
+        // Subpacotes (comum/, carteira/...): a pasta do arquivo antes dele.
+        pyodide.FS.mkdirTree(`${dir}/${file}`.slice(0, `${dir}/${file}`.lastIndexOf("/")));
+        pyodide.FS.writeFile(`${dir}/${file}`, text);
     }));
     pyodide.runPython("import sys; sys.path.insert(0, '/home/pyodide')");
     const browser = pyodide.pyimport("marketpressure.browser");

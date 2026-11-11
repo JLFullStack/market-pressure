@@ -97,7 +97,7 @@ beforeEach(() => { upstream.length = 0; });
 // ---------------------------------------------------------------- Sem login
 
 test("sem login nada é servido, além da tela de login", async () => {
-    for (const path of ["/db?names=scan", proxyPath(YAHOO_CHART), "/py/manifest.json", "/pyodide/pyodide.mjs", "/assets/js/app.js", "/auth/users", "/auth/me"]) {
+    for (const path of ["/db?names=scan", proxyPath(YAHOO_CHART), "/py/manifest.json", "/pyodide/pyodide.mjs", "/assets/js/screener.js", "/auth/users", "/auth/me"]) {
         assert.equal((await call("GET", path)).status, 401, path);
     }
     assert.equal((await put({}, { scan: "[]" })).status, 401);

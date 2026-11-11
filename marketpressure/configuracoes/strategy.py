@@ -27,13 +27,14 @@ de cada grupo. No navegador as tabelas são do usuário (como as carteiras), ent
 
 import logging
 
-from . import database as db
-from . import market_data
-from .core import EXIT, fmt_num, fmt_pct_value as pct
-from .portfolio import CLASS_GROUP, CLASSES, parse_number
+from ..comum import database as db
+from ..comum import market_data
+from ..comum.core import EXIT, fmt_num, fmt_pct_value as pct
+from ..carteira.portfolio import CLASS_GROUP, CLASSES, parse_number
 
 log = logging.getLogger(__name__)
 
+# region Constantes
 TABLE = "settings"
 KINDS_TABLE = "settings_kinds"
 STRATEGIES = {
@@ -59,7 +60,10 @@ FRACTION_RANGE = (1, 100)    # parte de cada compra vendida no alvo, em %
 REVERSAL_TEXT = "fechamento abaixo da MM20, MM50 e MM200 com a MM50 abaixo da MM200"
 WEAK_TEXT = "fechamento com menos de 1 ATR acima da MM20 ou RSI abaixo de 65"   # core.STRENGTH
 
+# endregion
 
+
+# region Regra de cada grupo
 def timing(rule):
     """Momento da venda parcial de uma regra ({key, ...}): "alvo" ou "forca" (core.PARTIAL_TIMINGS)."""
     return TIMING.get(rule.get("key"), "alvo")
@@ -111,7 +115,10 @@ def screener_kinds(settings):
     """{grupo: regra} — o que muda o histórico (backtest) e o Score do ranking."""
     return dict(settings["kinds"])
 
+# endregion
 
+
+# region Textos
 def describe_one(s):
     """Uma regra ({key, target, fraction}) com os textos da página."""
     rest = "; o restante na reversão de tendência" if s["fraction"] < 1 else ""
@@ -135,7 +142,10 @@ def describe(settings):
             "kinds": [{"group": g, "groupLabel": label, "hint": GROUP_HINTS[g], **describe_one(for_group(settings, g))}
                       for g, label in GROUPS.items()]}
 
+# endregion
 
+
+# region Leitura e gravação
 def from_form(body):
     """Formulário da aba Configurações → (configurações, erro). target e fraction chegam em %;
     kinds = {grupo: "forca" | "parcial" | "reversao"} (grupos ausentes ficam com o padrão)."""
@@ -190,3 +200,5 @@ def payload(s=None):
     return {"strategy": describe(s or load()), "options": [{"key": k, "label": v} for k, v in STRATEGIES.items()],
             "groups": [{"key": g, "label": v} for g, v in GROUPS.items()],
             "default": describe(DEFAULT), "ranges": {"target": TARGET_RANGE, "fraction": FRACTION_RANGE}}
+
+# endregion

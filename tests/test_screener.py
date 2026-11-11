@@ -2,9 +2,12 @@ import unittest
 from datetime import datetime
 from unittest import mock
 
-from marketpressure import ai_prompt, portfolio_prompt, screener, strategy, update
-from marketpressure import portfolio as pf
-from marketpressure.core import SAO_PAULO
+from marketpressure.screener import ai_prompt, screener
+from marketpressure.carteira import portfolio_prompt
+from marketpressure.configuracoes import strategy
+from marketpressure import update
+from marketpressure.carteira import portfolio as pf
+from marketpressure.comum.core import SAO_PAULO
 from tests.support import DatabaseTestCase, candles, raw_history
 
 
@@ -232,7 +235,7 @@ class AssetKindTest(unittest.TestCase):
         series = candles(60)
         for c in series[30:33]:  # 3 pregões em ~1% do preço (como o XPML11 no Yahoo)
             c["c"] = c["c"] / 100
-        with self.assertLogs("marketpressure.market_data", "WARNING"):
+        with self.assertLogs("marketpressure.comum.market_data", "WARNING"):
             kept = screener.market_data.drop_bad_candles(series, "XPML11")
         self.assertEqual(len(kept), 57)
         jump = candles(60)

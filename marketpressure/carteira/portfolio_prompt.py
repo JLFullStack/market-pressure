@@ -9,17 +9,19 @@ presença no ranking do Screener), renda fixa, proventos e a estratégia de vend
 
 import logging
 
-from . import database as db
-from . import market_data, screener
+from ..comum import database as db
+from ..comum import market_data
+from ..screener import screener
 from . import portfolio as pf
 from . import portfolio_service as svc
-from . import strategy as st
+from ..configuracoes import strategy as st
 from . import tax_alert
-from .ai_prompt import EVENTS, ROLE, _bova, _pct, _ratio_pct
-from .core import add_up, compute_indicators, fmt_brl, fmt_date, fmt_num, fmt_qty, local_time, today_iso
+from ..screener.ai_prompt import EVENTS, ROLE, _bova, _pct, _ratio_pct
+from ..comum.core import add_up, compute_indicators, fmt_brl, fmt_date, fmt_num, fmt_qty, local_time, today_iso
 
 log = logging.getLogger(__name__)
 
+# region Textos fixos
 MARKET_LABEL = {"b3": "B3", "us": "EUA (US$)", "crypto": "cripto (US$)"}
 SETUP_MODE = "fechamento"  # base do setup e do ranking citados: pregões encerrados
 
@@ -153,7 +155,10 @@ fraca (MM200 subindo menos de 1% em 20 pregões, retorno de 12 meses negativo ou
 ou ativo rendendo menos que o Ibovespa em 6 meses; COMPRAR com prioridade = Top 5 do tipo ou Score ≥ 65; \
 senão COMPRAR."""
 
+# endregion
 
+
+# region Seções de dados
 def _names():
     """{ticker: linha da tabela universe} (nome, setor e tipo), ou {} se não houver."""
     try:
@@ -326,7 +331,10 @@ def _position(p, info, ranked, rule, transactions):
         lines += technical
     return lines + [""]
 
+# endregion
 
+
+# region Montagem do texto
 def build(portfolio, analysis, settings, received):
     """Texto da análise da carteira em Markdown. analysis: portfolio_service.full_analysis;
     settings: strategy.load (a regra de venda de cada classe); received: os proventos já pagos
@@ -434,3 +442,5 @@ def prompt(portfolio):
     """{name, text} para a rota: a análise (a última, se a carteira não mudou) e o texto."""
     analysis = svc.full_analysis(portfolio, reuse=True)
     return {"name": portfolio["name"], "text": build(portfolio, analysis, st.load(), svc.receivables(portfolio)["received"])}
+
+# endregion

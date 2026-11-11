@@ -24,15 +24,16 @@ import logging
 import math
 from datetime import date
 
-from . import database as db
-from . import market_data, runtime
-from . import screener as sc
-from . import strategy as st
-from .core import (EXIT, entry_stats, entry_warnings, add_up, adjusted_candles, closed_candles, compute_indicators, day_of, evaluate_setup,
+from ..comum import database as db
+from ..comum import market_data, runtime
+from ..screener import screener as sc
+from ..configuracoes import strategy as st
+from ..comum.core import (EXIT, entry_stats, entry_warnings, add_up, adjusted_candles, closed_candles, compute_indicators, day_of, evaluate_setup,
                    exit_signal, fmt_brl, fmt_date, fmt_num, fmt_sessions, trend_strength, PARTIAL_TIMINGS)
 
 log = logging.getLogger(__name__)
 
+# region Constantes
 UNIVERSES = {"acoes": "Ranking de ações", "fundos": "Ranking de fundos listados", "etfs": "Ranking de ETFs",
              "bdrs": "Ranking de BDRs", "todos": "Rankings de todos os tipos", "lista": "Lista de ativos"}
 BENCHMARK = "BOVA11"
@@ -53,10 +54,10 @@ MARKER_LETTER = {"buy": "C", "partial": "P", "exit": "V"}
 MARKER_ORDER = ("buy", "partial", "exit")
 _signals_cache = {}    # (ticker, strict, pregões, último dia) → sinais (calculá-los é a parte cara)
 
+# endregion
 
-# ---------------------------------------------------------------- Parâmetros
 
-
+# region Parâmetros
 def _number(body, key, default, low, high, label):
     raw = body.get(key)
     if raw is None or str(raw).strip() == "":
@@ -163,10 +164,10 @@ def _liquidity(value):
         raise ValueError("Escolha a liquidez mínima.")
     return value
 
+# endregion
 
-# ---------------------------------------------------------------- Ativos e sinais
 
-
+# region Ativos e sinais
 def universe_assets(params):
     """[{ticker, kind, name}] candidatos: todos os ativos do tipo na lista da B3 salva (tabela
     universe; sem ela, os do último screener), ou a lista informada."""
@@ -276,10 +277,10 @@ def daily_ranking(candidates, top_n):
         ranked += [(t, score, pos) for pos, (t, score) in enumerate(items[:top_n], 1)]
     return sorted(ranked, key=lambda x: -x[1])
 
+# endregion
 
-# ---------------------------------------------------------------- Simulação
 
-
+# region Simulação
 def _first_sessions(cal):
     """Primeiro pregão de cada mês (dia dos aportes mensais)."""
     seen, out = set(), set()
@@ -505,7 +506,10 @@ def simulate(data, cal, params, fraction, cdi):
                           "to": a["days"][min(len(a["days"]) - 1, end + LOT_MARGIN)]}
     return curve, flows, trades
 
+# endregion
 
+
+# region Métricas e comparações
 def _irr(flows, final, end):
     """Taxa interna de retorno ao ano (aportes como entradas, patrimônio final como saída)."""
     t_end = date.fromisoformat(end)
@@ -697,7 +701,10 @@ def _cdi_curve(cal, flows, cdi):
         curve.append({"date": d, "equity": value, "contributed": contributed, "cash": value})
     return curve
 
+# endregion
 
+
+# region Marcadores no gráfico
 def _profit_series(curve):
     return [{"time": p["date"], "value": p["equity"] - p["contributed"]} for p in curve]
 
@@ -722,7 +729,10 @@ def _markers(rows):
                 for (d, k), m in sorted(groups.items(), key=lambda kv: (kv[0][0], MARKER_ORDER.index(kv[0][1])))]
             for t, groups in by_ticker.items()}
 
+# endregion
 
+
+# region Execução
 def _load(params):
     """Sinais dos candidatos e o calendário do BOVA11: o que run e robustness compartilham."""
     assets = universe_assets(params)
@@ -887,9 +897,10 @@ def _profit_ranking(traded):
     worst = [a for a in ranked[-PROFIT_RANKING:] if a["profit"] < 0 and a not in best]
     return [{"ticker": a["ticker"], "profit": a["profit"]} for a in best + worst]
 
+# endregion
 
-# ---------------------------------------------------------------- Robustez
 
+# region Robustez
 ROBUST_MIN_SESSIONS = 504     # até o fim: cada início precisa de ~2 anos até o fim do período
 ROBUST_WINDOWS = (2, 3, 5)    # janelas de tamanho fixo, em anos
 ROBUST_NAMES = {"onlyB": "da regra B sozinha", "bova": "do BOVA11", "ivvb": "do IVVB11", "mix": "dos índices nas metas", "cdi": "do CDI"}
@@ -1044,3 +1055,5 @@ def robustness(params):
                                                     "ranked": len(data), "illiquid": loaded["illiquid"]},
         "rows": rows, "wins": wins, "periods": n, "cards": cards, "summary": lines, "verdict": verdict, "warnings": warnings,
     }
+
+# endregion

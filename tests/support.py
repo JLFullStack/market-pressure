@@ -6,7 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from marketpressure import backtest_prompt, database, market_data
+from marketpressure.backtest import backtest_prompt
+from marketpressure.comum import database, market_data
 
 DAY = 86400
 START = 1609502400  # 2021-01-01 12:00 UTC (09:00 em Brasília)

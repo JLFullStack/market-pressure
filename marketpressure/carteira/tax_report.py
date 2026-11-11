@@ -21,15 +21,16 @@ import calendar
 import logging
 from datetime import date, timedelta
 
-from . import database as db
-from . import holidays as hd
-from . import market_data
+from ..comum import database as db
+from ..configuracoes import holidays as hd
+from ..comum import market_data
 from . import portfolio as pf
 from . import tax_alert
-from .core import add_up, fmt_brl, fmt_date, fmt_num, fmt_qty, today_iso
+from ..comum.core import add_up, fmt_brl, fmt_date, fmt_num, fmt_qty, today_iso
 
 log = logging.getLogger(__name__)
 
+# region Constantes
 PAYMENTS_TABLE = "tax_payments"
 OPENING_TABLE = "tax_opening"
 
@@ -68,9 +69,10 @@ INCOME_WHERE = {
     "cripto": "Ficha de Aplicações Financeiras e Lucros e Dividendos no Exterior.",
 }
 
+# endregion
 
-# ---------------------------------------------------------------- Tipo de cada ativo
 
+# region Tipo de cada ativo
 def _universe():
     try:
         return {r["ticker"]: r for r in db.read_table("universe")}
@@ -116,9 +118,10 @@ def categories(portfolio, universe=None):
         out[t] = {"category": category, "name": name, "assumed": assumed}
     return out
 
+# endregion
 
-# ---------------------------------------------------------------- Cálculos (puros)
 
+# region Apuração mensal
 def sales_of(transactions, cats):
     """Cada venda em reais, com o custo pelo preço médio (como portfolio.build_positions):
     [{date, month, ticker, category, quantity, gross, fees, cost, gain, sameDayBuy}]."""
@@ -273,7 +276,10 @@ def ledger(sales, opening=None, payments=None, today=None, holidays=()):
     return {"months": months, "lossCommon": loss_common, "lossFunds": loss_funds, "carry": carry,
             "creditByYear": credit_by_year}
 
+# endregion
 
+
+# region Declaração anual
 def foreign_years(sales, dividends=()):
     """Exterior por ano: {ano: {gain, dividends, lossIn, lossUsed, base, tax, lossOut}}, com o
     prejuízo do ano passando para os seguintes. Os dividendos ficam à parte da estimativa porque o
@@ -336,7 +342,10 @@ def income_rows(dividends, cats, year):
     return [{"ticker": t, "categoryLabel": CATEGORIES[cats[t]["category"]][0], "total": add_up(v),
              "where": INCOME_WHERE[cats[t]["category"]]} for t, v in sorted(totals.items(), key=lambda kv: -add_up(kv[1]))]
 
+# endregion
 
+
+# region DARF: guia e vencimento
 def _pending(months):
     return [m for m in months if m["status"] in ("pending", "overdue")]
 
@@ -417,9 +426,10 @@ def due_alert_from(months, today):
     return {"show": True, "level": due_level(pending, today), "title": title, "lines": lines,
             "link": {"href": "#impostos", "text": "Ver os dados do DARF"}}
 
+# endregion
 
-# ---------------------------------------------------------------- Dados salvos
 
+# region Dados salvos
 def load_payments(portfolio_id):
     """{mês: {amount, paidOn}} dos DARFs marcados como pagos."""
     try:
@@ -478,9 +488,10 @@ def save_opening(portfolio, body):
     db.write_tables({OPENING_TABLE: rows})
     return "Prejuízos salvos. A apuração já foi refeita com eles."
 
+# endregion
 
-# ---------------------------------------------------------------- O que a página mostra
 
+# region O que a página mostra
 def due_alert(portfolio, settings=None):
     """Topo da Visão geral: DARF em aberto, ou None (sem DARF ou com o aviso de imposto desligado)."""
     if not (settings or tax_alert.load())["enabled"]:
@@ -631,3 +642,5 @@ def payload(portfolio, year=None, analysis=None, portfolio_count=1):
         },
         "method": method(),
     }
+
+# endregion

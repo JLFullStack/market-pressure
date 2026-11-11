@@ -24,6 +24,7 @@ from pathlib import Path
 
 from . import config, runtime
 
+# region Caminhos e esquemas
 # Atributos do módulo (e não constantes do config) para que os testes troquem a pasta do banco.
 DATA_DIR: Path = config.DATA_DIR
 BACKUP_DIR: Path = DATA_DIR / "backup"
@@ -118,7 +119,10 @@ HISTORY_SCHEMA = _schema(("date", _i64), ("open", _f64), ("high", _f64), ("low",
 def schema_of(name) -> dict:
     return HISTORY_SCHEMA if name.startswith(HISTORY_PREFIX) else SCHEMAS[name]
 
+# endregion
 
+
+# region Leitura e gravação
 def table_path(name) -> Path:
     if name.startswith(HISTORY_PREFIX):
         return DATA_DIR / "history" / f"{name}.parquet"
@@ -153,10 +157,10 @@ def write_tables(tables: dict, backup=False):
         else:
             _parquet_write(tables, backup)
 
+# endregion
 
-# ---------------------------------------------------------------- Parquet (servidor local)
 
-
+# region Parquet (servidor local)
 def _arrow_schema(name):
     import pyarrow as pa
 
@@ -199,10 +203,10 @@ def _parquet_write(tables, backup):
     for tmp, path in staged:
         os.replace(tmp, path)
 
+# endregion
 
-# ---------------------------------------------------------------- D1 (navegador)
 
-
+# region D1 (navegador)
 def _coerce(value, kind, where):
     """Valor no tipo da coluna (como o pyarrow: número inteiro vale em float64, nada além)."""
     if value is None:
@@ -250,10 +254,10 @@ def _remote_write(tables, backup):
     if status != 200:
         raise _remote_error(status, text)
 
+# endregion
 
-# ---------------------------------------------------------------- Análises do screener
 
-
+# region Análises do screener
 def flatten_analysis(analysis: dict) -> dict:
     """Análise de uma base (dict aninhado de analyze_asset) → colunas de scan_analyses."""
     row = {}
@@ -280,3 +284,5 @@ def unflatten_analysis(row: dict) -> dict:
         out.pop("pressure", None)
         out.pop("backtest", None)
     return out
+
+# endregion

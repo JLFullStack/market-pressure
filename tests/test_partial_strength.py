@@ -6,7 +6,10 @@ import unittest
 from datetime import datetime, timezone
 from unittest import mock
 
-from marketpressure import core, portfolio as pf, portfolio_backtest as pb, screener
+from marketpressure.comum import core
+from marketpressure.carteira import portfolio as pf
+from marketpressure.backtest import portfolio_backtest as pb
+from marketpressure.screener import screener
 
 
 def ts(iso):

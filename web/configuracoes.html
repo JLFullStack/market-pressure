@@ -4,15 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MarketPressure — Configurações</title>
+    <!-- #region Estilos -->
     <link rel="stylesheet" href="assets/css/app.css">
     <link rel="stylesheet" href="assets/css/responsivo.css">
     <link rel="stylesheet" href="assets/css/animacao.css">
     <link rel="stylesheet" href="assets/css/configuracoes.css">
+    <!-- #endregion -->
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
 <body>
 
 <div class="container">
+    <!-- #region Barra do app -->
     <header class="appbar">
         <span class="brand">MarketPressure</span>
         <nav class="tabs" aria-label="Seções do MarketPressure">
@@ -42,7 +45,9 @@
             <button type="button" class="link-btn" id="logoutBtn">Sair</button>
         </div>
     </header>
+    <!-- #endregion -->
 
+    <!-- #region Cabeçalho -->
     <section class="panel hero" data-reveal>
         <div class="hero-aurora" aria-hidden="true"></div>
         <div class="hero-title">
@@ -56,7 +61,9 @@
             <a href="backtest.html" class="apply-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-7"/></svg><span><strong>Backtest</strong>quando a saída escolhida lá é "Conforme as Configurações"</span></a>
         </div>
     </section>
+    <!-- #endregion -->
 
+    <!-- #region Estratégia de venda -->
     <form id="strategyForm" novalidate>
         <div class="panel" data-reveal>
             <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></span><h2>Venda parcial</h2></div>
@@ -136,7 +143,9 @@
             <div class="form-msg" id="strategyMsg" role="status"></div>
         </div>
     </form>
+    <!-- #endregion -->
 
+    <!-- #region Aviso de imposto -->
     <form id="alertForm" novalidate>
         <div class="panel tax-panel" data-reveal>
             <div class="panel-head">
@@ -181,7 +190,9 @@
             <div class="form-msg" id="alertMsg" role="status"></div>
         </div>
     </form>
+    <!-- #endregion -->
 
+    <!-- #region Feriados -->
     <div class="panel" data-reveal id="feriados">
         <div class="panel-title"><span class="icon-chip tone-warn" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span><h2>Feriados</h2></div>
         <p class="small muted">Esta lista define os dias sem expediente bancário usados no vencimento do DARF.</p>
@@ -231,9 +242,13 @@
         </div>
         <div id="holidayDated"></div>
     </div>
+    <!-- #endregion -->
 </div>
 
+<!-- #region Scripts -->
 <script src="assets/js/core.js"></script>
+<script src="assets/js/animacao.js"></script>
 <script src="assets/js/configuracoes.js"></script>
+<!-- #endregion -->
 </body>
 </html>

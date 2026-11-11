@@ -4,14 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MarketPressure — Conta</title>
+    <!-- #region Estilos -->
     <link rel="stylesheet" href="assets/css/app.css">
     <link rel="stylesheet" href="assets/css/responsivo.css">
     <link rel="stylesheet" href="assets/css/animacao.css">
+    <!-- #endregion -->
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
 <body>
 
 <div class="container">
+    <!-- #region Barra do app -->
     <header class="appbar">
         <span class="brand">MarketPressure</span>
         <nav class="tabs" aria-label="Seções do MarketPressure">
@@ -41,12 +44,16 @@
             <button type="button" class="link-btn" id="logoutBtn">Sair</button>
         </div>
     </header>
+    <!-- #endregion -->
 
+    <!-- #region Aviso da versão local -->
     <div class="panel" id="localNote" hidden>
         <h2>Conta</h2>
         <p class="muted">Login e contas existem só na versão publicada (Cloudflare). Rodando pelo <code>server.py</code>, a aplicação é só sua e não pede login.</p>
     </div>
+    <!-- #endregion -->
 
+    <!-- #region Minha conta -->
     <div class="panel" data-auth hidden>
         <h2>👤 Minha conta</h2>
         <p class="muted" id="accountInfo"></p>
@@ -64,7 +71,9 @@
         </form>
         <div class="form-msg" id="passwordMsg" role="status"></div>
     </div>
+    <!-- #endregion -->
 
+    <!-- #region Usuários (administrador) -->
     <section id="adminSection" hidden>
         <div class="panel">
             <h2>👥 Usuários</h2>
@@ -116,9 +125,13 @@
             <div class="form-msg" id="resetMsg" role="status"></div>
         </div>
     </section>
+    <!-- #endregion -->
 </div>
 
+<!-- #region Scripts -->
 <script src="assets/js/core.js"></script>
+<script src="assets/js/animacao.js"></script>
 <script src="assets/js/conta.js"></script>
+<!-- #endregion -->
 </body>
 </html>

@@ -18,21 +18,21 @@ Esta é a arquitetura vigente. Não a altere sem aprovação explícita.
 | Camada | Arquivo | Responsabilidade |
 |---|---|---|
 | Inicialização | `server.py` (raiz) | Só inicia o servidor (`python server.py`, igual a `python -m marketpressure`). Todo o código Python fica no pacote `marketpressure/`, com imports relativos. |
-| Backend | `marketpressure/config.py` | Caminhos (`WEB_DIR`, `DATA_DIR`), `HOST`/`PORT`, nível de log, `BRAPI_TOKEN` e tempos de cache. Lê variáveis de ambiente e o `.env` da raiz (fora do controle de versão; modelo em `.env.example`). |
+| Backend | `marketpressure/comum/config.py` | Caminhos (`WEB_DIR`, `DATA_DIR`), `HOST`/`PORT`, nível de log, `BRAPI_TOKEN` e tempos de cache. Lê variáveis de ambiente e o `.env` da raiz (fora do controle de versão; modelo em `.env.example`). |
 | Backend | `marketpressure/server.py` | Só o HTTP (biblioteca padrão do Python 3.14). Cada rota é uma função curta registrada com `@route(método, padrão)`; os erros são tratados num só lugar (`Handler.dispatch`). Serve as duas páginas (`/` e `/carteira`), os arquivos de `web/` e `/api/*`: resultados prontos (`/api/scan`, `/api/bova`, `/api/carteira/{id}/estrutura|analise|aporte|proventos|ativo`, `/api/cotacao`, `/api/lote/totais`, `POST /api/carteira/acao`) e dados brutos (`/api/universe`, `/api/history`, `/api/cdi`, `/api/proventos`, `GET`/`PUT /api/portfolios`). O contrato completo está no `CLAUDE.md`. |
-| Backend | `marketpressure/core.py` | Relógio da B3 (fusos calculados à mão, sem `zoneinfo`), indicadores, `SETUP`, `evaluate_setup`, `exit_signal`, aritmética igual à do JS (`add_up`, `js_round`) e formatadores pt-BR das mensagens. |
-| Backend | `marketpressure/market_data.py` | Coleta (brapi, Yahoo, BCB, B3), cache em memória de 15 min e `history()` (candles normalizados; cripto e câmbio recarimbados). Falha de fonte externa levanta `UpstreamError` (HTTP 502). |
-| Backend | `marketpressure/screener.py` | `pressure`, `backtest`, `analyze_asset`, varredura em segundo plano (`ScanJob`, tabelas `scan*` no banco), ranking, visões prontas (base × candle), regime, estado da garrafa, justificativa e KPI do BOVA11. |
-| Backend | `marketpressure/portfolio.py` | Todos os cálculos da Carteira, só funções puras (sem rede nem disco): posições, proventos, câmbio, série TWR, alocação, metas por ativo, plano de aporte, lista de compras e validações. |
-| Backend | `marketpressure/portfolio_service.py` | Carrega cotações, CDI e proventos (`market_data`), chama `portfolio.py` e monta os payloads das rotas da Carteira. |
-| Backend | `marketpressure/database.py` | Banco de dados: uma tabela Parquet por arquivo em `data/` (`SCHEMAS`, `read_table`, `write_tables`, backup em `data/backup/`). |
-| Backend | `marketpressure/portfolio_store.py` | Tabelas das carteiras no banco (documento ↔ tabelas, backup a cada gravação, migração na leitura) e todas as alterações como ações validadas (`ACTIONS`). |
+| Backend | `marketpressure/comum/core.py` | Relógio da B3 (fusos calculados à mão, sem `zoneinfo`), indicadores, `SETUP`, `evaluate_setup`, `exit_signal`, aritmética igual à do JS (`add_up`, `js_round`) e formatadores pt-BR das mensagens. |
+| Backend | `marketpressure/comum/market_data.py` | Coleta (brapi, Yahoo, BCB, B3), cache em memória de 15 min e `history()` (candles normalizados; cripto e câmbio recarimbados). Falha de fonte externa levanta `UpstreamError` (HTTP 502). |
+| Backend | `marketpressure/screener/screener.py` | `pressure`, `backtest`, `analyze_asset`, varredura em segundo plano (`ScanJob`, tabelas `scan*` no banco), ranking, visões prontas (base × candle), regime, estado da garrafa, justificativa e KPI do BOVA11. |
+| Backend | `marketpressure/carteira/portfolio.py` | Todos os cálculos da Carteira, só funções puras (sem rede nem disco): posições, proventos, câmbio, série TWR, alocação, metas por ativo, plano de aporte, lista de compras e validações. |
+| Backend | `marketpressure/carteira/portfolio_service.py` | Carrega cotações, CDI e proventos (`market_data`), chama `portfolio.py` e monta os payloads das rotas da Carteira. |
+| Backend | `marketpressure/comum/database.py` | Banco de dados: uma tabela Parquet por arquivo em `data/` (`SCHEMAS`, `read_table`, `write_tables`, backup em `data/backup/`). |
+| Backend | `marketpressure/carteira/portfolio_store.py` | Tabelas das carteiras no banco (documento ↔ tabelas, backup a cada gravação, migração na leitura) e todas as alterações como ações validadas (`ACTIONS`). |
 | Frontend | `web/analise_quantitativa_b3.html` | Marcação da aba Screener. |
 | Frontend | `web/carteira.html` | Marcação da aba Carteira. |
 | Frontend | `web/assets/css/` | Estilos: `app.css` (comum, cores em variáveis no `:root`), `responsivo.css` (media queries comuns), `animacao.css` (animações comuns), um arquivo por página (`screener.css`, `backtest.css`, `configuracoes.css`, `login.css`) e a Carteira em `carteira/` (`carteira.css` comum às sub-abas + um arquivo por sub-aba). |
-| Frontend | `web/assets/js/core.js` | Só o comum às duas páginas: `API`, `apiGet`, `apiPost`, `ApiError`, `MODE_KEY` e formatadores. Carregado antes do script da página. |
-| Frontend | `web/assets/js/app.js` | Tela do Screener: pede `/api/scan`, acompanha o progresso e exibe a visão escolhida. É um script clássico, não um módulo. |
-| Frontend | `web/assets/js/carteira.js` | Tela da Carteira: sub-abas, formulários, tabelas, gráfico (Chart.js) e a lista de compras. Cada alteração é uma ação enviada ao servidor (`act`). Nenhum cálculo. |
+| Frontend | `web/assets/js/core.js`, `animacao.js`, `graficos.js` | O comum às páginas: `API`, `apiGet`, `apiPost`, `ApiError`, `MODE_KEY` e formatadores (`core.js`); efeitos visuais (`animacao.js`); tema dos gráficos e gráfico de preço (`graficos.js`, só Backtest e Carteira). Carregados antes do script da página. |
+| Frontend | `web/assets/js/screener.js` | Tela do Screener: pede `/api/scan`, acompanha o progresso e exibe a visão escolhida. É um script clássico, não um módulo. |
+| Frontend | `web/assets/js/carteira/` | Tela da Carteira (`carteira.js` comum + um arquivo por sub-aba): sub-abas, formulários, tabelas, gráfico (Chart.js) e a lista de compras. Cada alteração é uma ação enviada ao servidor (`act`). Nenhum cálculo. |
 
 **Regra central:** cálculo, regra de negócio, validação e alteração de dados ficam no Python. O JavaScript só faz tela, animação e interação com o usuário (chamar a API, desenhar, tratar eventos, formatar). Não leve cálculo de volta para o JS.
 
@@ -190,7 +190,7 @@ Valide antes de entregar e informe o que foi verificado e como.
 * gerenciamento correto de estado
 * cache adequado: varredura no servidor (tabelas `scan*` em `data/`, 60 min) e o cache de 15 min das cotações; `localStorage` só para preferências
 
-Para validar a lógica sem navegador: rode os testes automatizados (`tests/`), ou importe os módulos do pacote (`from marketpressure import screener, portfolio, core`) e fixe o relógio e os dados (veja "Testing without a browser" no `CLAUDE.md`). Para testar rotas que gravam numa cópia do banco: `MARKETPRESSURE_PORT=8766 MARKETPRESSURE_DATA_DIR=tmp/data python server.py`.
+Para validar a lógica sem navegador: rode os testes automatizados (`tests/`), ou importe os módulos do pacote (`from marketpressure.screener import screener`, `from marketpressure.carteira import portfolio`, `from marketpressure.comum import core`) e fixe o relógio e os dados (veja "Testing without a browser" no `CLAUDE.md`). Para testar rotas que gravam numa cópia do banco: `MARKETPRESSURE_PORT=8766 MARKETPRESSURE_DATA_DIR=tmp/data python server.py`.
 
 Ao validar regras do setup, confira ativos concretos e mostre os números (fechamento, MM20, MM50, MM200 e a distância em %). O usuário compara os resultados com o TradingView.
 

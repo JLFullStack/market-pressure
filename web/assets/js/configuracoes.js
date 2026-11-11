@@ -2,6 +2,7 @@
 // A validação e os textos vêm do Python (strategy.py, rotas /api/configuracoes); aqui só se
 // preenche e envia o formulário.
 
+//#region Estratégia de venda
 const form = document.getElementById('strategyForm');
 const msg = document.getElementById('strategyMsg');
 let defaults = null;
@@ -107,7 +108,9 @@ form.addEventListener('submit', async (event) => {
         button.disabled = false;
     }
 });
+//#endregion
 
+//#region Aviso de imposto
 // Aviso de imposto (tax_alert.py, rotas /api/configuracoes/avisos).
 const alertForm = document.getElementById('alertForm');
 const warnRange = document.getElementById('warnRange');
@@ -158,7 +161,9 @@ alertForm.addEventListener('submit', async (event) => {
         busy();
     }
 });
+//#endregion
 
+//#region Feriados
 // Feriados (holidays.py, rotas /api/configuracoes/feriados). As regras ficam no Python; aqui só a lista e o formulário.
 const holidayForm = document.getElementById('holidayForm');
 const holidayOut = document.getElementById('holidayMsg');
@@ -235,7 +240,9 @@ document.getElementById('feriados').addEventListener('click', (ev) => {
         holidayForm.elements.name.focus();
     }
 });
+//#endregion
 
+//#region Início
 observeReveal();
 apiGet('/configuracoes/feriados').then(showHolidays, (e) => {
     holidayOut.className = 'form-msg error';
@@ -255,3 +262,4 @@ apiGet('/configuracoes/avisos').then(showAlert, (e) => {
         busy();
     }
 })();
+//#endregion
