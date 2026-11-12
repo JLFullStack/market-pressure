@@ -336,6 +336,14 @@ def history_url(ticker: str, market: str = "b3", range_: str = "10y") -> str:
             f"?range={range_}&interval=1d&events=div")
 
 
+def complete_prices(*prices) -> bool:
+    """Candle com abertura, máxima, mínima e fechamento de verdade. Logo depois do fechamento o
+    Yahoo às vezes manda o candle do dia só com o fechamento provisório e o resto zerado (11/11/2026:
+    abertura, máxima, mínima e volume 0); salvo, ele contaria como pregão fechado e o candle certo
+    nunca seria buscado."""
+    return all(p is not None and p > 0 for p in prices)
+
+
 def parse_chart(data: dict, ticker: str) -> dict:
     """Resposta do Yahoo (v8/chart) → {"candles": [...], "dividends": [...]} no formato bruto."""
     result = (data.get("chart") or {}).get("result") or []
@@ -347,7 +355,7 @@ def parse_chart(data: dict, ticker: str) -> dict:
     candles = []
     for i, ts in enumerate(r.get("timestamp") or []):
         o, h, l, c, v = (quote[k][i] for k in ("open", "high", "low", "close", "volume"))
-        if None in (o, h, l, c):
+        if not complete_prices(o, h, l, c):
             continue
         candles.append({"date": ts, "open": o, "high": h, "low": l, "close": c,
                         "volume": v or 0, "adjustedClose": adj[i] if adj[i] is not None else c})
@@ -431,8 +439,11 @@ def live_session(market: str, now: float) -> bool:
 
 
 def _rows_to_history(rows: list) -> dict:
+    # Um candle incompleto salvo antes de complete_prices existir fica de fora: o histórico parece
+    # atrasado e o candle certo é buscado de novo.
     candles = [{"date": r["date"], "open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"],
-                "volume": r["volume"] or 0, "adjustedClose": r["adj"]} for r in rows if r.get("dividend") is None]
+                "volume": r["volume"] or 0, "adjustedClose": r["adj"]} for r in rows
+               if r.get("dividend") is None and complete_prices(r["open"], r["high"], r["low"], r["close"])]
     dividends = [{"date": r["date"], "amount": r["dividend"]} for r in rows if r.get("dividend") is not None]
     return {"candles": candles, "dividends": dividends}
 

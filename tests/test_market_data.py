@@ -90,6 +90,29 @@ class StoredHistoryTest(DatabaseTestCase):
         self.assertEqual(hist["candles"], data)
         write.assert_not_called()
 
+    def test_incomplete_candle_after_the_close_is_not_saved(self):
+        # Logo depois do fechamento o Yahoo manda o candle do dia só com o fechamento provisório
+        # (abertura, máxima, mínima e volume 0): ele fica de fora e é buscado de novo depois.
+        data = series(1001)
+        self.load(data, at(data[-1], 12))
+        partial = data[:-1] + [{**data[-1], "open": 0.0, "high": 0.0, "low": 0.0, "volume": 0}]
+        hist, ranges = self.load(partial, at(data[-1], 19))
+        self.assertEqual(hist["candles"], data[:-1])
+        self.assertEqual(self.saved(), 1000)
+        hist, ranges = self.load(data, at(data[-1], 23))
+        self.assertEqual(ranges, ["1mo"])
+        self.assertEqual(hist["candles"], data)
+        self.assertEqual(self.saved(), 1001)
+
+    def test_incomplete_candle_saved_before_is_fetched_again(self):
+        data = series(1001)
+        bad = data[:-1] + [{**data[-1], "open": 0.0, "high": 0.0, "low": 0.0, "volume": 0}]
+        database.write_tables({"history_b3_petr4": market_data._history_to_rows({"candles": bad, "dividends": []})})
+        hist, ranges = self.load(data, at(data[-1], 23))
+        self.assertEqual(ranges, ["1mo"])
+        self.assertEqual(hist["candles"], data)
+        self.assertEqual(database.read_table("history_b3_petr4")[-1]["open"], data[-1]["open"])
+
     def test_gap_picks_a_larger_range(self):
         data = series(1100)
         self.load(data[:1001], at(data[1000], 12))
