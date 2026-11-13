@@ -839,13 +839,24 @@ class ScanJob:
 
     def _fresh(self, now=None):
         """Válida por cacheTtlMinutes; a feita depois do último fechamento (a da atualização
-        diária, update.py) vale até a abertura do próximo pregão, pois nada muda até lá."""
+        diária, update.py) vale até a abertura do próximo pregão, pois nada muda até lá — desde
+        que já tenha o candle desse fechamento: logo depois dele o Yahoo às vezes ainda não manda
+        o candle do dia completo (market_data.complete_prices), e a varredura sai com o pregão
+        anterior; essa vale só o TTL, até a próxima atualização trazer o candle."""
         if not self.scan:
             return False
         now = time.time() if now is None else now
         made = self.scan["timestamp"] / 1000
         ttl = CONFIG["browserCacheTtlMinutes"] if runtime.BROWSER else CONFIG["cacheTtlMinutes"]
-        return now - made < ttl * 60 or (made >= last_close(now) and not in_session_hours(now))
+        if now - made < ttl * 60:
+            return True
+        closed = last_close(now)
+        return made >= closed and not in_session_hours(now) and self._has_day(day_of(closed))
+
+    def _has_day(self, day):
+        """A base "fechamento" da varredura chega até day? (sem análises: não há o que esperar)"""
+        dates = [a["fechamento"]["date"] for a in self.scan.get("analyses") or [] if a.get("fechamento")]
+        return not dates or day_of(max(dates)) >= day
 
     def _reload(self):
         """Lê de novo a varredura salva: a atualização (update.py) pode ter gravado uma mais nova

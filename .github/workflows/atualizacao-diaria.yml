@@ -10,6 +10,8 @@ on:
   schedule:
     - cron: "30 21 * * 1-5"      # 18:30 em Brasília (UTC−3), segunda a sexta
     - cron: "7,37 13-20 * * 1-5"  # pregão: 10:07 a 17:37 em Brasília, a cada 30 min
+    - cron: "7 11 * * 2-6"        # 08:07 em Brasília, terça a sábado: o Yahoo às vezes só completa o
+                                  # candle do dia horas depois do fechamento (11 e 12/11/2026)
     # O GitHub pode atrasar os agendamentos (minutos fora da hora cheia atrasam menos); no
     # navegador a varredura salva vale 2 h (screener.CONFIG["browserCacheTtlMinutes"]).
   workflow_dispatch:          # rodar à mão: aba Actions → Atualização diária → Run workflow

@@ -262,6 +262,18 @@ class ScanFreshnessTest(unittest.TestCase):
         self.assertTrue(self.fresh(sp("2023-09-29", 19), sp("2023-10-01", 15)))  # fim de semana
         self.assertFalse(self.fresh(sp("2023-09-28", 17), sp("2023-09-28", 19)))  # feita no pregão
 
+    def test_scan_after_the_close_without_the_days_candle_lasts_only_the_ttl(self):
+        # Atualização das 23h com o candle do dia ainda incompleto no Yahoo: a base é o pregão
+        # anterior, e a varredura não pode valer a noite toda.
+        job = screener.ScanJob.__new__(screener.ScanJob)
+        made = sp("2023-09-28", 23)
+        last = lambda day: {"fechamento": {"date": sp(day, 10)}}  # noqa: E731
+        job.scan = {"timestamp": made * 1000, "analyses": [last("2023-09-27"), last("2023-09-26")]}
+        self.assertTrue(job._fresh(made + 59 * 60))
+        self.assertFalse(job._fresh(sp("2023-09-29", 8)))
+        job.scan["analyses"].append(last("2023-09-28"))
+        self.assertTrue(job._fresh(sp("2023-09-29", 8)))
+
     def test_scan_during_the_session_lasts_the_ttl(self):
         made = sp("2023-09-28", 12)
         self.assertTrue(self.fresh(made, made + 59 * 60))
