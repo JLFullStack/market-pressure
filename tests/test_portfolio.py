@@ -392,6 +392,37 @@ class AssetTargetRowTest(unittest.TestCase):
 
 
 class PatrimonyBarsTest(unittest.TestCase):
+    def test_full_redemption_with_tax_zeroes_title(self):
+        # Resgate total que reteve IR/IOF: o "valor atual" 0 no mesmo dia zera valor e aplicado.
+        entries = [{"id": "a", "date": "2026-01-10", "type": "aporte", "amount": 100},
+                   {"id": "c", "date": "2026-11-13", "type": "valor_atual", "amount": 0},
+                   {"id": "b", "date": "2026-11-13", "type": "resgate", "amount": 99.73}]
+        self.assertEqual(pf.fixed_income_value_at(pf.by_date(entries), "2026-11-13"), 0)
+        self.assertEqual(pf.fixed_income_invested_at(entries, "2026-11-13"), 0)
+        self.assertEqual(pf.fixed_income_invested_at(entries, "2026-11-12"), 100)
+        s = pf.fixed_income_summary({"id": "f", "name": "CDB", "entries": entries}, "2026-11-18")
+        self.assertAlmostEqual(s["profit"], -0.27)
+        self.assertIsNone(pf.validate_fixed_income_entry({"date": "2026-11-13", "type": "valor_atual", "amount": 0},
+                                                         today="2026-11-18"))
+        self.assertIsNotNone(pf.validate_fixed_income_entry({"date": "2026-11-13", "type": "aporte", "amount": 0},
+                                                            today="2026-11-18"))
+
+    def test_closed_title_leaves_positions(self):
+        # Resgatado por inteiro com ganho: fora da tabela, lucro como realizado e no lucro total.
+        from tests.support import candles
+        hist = {"candles": candles(400), "dividends": []}
+        portfolio = {"classes": [{"name": "Renda fixa", "target": 100}], "assets": {}, "transactions": [],
+                     "fixedIncome": [{"id": "f", "name": "CDB", "class": "Renda fixa", "entries": [
+                         {"id": "a", "date": "2021-02-01", "type": "aporte", "amount": 250},
+                         {"id": "b", "date": "2021-06-01", "type": "resgate", "amount": 250.45},
+                         {"id": "c", "date": "2021-06-01", "type": "valor_atual", "amount": 0}]}]}
+        a = pf.analyze_portfolio(portfolio, {"BOVA11": hist}, [], as_of="2022-02-04",
+                                 now=datetime(2022, 2, 4, 22, tzinfo=timezone.utc).timestamp())
+        self.assertEqual(a["fixed"], [])
+        self.assertAlmostEqual(a["kpis"]["profit"], 0.45)
+        self.assertAlmostEqual(a["kpis"]["realized"], 0.45)
+        self.assertAlmostEqual(a["kpis"]["unrealized"], 0)
+
     def test_monthly_bars_by_class(self):
         from tests.support import candles
         hist = {"candles": candles(400), "dividends": []}

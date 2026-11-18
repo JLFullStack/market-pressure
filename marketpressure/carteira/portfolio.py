@@ -926,9 +926,17 @@ def fixed_income_value_at(entries, iso):
 
 
 def fixed_income_invested_at(entries, iso):
-    """Líquido aplicado num título até o dia iso (aportes − resgates, nunca negativo)."""
-    net = add_up(e["amount"] if e["type"] == "aporte" else -e["amount"]
-                 for e in entries if e["date"] <= iso and e["type"] != "valor_atual")
+    """Líquido aplicado num título até o dia iso (aportes − resgates, nunca negativo). Um "valor
+    atual" de zero encerra o título (resgate total com IR/IOF retido): o aplicado volta a zero."""
+    net = 0
+    for e in by_date(entries):
+        if e["date"] > iso:
+            break
+        if e["type"] == "valor_atual":
+            if e["amount"] == 0:
+                net = 0
+            continue
+        net += e["amount"] if e["type"] == "aporte" else -e["amount"]
     return max(0, net)
 
 
@@ -1682,12 +1690,16 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, str
             "partial": partial,
         })
     open_ = sorted((p for p in positions if p["quantity"] > 0), key=lambda p: -p["value"])
-    fixed = [s for s in (fixed_income_summary(f, as_of) for f in portfolio.get("fixedIncome") or []) if s["entries"]]
+    titles = [s for s in (fixed_income_summary(f, as_of) for f in portfolio.get("fixedIncome") or []) if s["entries"]]
+    # Título resgatado por inteiro (valor 0): sai da carteira como uma ação vendida, e o lucro dele
+    # passa a ser realizado; o aplicado líquido (negativo quando houve ganho) ainda entra no investido.
+    fixed = [f for f in titles if f["value"] > 0]
+    closed = [f for f in titles if f["value"] <= 0]
 
     total = add_up(p["value"] for p in open_) + add_up(f["value"] for f in fixed)
-    invested = add_up(p["bought"] - p["soldProceeds"] for p in positions) + add_up(f["invested"] for f in fixed)
+    invested = add_up(p["bought"] - p["soldProceeds"] for p in positions) + add_up(f["invested"] for f in titles)
     dividends_sum = add_up(d["total"] for d in dividends)
-    realized = add_up(p["realized"] for p in positions)
+    realized = add_up(p["realized"] for p in positions) + add_up(f["profit"] for f in closed)
     unrealized = add_up(p["value"] - p["cost"] for p in open_) + add_up(f["value"] - f["invested"] for f in fixed)
     profit = total - invested + dividends_sum  # = valorização + proventos + lucro realizado
     for h in open_ + fixed:
@@ -1745,7 +1757,12 @@ def validate_fixed_income_entry(entry, today=None):
         return "Informe uma data válida."
     if entry["date"] > today:
         return "A data não pode ser futura."
-    if not (entry.get("amount") is not None and entry["amount"] > 0):
+    amount = entry.get("amount")
+    if entry.get("type") == "valor_atual":
+        # Zero é válido: zera o título depois de um resgate total que reteve IR/IOF.
+        if not (amount is not None and amount >= 0):
+            return "O valor atual não pode ser negativo."
+    elif not (amount is not None and amount > 0):
         return "O valor deve ser maior que zero."
     return None
 
