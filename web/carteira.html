@@ -235,27 +235,10 @@
 
             <div class="panel" data-reveal>
                 <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></span><h2>Posições</h2></div>
-                <div class="table-container">
-                    <table class="sticky-first">
-                        <thead>
-                            <tr>
-                                <th>Ativo</th>
-                                <th class="r">Quantidade</th>
-                                <th class="r">Preço médio</th>
-                                <th class="r">Preço atual</th>
-                                <th class="r">Var. dia</th>
-                                <th class="r">Valor</th>
-                                <th class="r">Lucro</th>
-                                <th class="r">Rentab.</th>
-                                <th class="r">Proventos</th>
-                                <th class="r">% carteira</th>
-                                <th class="c">Situação</th>
-                            </tr>
-                        </thead>
-                        <tbody id="positionsBody"></tbody>
-                    </table>
-                </div>
+                <!-- Uma tabela por classe com posição (renderPositions), cada uma com a sua paginação. -->
+                <div id="positionsTables" class="position-groups"></div>
                 <ul class="notes">
+                    <li>Uma tabela por classe, só das classes com posição aberta. Com mais de 10 ativos numa classe, a tabela é paginada; a quantidade por página vale para todas as tabelas da Carteira.</li>
                     <li><strong>Lucro e rentabilidade</strong> incluem valorização, vendas e proventos (desde a data-ex, mesmo antes do pagamento), sobre o total comprado do ativo.</li>
                     <li><strong>Situação</strong> segue a estratégia de venda escolhida em <a href="configuracoes.html" class="inline-link">Configurações</a>; toque no selo para ver o motivo.
                         <strong>VENDER</strong> na reversão de tendência (vende tudo) ou <strong>VENDER X%</strong> quando uma compra atingiu o alvo (na regra "quando a alta perder força", só depois de um fechamento sem força ainda no alvo ou acima, para vender na abertura);
@@ -611,7 +594,7 @@
                     <tbody id="historyBody"></tbody>
                 </table>
             </div>
-            <button type="button" class="btn-secondary history-toggle" id="historyToggle" aria-expanded="false" aria-controls="historyBody" hidden>Ver todos</button>
+            <nav class="pager" data-pager="history" aria-label="Páginas do histórico de lançamentos" hidden></nav>
         </div>
         <!-- #endregion -->
     </section>
@@ -667,6 +650,7 @@
                     <tbody id="receivablesBody"></tbody>
                 </table>
             </div>
+            <nav class="pager" data-pager="receivables" aria-label="Páginas dos proventos a receber" hidden></nav>
             <ul class="notes">
                 <li>Proventos anunciados por empresas e FIIs na B3 e ainda não pagos. Cobre ações, units e FIIs; ETFs, BDRs, ativos dos EUA e cripto ficam de fora.</li>
                 <li><strong>Confirmado:</strong> a data-com já passou e a quantidade é a que você tinha nela. Só passa para Proventos recebidos depois do pagamento, mas já conta no lucro e na rentabilidade, porque o preço cai na data-ex.</li>
@@ -690,6 +674,7 @@
                     <tbody id="dividendsBody"></tbody>
                 </table>
             </div>
+            <nav class="pager" data-pager="dividends" aria-label="Páginas dos proventos recebidos" hidden></nav>
             <ul class="notes">
                 <li>Valores brutos estimados pela data-com e pelos proventos informados pelo Yahoo Finance (data-ex); podem diferir do extrato da corretora.</li>
                 <li><strong>ETFs, BDRs, ativos dos EUA e cripto</strong> não têm data de pagamento disponível: contam como recebidos a partir da data-ex.</li>

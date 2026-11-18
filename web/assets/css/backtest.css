@@ -55,16 +55,10 @@
 .in .robust-bar i { animation: grow-x 1s var(--ease-out) 0.4s backwards; }
 /* #endregion */
 
-/* #region Tabelas: lote selecionado e paginação */
+/* #region Tabelas: lote selecionado */
 .lot-row { cursor: pointer; }
 .lot-row.selected td { background-color: rgba(56, 139, 253, 0.1); }
 .lot-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.pager { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-.pager[hidden] { display: none; }
-.pager .btn-secondary { padding: 6px 10px; }
-.pager .btn-secondary:disabled { opacity: 0.4; cursor: default; border-color: var(--border-color); color: var(--text-color); }
-.pager-info { font-size: 13px; color: var(--text-muted); padding: 0 4px; }
-.pager-size { margin-left: auto; font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
 /* #endregion */
 
 /* #region Responsivo */
@@ -77,12 +71,6 @@
     .bt-result-head > div:first-child, #btResult .panel-head > div:first-child { flex: 1 1 100%; }
     .bt-head-actions { justify-content: flex-start; }
     .bt-result-head .bt-analyze, .bt-head-actions { width: 100%; }
-    /* Paginação: a página atual numa linha, os quatro botões lado a lado (« e » estreitos,
-       Anterior e Próxima dividindo o resto) e "Por página" embaixo. */
-    .pager { display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 8px; }
-    .pager .btn-secondary { min-height: 40px; padding: 6px 12px; }
-    .pager-info { grid-column: 1 / -1; order: -1; text-align: center; padding: 0; }
-    .pager-size { grid-column: 1 / -1; margin-left: 0; justify-content: center; }
     :is(.sticky-first, .sticky-two) .lot-row.selected td { --tint: rgba(56, 139, 253, 0.1); }
 }
 /* #endregion */

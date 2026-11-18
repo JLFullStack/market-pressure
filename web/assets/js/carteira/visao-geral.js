@@ -343,11 +343,28 @@ const weightCell = (w, max) => `<div class="weight"><span class="num">${fmtNum(w
 
 const deltaPill = (v) => v === null || v === undefined ? '—' : `<span class="delta-pill ${signClass(v)}">${fmtPct(v, 2)}</span>`;
 
+// Uma tabela por classe (na ordem das classes da carteira), só das classes com posição aberta ou
+// título de renda fixa; cada uma paginada (paginate, chave "pos:{classe}").
+const POSITION_COLUMNS = `
+    <tr>
+        <th>Ativo</th>
+        <th class="r">Quantidade</th>
+        <th class="r">Preço médio</th>
+        <th class="r">Preço atual</th>
+        <th class="r">Var. dia</th>
+        <th class="r">Valor</th>
+        <th class="r">Lucro</th>
+        <th class="r">Rentab.</th>
+        <th class="r">Proventos</th>
+        <th class="r">% carteira</th>
+        <th class="c">Situação</th>
+    </tr>`;
+
 function renderPositions(a) {
     const maxWeight = Math.max(0, ...a.open.map(p => p.weight), ...a.fixed.map(f => f.weight));
     const classIndex = (cls) => Math.max(0, a.allocation.findIndex(r => r.cls === cls));
     const avatar = (label, cls) => `<span class="avatar solo" style="--a1:${classColor(cls, classIndex(cls))}" aria-hidden="true">${escapeHTML(label.slice(0, 2).toUpperCase())}</span>`;
-    const rows = a.open.map(p => `
+    const openRow = (p) => `
         <tr data-reveal class="position-row" tabindex="0" data-ticker="${escapeHTML(p.ticker)}" aria-label="Abrir o gráfico de ${escapeHTML(p.ticker)} com as operações e os alvos">
             <td><div class="asset">${avatar(p.ticker, p.cls)}<div class="asset-text"><a href="https://br.tradingview.com/chart/?symbol=${encodeURIComponent(tradingViewSymbol(p.ticker, p.market))}" target="_blank" rel="noopener" class="ticker-link">${p.ticker}</a>
                 ${p.market === 'crypto' ? '' : `<a href="backtest.html?ticker=${encodeURIComponent(p.ticker)}&market=${p.market}" class="inline-link small" aria-label="Backtest de ${p.ticker}">backtest</a>`}
@@ -363,8 +380,8 @@ function renderPositions(a) {
             <td class="r nowrap">${weightCell(p.weight, maxWeight)}</td>
             <td class="c">${p.status ? signalBadge(p.status, p.statusReason, STATUS_BADGE[p.statusKey] || 'badge-low') : '<span class="small muted">—</span>'}
                 ${p.partial ? `<div class="small muted nowrap">${fmtQty(p.partial.quantity)} ${p.partial.quantity === 1 ? 'cota' : 'cotas'} de ${p.partial.lots} compra(s)</div>` : ''}</td>
-        </tr>`);
-    const fixedRows = a.fixed.map(f => `
+        </tr>`;
+    const fixedRow = (f) => `
         <tr class="fi-section" data-reveal>
             <td><div class="asset">${avatar(f.name, f.cls)}<div class="asset-text"><strong>${escapeHTML(f.name)}</strong><div class="small muted">${escapeHTML(f.cls)}</div></div></div></td>
             <td colspan="4" class="small muted">Investido líquido ${fmtBRL(f.invested)} · valor atualizado em ${fmtDate(f.lastUpdate)}</td>
@@ -374,10 +391,33 @@ function renderPositions(a) {
             <td class="r muted">—</td>
             <td class="r nowrap">${weightCell(f.weight, maxWeight)}</td>
             <td class="c"><span class="small muted">—</span></td>
-        </tr>`);
-    $('positionsBody').innerHTML = rows.length || fixedRows.length ? [...rows, ...fixedRows].join('')
-        : `<tr><td colspan="11" class="empty-row">Nenhuma posição aberta.</td></tr>`;
-    revealItems($('positionsBody'));
+        </tr>`;
+    // Classes na ordem da alocação (a das classes da carteira); uma classe sem posição não aparece.
+    const order = [...a.allocation.map(r => r.cls), ...a.open.map(p => p.cls), ...a.fixed.map(f => f.cls)];
+    const groups = [...new Set(order)].map(cls => {
+        const open = a.open.filter(p => p.cls === cls);
+        const fixed = a.fixed.filter(f => f.cls === cls);
+        const alloc = a.allocation.find(r => r.cls === cls);
+        const value = alloc ? alloc.value : [...open, ...fixed].reduce((s, x) => s + x.value, 0);
+        return { cls, count: open.length + fixed.length, value, pct: alloc?.pct, rows: [...open.map(openRow), ...fixed.map(fixedRow)] };
+    }).filter(g => g.rows.length);
+    $('positionsTables').innerHTML = groups.length ? groups.map((g, k) => `
+        <section class="position-group" style="--g:${classColor(g.cls, classIndex(g.cls))}" aria-label="Posições em ${escapeHTML(g.cls)}">
+            <div class="position-group-head">
+                <span class="swatch-box" aria-hidden="true"></span><h3>${escapeHTML(g.cls)}</h3>
+                <span class="small muted">${g.count} ${g.count === 1 ? 'ativo' : 'ativos'} · ${fmtBRL(g.value)}${g.pct === undefined ? '' : ` · ${fmtNum(g.pct)}% da carteira`}</span>
+            </div>
+            <div class="table-container">
+                <table class="sticky-first">
+                    <thead>${POSITION_COLUMNS}</thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <nav class="pager" data-pager="pos:${escapeHTML(g.cls)}" aria-label="Páginas da tabela de ${escapeHTML(g.cls)}" hidden></nav>
+        </section>`).join('')
+        : `<p class="empty-row muted">Nenhuma posição aberta.</p>`;
+    const bodies = $('positionsTables').querySelectorAll('tbody');
+    groups.forEach((g, k) => paginate(`pos:${g.cls}`, bodies[k], g.rows, ''));
 }
 
 // ---------------------------------------------------------------- Operações no gráfico (card flutuante)
@@ -395,8 +435,8 @@ function setupAssetChart() {
         const row = ev.target.closest?.('tr[data-ticker]');
         if (row) openAssetChart(row.dataset.ticker);
     };
-    $('positionsBody').addEventListener('click', open);
-    $('positionsBody').addEventListener('keydown', (ev) => {
+    $('positionsTables').addEventListener('click', open);
+    $('positionsTables').addEventListener('keydown', (ev) => {
         if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches?.('tr[data-ticker]')) { ev.preventDefault(); open(ev); }
     });
     const dlg = $('assetChartDialog');
@@ -447,7 +487,7 @@ function setTypeButtons() {
 async function openAssetChart(ticker) {
     const dlg = $('assetChartDialog');
     const seq = ++state.assetSeq;
-    state.assetRow = document.activeElement?.closest?.('tr[data-ticker]') || $('positionsBody').querySelector(`tr[data-ticker="${CSS.escape(ticker)}"]`);
+    state.assetRow = document.activeElement?.closest?.('tr[data-ticker]') || $('positionsTables').querySelector(`tr[data-ticker="${CSS.escape(ticker)}"]`);
     state.assetPrice?.chart.remove();
     state.assetPrice = null;
     state.asset = null;

@@ -69,6 +69,13 @@
     .ring { width: 44px; height: 44px; }
     .result-head .icon-chip { display: none; }
     .result-head h2 { font-size: 15px; }
+    /* Paginação: a página atual numa linha, os quatro botões lado a lado (« e » estreitos,
+       Anterior e Próxima dividindo o resto) e "Por página" embaixo. */
+    .pager { display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 8px; }
+    .pager .btn-secondary { min-height: 40px; padding: 6px 12px; }
+    .pager-info { grid-column: 1 / -1; order: -1; text-align: center; padding: 0; }
+    .pager-size { grid-column: 1 / -1; margin-left: 0; justify-content: center; }
+    .pager-size select { height: 40px; }
 }
 /* #endregion */
 

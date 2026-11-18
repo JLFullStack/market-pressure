@@ -86,17 +86,14 @@ function renderDividends(received, note) {
     if (received?.warning) parts.push(`<span class="neg">${escapeHTML(received.warning)}</span>`);
     $('dividendTotals').innerHTML = parts.join(' · ');
     const rows = received?.dividends || [];
-    $('dividendsBody').innerHTML = !received ? `<tr><td colspan="5" class="empty-row">${escapeHTML(note)}</td></tr>`
-        : rows.length ? rows.map(d => `
+    paginate('dividends', $('dividendsBody'), rows.map(d => `
         <tr>
             <td class="nowrap">${fmtDate(d.comDate)}</td>
             <td><strong>${d.ticker}</strong></td>
             <td class="r nowrap">R$ ${d.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</td>
             <td class="r nowrap">${fmtQty(d.quantity)}</td>
             <td class="r nowrap">${fmtBRL(d.total)}</td>
-        </tr>`).join('')
-        : `<tr><td colspan="5" class="empty-row">Nenhum provento no período das posições.</td></tr>`;
-    revealItems($('dividendsBody'));
+        </tr>`), `<tr><td colspan="5" class="empty-row">${escapeHTML(received ? 'Nenhum provento no período das posições.' : note)}</td></tr>`);
 }
 //#endregion
 
@@ -110,8 +107,7 @@ function renderReceivables(result) {
     renderDividends(result.ok ? result.r.received : null, 'Proventos indisponíveis agora');
     if (!result.ok) {
         $('receivableTotals').innerHTML = `<span class="neg">Proventos anunciados indisponíveis (${escapeHTML(result.e.message)}).</span>`;
-        $('receivablesBody').innerHTML = `<tr><td colspan="8" class="empty-row">Nenhum provento anunciado a receber.</td></tr>`;
-        revealItems($('receivablesBody'));
+        paginate('receivables', $('receivablesBody'), [], `<tr><td colspan="8" class="empty-row">Nenhum provento anunciado a receber.</td></tr>`);
         return;
     }
     const r = result.r, rows = r.rows;
@@ -122,7 +118,7 @@ function renderReceivables(result) {
     }
     if (r.failed.length) parts.push(`<span class="neg">Proventos anunciados indisponíveis: ${r.failed.map(escapeHTML).join('; ')}.</span>`);
     $('receivableTotals').innerHTML = parts.join(' · ');
-    $('receivablesBody').innerHTML = rows.length ? rows.map(d => `
+    paginate('receivables', $('receivablesBody'), rows.map(d => `
         <tr>
             <td class="nowrap">${d.paymentDate ? fmtDate(d.paymentDate) : 'A definir'}</td>
             <td class="nowrap">${fmtDate(d.comDate)}</td>
@@ -132,9 +128,7 @@ function renderReceivables(result) {
             <td class="r nowrap">${fmtQty(d.quantity)}</td>
             <td class="r nowrap">${fmtBRL(d.total)}</td>
             <td>${d.confirmed ? '<span class="badge badge-ok">Confirmado</span>' : '<span class="badge badge-fill">Previsto</span>'}</td>
-        </tr>`).join('')
-        : `<tr><td colspan="8" class="empty-row">Nenhum provento anunciado a receber.</td></tr>`;
-    revealItems($('receivablesBody'));
+        </tr>`), `<tr><td colspan="8" class="empty-row">Nenhum provento anunciado a receber.</td></tr>`);
 }
 
 // ---------------------------------------------------------------- Formulários

@@ -55,7 +55,6 @@
 /* #endregion */
 
 /* #region Histórico de lançamentos */
-.history-toggle { margin-top: 12px; }
 /* Linha do tempo: ponto colorido pelo sentido do dinheiro */
 .history-table td { padding-top: 12px; padding-bottom: 12px; }
 .tl-in { --tl: var(--success); }

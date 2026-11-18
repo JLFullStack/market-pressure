@@ -5,7 +5,6 @@
 //#region Constantes, preferências e eventos
 const APORTE_KEY = 'marketpressure_aporte_'; // + id da carteira: { amount, mode, selected }
 const COLLAPSE_KEY = 'marketpressure_aporte_recolhido'; // "1" = calculadora de aporte recolhida
-const HISTORY_LIMIT = 10; // lançamentos mostrados no histórico antes de "Ver todos"
 const APORTE_MODES = { todos: 'Todos os ativos da carteira', escolher: 'Escolher ativos', pullback: 'Pelas regras do pullback' };
 const PLAN_BADGE = { sell: 'badge-hot', fixed: 'badge-low', setup: 'badge-ok', wait: 'badge-fill', candidate: 'badge-info' };
 const AMOUNT_DELAY_MS = 250; // espera após a digitação do valor do aporte antes de recalcular
@@ -80,7 +79,6 @@ function setupAportes() {
     $('aporteCandidates').addEventListener('change', onCandidateChange);
     $('aporteAssetsBody').addEventListener('change', onAporteTableChange);
     $('aporteToggle').addEventListener('click', () => setAporteCollapsed($('aporteToggle').getAttribute('aria-expanded') === 'true'));
-    $('historyToggle').addEventListener('click', () => { state.historyAll = !state.historyAll; renderHistory(state.structure); });
     $('aporteRegisterBtn').addEventListener('click', openBatch);
     $('batchDate').addEventListener('change', onBatchDateChange);
     $('batchBody').addEventListener('input', onBatchInput);
@@ -641,22 +639,17 @@ async function confirmBatch() {
 //#endregion
 
 //#region Histórico de lançamentos
-// Histórico de lançamentos (já em ordem do mais recente, vindo da estrutura da carteira).
+// Histórico de lançamentos (já em ordem do mais recente, vindo da estrutura da carteira), paginado.
 function renderHistory(st) {
     const rows = (st?.history || []).map(r => r.kind === 'tx' ? {
         ...r, qty: fmtQty(r.quantity), price: fmtMoney(r.price, r.currency),
         total: fmtMoney(r.gross, r.currency) + (r.fees ? `<div class="small muted">taxas ${fmtMoney(r.fees, r.currency)}</div>` : '')
             + (r.fx !== 1 ? `<div class="small muted">câmbio ${fmtNum(r.fx, 4)} · ${fmtBRL(r.flowBRL)}</div>` : '')
     } : { ...r, qty: '—', price: '—', total: fmtBRL(r.amount) });
-    const toggle = $('historyToggle');
-    toggle.hidden = rows.length <= HISTORY_LIMIT;
-    toggle.setAttribute('aria-expanded', String(state.historyAll));
-    toggle.innerText = state.historyAll ? 'Ver menos' : `Ver todos (${rows.length})`;
-    const shown = state.historyAll ? rows : rows.slice(0, HISTORY_LIMIT);
     // Classe de cada ativo/título (para a cor do avatar), pela estrutura da carteira.
     const classOf = new Map();
     (st?.classes || []).forEach((c, k) => c.members.forEach(m => classOf.set(m, [c.name, k])));
-    $('historyBody').innerHTML = shown.length ? shown.map(r => {
+    paginate('history', $('historyBody'), rows.map(r => {
         const kind = r.type.toLowerCase().split(' ')[0];
         const [cls, k] = classOf.get(r.asset) || ['', 0];
         return `
@@ -672,9 +665,7 @@ function renderHistory(st) {
             <td class="c"><button type="button" class="icon-btn icon-danger" data-kind="${r.kind}" data-id="${escapeHTML(r.id)}" ${r.item ? `data-item="${escapeHTML(r.item)}"` : ''}
                 title="Excluir" aria-label="Excluir ${r.type.toLowerCase()} de ${escapeHTML(r.asset)} em ${fmtDate(r.date)}"><svg viewBox="0 0 24 24" aria-hidden="true"><g class="lid"><path d="M4 7h16M9 7V4h6v3"/></g><path d="M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button></td>
         </tr>`;
-    }).join('')
-        : `<tr><td colspan="7" class="empty-row">Nenhum lançamento.</td></tr>`;
-    revealItems($('historyBody'));
+    }), `<tr><td colspan="7" class="empty-row">Nenhum lançamento.</td></tr>`);
 }
 
 async function onHistoryClick(ev) {

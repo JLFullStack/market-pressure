@@ -66,7 +66,10 @@ const state = {
     classTouched: false, // a classe sugerida só substitui a escolha enquanto o usuário não mexe no seletor
     aporteFor: null,     // id da carteira cujas preferências de aporte estão nos campos
     tab: 'visao',        // sub-aba ativa
-    historyAll: false,   // histórico completo (true) ou só os HISTORY_LIMIT mais recentes
+    pages: {},           // página atual de cada tabela paginada (chave do paginador), mantida ao redesenhar
+    pageRows: {},        // linhas (HTML) de cada tabela paginada, para trocar de página sem refazer a tabela
+    pageEmpty: {},       // linha mostrada por tabela paginada quando não há linhas
+    pageSize: 0,         // linhas por página, a mesma em todas as tabelas (PAGE_SIZES; salva em PAGE_SIZE_KEY)
     batch: null,         // lista de compras sugeridas em conferência: { date, amount, rows }
     chart: null,
     goals: null,         // resposta de /metas (null = ainda não carregada para a carteira atual)
@@ -108,6 +111,7 @@ async function init() {
     setupMetas();
     setupImpostos();
     setupConfiguracoes();
+    setupPagers();
     state.tab = tabFromHash() || savedTab() || 'visao';
 
     const busy = busyStart('Carregando carteiras...');
@@ -131,7 +135,7 @@ function selectPortfolio(id) {
     state.currentId = id;
     state.batch = null;
     resetGoalForm();
-    state.historyAll = false;
+    state.pages = {};
     try { if (id) localStorage.setItem(SELECTED_KEY, id); } catch (e) { /* preferência não salva */ }
     return refresh();
 }
@@ -470,4 +474,82 @@ function renderTaxAlert(el, alert) {
 
 function showError(text) { $('errorBanner').innerText = text; $('errorBanner').style.display = 'block'; }
 function hideError() { $('errorBanner').style.display = 'none'; }
+//#endregion
+
+//#region Paginação
+// Tabelas paginadas da Carteira: posições de cada classe (Visão geral), histórico de lançamentos
+// e proventos a receber e recebidos. A quantidade por página é a mesma em todas e fica salva; a
+// página de cada tabela fica em state.pages (por chave), mantida ao atualizar e zerada ao trocar
+// de carteira. O paginador (<nav class="pager" data-pager="chave">) fica escondido até a menor
+// quantidade por página.
+const PAGE_SIZES = [10, 25, 50];
+const PAGE_SIZE_KEY = 'marketpressure_carteira_por_pagina';
+
+function pageSize() {
+    if (!state.pageSize) {
+        try { state.pageSize = Number(localStorage.getItem(PAGE_SIZE_KEY)); } catch (e) { /* sem preferência salva */ }
+        if (!PAGE_SIZES.includes(state.pageSize)) state.pageSize = PAGE_SIZES[0];
+    }
+    return state.pageSize;
+}
+
+// Botões e "Por página" de todos os paginadores, delegados no documento (as tabelas são redesenhadas).
+function setupPagers() {
+    document.addEventListener('click', (ev) => {
+        const btn = ev.target.closest?.('.pager[data-pager] button[data-page]');
+        if (!btn) return;
+        const key = btn.closest('.pager').dataset.pager;
+        const rows = state.pageRows[key];
+        if (!rows) return;
+        const page = state.pages[key] || 0;
+        const last = Math.max(0, Math.ceil(rows.length / pageSize()) - 1);
+        state.pages[key] = { first: 0, prev: page - 1, next: page + 1, last }[btn.dataset.page];
+        fillPage(key);
+    });
+    document.addEventListener('change', (ev) => {
+        if (!ev.target.matches?.('.pager[data-pager] .pager-size select')) return;
+        state.pageSize = Number(ev.target.value);
+        try { localStorage.setItem(PAGE_SIZE_KEY, String(state.pageSize)); } catch (e) { /* preferência não salva */ }
+        state.pages = {};
+        for (const key of Object.keys(state.pageRows)) fillPage(key);
+    });
+}
+
+// Mostra as linhas (HTML de cada <tr>) da tabela `key` em `body`, paginadas; sem linhas, `empty`.
+function paginate(key, body, rows, empty) {
+    body.dataset.pagerBody = key;
+    state.pageRows[key] = rows;
+    state.pageEmpty[key] = empty;
+    fillPage(key);
+}
+
+function fillPage(key) {
+    const rows = state.pageRows[key];
+    const body = document.querySelector(`tbody[data-pager-body="${CSS.escape(key)}"]`);
+    if (!rows || !body) { delete state.pageRows[key]; return; } // tabela que já saiu da página
+    const nav = document.querySelector(`.pager[data-pager="${CSS.escape(key)}"]`);
+    const size = pageSize();
+    const pages = Math.max(1, Math.ceil(rows.length / size));
+    const page = state.pages[key] = Math.min(Math.max(0, state.pages[key] || 0), pages - 1);
+    const start = page * size;
+    const shown = rows.slice(start, start + size);
+    body.innerHTML = shown.length ? shown.join('') : state.pageEmpty[key] || '';
+    revealItems(body);
+    if (!nav) return;
+    if (!nav.firstElementChild) nav.innerHTML = `
+        <button type="button" class="btn-secondary" data-page="first" aria-label="Primeira página">«</button>
+        <button type="button" class="btn-secondary" data-page="prev" aria-label="Página anterior">‹ Anterior</button>
+        <span class="pager-info" aria-live="polite"></span>
+        <button type="button" class="btn-secondary" data-page="next" aria-label="Próxima página">Próxima ›</button>
+        <button type="button" class="btn-secondary" data-page="last" aria-label="Última página">»</button>
+        <label class="pager-size">Por página
+            <select>${PAGE_SIZES.map(n => `<option value="${n}">${n}</option>`).join('')}</select>
+        </label>`;
+    nav.hidden = rows.length <= PAGE_SIZES[0];
+    nav.querySelector('select').value = String(size);
+    nav.querySelector('.pager-info').innerText = `Página ${page + 1} de ${pages} · ${start + 1}–${start + shown.length} de ${rows.length}`;
+    for (const b of nav.querySelectorAll('button[data-page]')) {
+        b.disabled = b.dataset.page === 'first' || b.dataset.page === 'prev' ? page === 0 : page === pages - 1;
+    }
+}
 //#endregion
