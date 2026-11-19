@@ -670,10 +670,13 @@ function renderHistory(st) {
 
 async function onHistoryClick(ev) {
     const btn = ev.target.closest?.('button[data-id]');
-    if (!btn || !confirm('Excluir este lançamento?')) return;
+    if (!btn) return;
+    const ok = await confirmDialog('Excluir este lançamento?', btn.getAttribute('aria-label') + '.\nEsta ação não pode ser desfeita.',
+        { confirmText: 'Excluir', danger: true });
+    if (!ok) return;
     const { kind, id, item } = btn.dataset;
     const res = await act('excluir_lancamento', { kind, entryId: id, itemId: item });
-    if (res.error && !res.saveFailed) alert(res.error);
+    if (res.error && !res.saveFailed) alertDialog('Não foi possível excluir', res.error);
 }
 //#endregion
 

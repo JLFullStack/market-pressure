@@ -388,6 +388,97 @@ function showCopyDialog(title, text) {
 }
 //#endregion
 
+//#region Janelas de confirmação
+// Substituem confirm(), prompt() e alert() do navegador por uma janela no estilo do app (<dialog>
+// modal: Esc e clique fora cancelam, o foco volta ao elemento de origem). Devolvem promessas:
+// confirmDialog → true/false, promptDialog → o texto digitado (aparado) ou null, alertDialog → ao fechar.
+const DIALOG_ICON = {
+    danger: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>',
+    info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>',
+};
+const DIALOG_CLOSE_MS = 180;   // duração da saída (dialog-out em app.css)
+
+function openDialog({ title, text = '', tone = 'info', confirmText = 'OK', cancelText = 'Cancelar', input = null }) {
+    return new Promise((resolve) => {
+        const origin = document.activeElement;
+        const dialog = document.createElement('dialog');
+        dialog.className = `app-dialog app-dialog-${tone}`;
+        dialog.setAttribute('aria-labelledby', 'appDialogTitle');
+        const body = String(text).split('\n').filter(Boolean).map(p => `<p>${escapeHTML(p)}</p>`).join('');
+        dialog.innerHTML = `<form method="dialog" class="app-dialog-form">
+            <div class="app-dialog-head">
+                <span class="app-dialog-icon"><span class="app-dialog-ring"></span>${DIALOG_ICON[tone] || DIALOG_ICON.info}</span>
+                <h3 id="appDialogTitle">${escapeHTML(title)}</h3>
+            </div>
+            ${body ? `<div class="app-dialog-text">${body}</div>` : ''}
+            ${input ? `<input class="app-dialog-input" type="text" maxlength="${input.maxLength || 80}"
+                aria-label="${escapeHTML(input.label || title)}" placeholder="${escapeHTML(input.placeholder || '')}">` : ''}
+            <div class="app-dialog-actions">
+                ${cancelText ? `<button type="button" class="btn-secondary" data-cancel>${escapeHTML(cancelText)}</button>` : ''}
+                <button type="submit" class="${tone === 'danger' ? 'btn btn-confirm-danger' : 'btn'}" value="ok">${escapeHTML(confirmText)}</button>
+            </div>
+        </form>`;
+        const field = dialog.querySelector('.app-dialog-input');
+        if (field) field.value = input.value || '';
+        let result = null, closing = false;
+        // Fecha com a animação de saída (.closing); sem animação (movimento reduzido), na hora.
+        const finish = (value) => {
+            if (closing) return;
+            closing = true;
+            result = value;
+            const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+            if (reduced) { dialog.close(); return; }
+            dialog.classList.add('closing');
+            setTimeout(() => dialog.close(), DIALOG_CLOSE_MS);
+        };
+        dialog.querySelector('form').addEventListener('submit', (ev) => {
+            ev.preventDefault();
+            if (field && !field.value.trim()) {
+                field.focus();
+                field.classList.remove('shake');
+                void field.offsetWidth;   // reinicia a animação
+                field.classList.add('shake');
+                return;
+            }
+            finish(field ? field.value.trim() : true);
+        });
+        dialog.querySelector('[data-cancel]')?.addEventListener('click', () => finish(null));
+        // Esc e clique no fundo (fora da caixa) cancelam, também com a saída animada.
+        dialog.addEventListener('cancel', (ev) => { ev.preventDefault(); finish(null); });
+        dialog.addEventListener('click', (ev) => { if (ev.target === dialog) finish(null); });
+        // Brilho que segue o ponteiro nos botões.
+        dialog.querySelectorAll('.app-dialog-actions button').forEach(b => b.addEventListener('pointermove', (ev) => {
+            const r = b.getBoundingClientRect();
+            b.style.setProperty('--mx', `${ev.clientX - r.left}px`);
+            b.style.setProperty('--my', `${ev.clientY - r.top}px`);
+        }));
+        dialog.addEventListener('close', () => {
+            dialog.remove();
+            if (origin && origin.isConnected && typeof origin.focus === 'function') origin.focus();
+            resolve(result);
+        });
+        document.body.appendChild(dialog);
+        dialog.showModal();
+        if (field) { field.focus(); field.select(); }
+        else (dialog.querySelector(tone === 'danger' ? '[data-cancel]' : 'button[type="submit"]')
+            || dialog.querySelector('button[type="submit"]')).focus();
+    });
+}
+
+async function confirmDialog(title, text = '', { confirmText = 'Confirmar', cancelText = 'Cancelar', danger = false } = {}) {
+    return (await openDialog({ title, text, confirmText, cancelText, tone: danger ? 'danger' : 'info' })) === true;
+}
+
+function promptDialog(title, value = '', { text = '', confirmText = 'Salvar', placeholder = '', label = '' } = {}) {
+    return openDialog({ title, text, confirmText, tone: 'edit', input: { value, placeholder, label } });
+}
+
+async function alertDialog(title, text = '') {
+    await openDialog({ title, text, confirmText: 'OK', cancelText: '', tone: 'info' });
+}
+//#endregion
+
 //#region Formatadores
 const fmtBRL = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtNum = (v, d = 1) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });

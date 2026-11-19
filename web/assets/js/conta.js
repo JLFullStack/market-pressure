@@ -79,7 +79,10 @@ $('usersBody').addEventListener('click', async (event) => {
     const button = event.target.closest('[data-delete]');
     if (!button) return;
     const name = button.dataset.name;
-    if (!confirm(`Excluir a conta de ${name}? As carteiras dessa pessoa também serão apagadas, sem volta.`)) return;
+    const confirmed = await confirmDialog(`Excluir a conta de ${name}?`,
+        'As carteiras dessa pessoa também serão apagadas.\nEsta ação não pode ser desfeita.',
+        { confirmText: 'Excluir conta', danger: true });
+    if (!confirmed) return;
     const { status, data } = await authCall('DELETE', `/users?id=${encodeURIComponent(button.dataset.delete)}`);
     const ok = status === 200;
     showMsg($('usersMsg'), ok, ok ? data.message : (data.message || `HTTP ${status}`));

@@ -190,6 +190,133 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
 }
 .copy-dialog-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
 
+/* Janelas de confirmação (confirmDialog, promptDialog, alertDialog em core.js).
+   Entrada com mola (sobe, passa um pouco do tamanho e assenta), fundo que escurece e desfoca, ícone
+   que salta com um anel pulsando, título, texto e botões entrando em sequência; saída rápida
+   (.closing, DIALOG_CLOSE_MS). Botões sobem no hover com um brilho que segue o ponteiro (--mx/--my). */
+.app-dialog {
+    --tone: var(--accent);
+    --tone-rgb: 90, 162, 255;
+    width: min(440px, calc(100vw - 32px));
+    padding: 0;
+    overflow: hidden;
+    background:
+        radial-gradient(120% 90% at 0% 0%, rgba(var(--tone-rgb), 0.13), transparent 55%),
+        linear-gradient(180deg, #16203a, var(--panel-raised));
+    color: var(--text-color);
+    border: 1px solid var(--border-strong);
+    border-radius: 18px;
+    box-shadow:
+        0 0 0 1px rgba(var(--tone-rgb), 0.12),
+        0 30px 80px -24px rgba(0, 0, 0, 0.9),
+        0 0 60px -20px rgba(var(--tone-rgb), 0.45);
+}
+.app-dialog-danger { --tone: var(--danger); --tone-rgb: 255, 123, 114; }
+/* Faixa colorida no topo, que se desenha da esquerda para a direita. */
+.app-dialog::before {
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+    background: linear-gradient(90deg, transparent, var(--tone), transparent);
+    transform-origin: left; animation: dialog-bar 0.6s 0.1s var(--ease-out) backwards;
+}
+.app-dialog[open] { animation: dialog-in 0.5s cubic-bezier(0.34, 1.45, 0.64, 1); }
+.app-dialog::backdrop {
+    background: radial-gradient(ellipse at center, rgba(10, 18, 40, 0.55), rgba(2, 5, 14, 0.78));
+    backdrop-filter: blur(5px) saturate(0.8);
+    animation: dialog-fade 0.3s ease-out;
+}
+.app-dialog.closing { animation: dialog-out 0.18s ease-in forwards; }
+.app-dialog.closing::backdrop { animation: dialog-fade-out 0.18s ease-in forwards; }
+
+.app-dialog-form { position: relative; padding: 22px 22px 18px; }
+.app-dialog-head { display: flex; align-items: center; gap: 14px; }
+.app-dialog-head h3 { margin: 0; font-size: 16.5px; line-height: 1.35; animation: dialog-rise 0.4s 0.08s var(--ease-out) backwards; }
+.app-dialog-icon {
+    position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 42px; height: 42px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 25%, rgba(var(--tone-rgb), 0.32), rgba(var(--tone-rgb), 0.1));
+    color: var(--tone);
+    box-shadow: inset 0 0 0 1px rgba(var(--tone-rgb), 0.35);
+    animation: dialog-icon 0.55s 0.05s cubic-bezier(0.34, 1.7, 0.64, 1) backwards;
+}
+.app-dialog-ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 2px solid rgba(var(--tone-rgb), 0.55);
+    animation: dialog-ring 1.6s 0.3s ease-out 2 backwards;
+    pointer-events: none;
+}
+.app-dialog-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.app-dialog-danger .app-dialog-icon svg { transform-origin: 50% 20%; animation: dialog-wiggle 0.6s 0.45s ease-in-out backwards; }
+.app-dialog-text { margin: 12px 0 0 56px; color: var(--text-muted); font-size: 14px; line-height: 1.55; animation: dialog-rise 0.4s 0.14s var(--ease-out) backwards; }
+.app-dialog-text p { margin: 0 0 6px; }
+.app-dialog-text p:first-child { color: var(--text-color); }
+.app-dialog-input {
+    display: block; width: 100%; box-sizing: border-box; margin-top: 16px;
+    background: var(--bg-color); color: var(--text-color);
+    border: 1px solid var(--border-color); border-radius: 10px; padding: 11px 13px; font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.25s;
+    animation: dialog-rise 0.4s 0.18s var(--ease-out) backwards;
+}
+.app-dialog-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(90, 162, 255, 0.18); }
+.app-dialog-input.shake { border-color: var(--danger); animation: dialog-shake 0.4s ease-in-out; }
+
+.app-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.app-dialog-actions button {
+    position: relative; overflow: hidden; isolation: isolate;
+    padding: 9px 20px; font-size: 14px;
+    transition: transform 0.2s var(--ease-out), box-shadow 0.25s, border-color 0.2s, color 0.2s, background-color 0.2s, filter 0.2s;
+    animation: dialog-rise 0.4s var(--ease-out) backwards;
+}
+.app-dialog-actions button:nth-child(1) { animation-delay: 0.2s; }
+.app-dialog-actions button:nth-child(2) { animation-delay: 0.26s; }
+/* Brilho que segue o ponteiro. */
+.app-dialog-actions button::after {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(120px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.22), transparent 60%);
+    opacity: 0; transition: opacity 0.25s;
+}
+.app-dialog-actions button:hover::after { opacity: 1; }
+.app-dialog-actions button:hover { transform: translateY(-2px); }
+.app-dialog-actions button:active { transform: translateY(0) scale(0.95); transition-duration: 0.08s; }
+.app-dialog-actions .btn-secondary:hover { box-shadow: 0 8px 20px -12px rgba(90, 162, 255, 0.8); }
+.app-dialog-actions button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--panel-raised), 0 0 0 5px rgba(var(--tone-rgb), 0.7); }
+.btn-confirm-danger {
+    background: linear-gradient(135deg, #ff8a7f, #e5534b 55%, #c93c4f);
+    box-shadow: 0 6px 18px -8px rgba(229, 83, 75, 0.9);
+}
+.btn-confirm-danger:hover { box-shadow: 0 12px 28px -10px rgba(229, 83, 75, 1); }
+
+@keyframes dialog-in {
+    0% { opacity: 0; transform: translateY(24px) scale(0.9); }
+    60% { opacity: 1; }
+    100% { opacity: 1; transform: none; }
+}
+@keyframes dialog-out { to { opacity: 0; transform: translateY(8px) scale(0.95); } }
+@keyframes dialog-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dialog-fade-out { to { opacity: 0; } }
+@keyframes dialog-bar { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
+@keyframes dialog-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes dialog-icon { from { opacity: 0; transform: scale(0.3) rotate(-25deg); } to { opacity: 1; transform: none; } }
+@keyframes dialog-ring { from { transform: scale(1); opacity: 0.9; } to { transform: scale(1.9); opacity: 0; } }
+@keyframes dialog-wiggle {
+    0%, 100% { transform: rotate(0); }
+    20% { transform: rotate(-12deg); } 40% { transform: rotate(10deg); }
+    60% { transform: rotate(-6deg); } 80% { transform: rotate(3deg); }
+}
+@keyframes dialog-shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); } 40% { transform: translateX(5px); }
+    60% { transform: translateX(-3px); } 80% { transform: translateX(2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .app-dialog[open], .app-dialog::backdrop, .app-dialog::before, .app-dialog *, .app-dialog *::after { animation: none !important; }
+    .app-dialog-actions button:hover { transform: none; }
+}
+@media (max-width: 640px) {
+    .app-dialog-text { margin-left: 0; }
+    .app-dialog-actions { flex-direction: column-reverse; }
+    .app-dialog-actions button { width: 100%; }
+}
+
 .inline-link { color: var(--accent); text-decoration: none; font-weight: 600; }
 .inline-link:hover { text-decoration: underline; }
 .inline-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }

@@ -166,29 +166,34 @@ function renderClassSelects(st) {
 }
 
 async function createPortfolio() {
-    const name = (prompt('Nome da nova carteira:', state.doc.portfolios.length ? '' : 'Principal') || '').trim();
+    const name = await promptDialog('Nova carteira', state.doc.portfolios.length ? '' : 'Principal',
+        { confirmText: 'Criar', label: 'Nome da nova carteira', placeholder: 'Nome da carteira' });
     if (!name) return;
     const res = await act('criar_carteira', { name }, (r) => {
         state.currentId = r.id;
         try { localStorage.setItem(SELECTED_KEY, r.id); } catch (e) { /* preferência não salva */ }
     });
-    if (res.error && !res.saveFailed) alert(res.error);
+    if (res.error && !res.saveFailed) alertDialog('Não foi possível criar a carteira', res.error);
 }
 
 async function renamePortfolio() {
     const p = current();
     if (!p) return;
-    const name = (prompt('Novo nome da carteira:', p.name) || '').trim();
+    const name = await promptDialog('Renomear carteira', p.name, { label: 'Novo nome da carteira' });
     if (!name || name === p.name) return;
     const res = await act('renomear_carteira', { name });
-    if (res.error && !res.saveFailed) alert(res.error);
+    if (res.error && !res.saveFailed) alertDialog('Não foi possível renomear', res.error);
 }
 
 async function deletePortfolio() {
     const p = current();
-    if (!p || !confirm(`Excluir a carteira "${p.name}" e todos os seus lançamentos? Esta ação não pode ser desfeita.`)) return;
+    if (!p) return;
+    const ok = await confirmDialog(`Excluir a carteira "${p.name}"?`,
+        'Todos os lançamentos, metas e configurações dela serão apagados.\nEsta ação não pode ser desfeita.',
+        { confirmText: 'Excluir carteira', danger: true });
+    if (!ok) return;
     const res = await act('excluir_carteira', {}, (r) => { state.currentId = r.id; });
-    if (res.error && !res.saveFailed) alert(res.error);
+    if (res.error && !res.saveFailed) alertDialog('Não foi possível excluir', res.error);
 }
 
 // "ANALISAR CARTEIRA": o texto para uma IA sobre a carteira e cada ativo dela vem pronto do

@@ -327,7 +327,8 @@ async function onGoalsClick(ev) {
         if (g) fillGoalForm(g);
     } else if (del) {
         const g = goals.find(x => x.id === del.dataset.goalDelete);
-        if (!g || !confirm(`Excluir a meta "${g.name}"?`)) return;
+        if (!g || !(await confirmDialog(`Excluir a meta "${g.name}"?`, 'Esta ação não pode ser desfeita.',
+            { confirmText: 'Excluir', danger: true }))) return;
         const res = await act('excluir_meta', { goalId: g.id });
         setMsg('goalMsg', res.error || res.message, res.error ? 'error' : 'ok');
         if (!res.error && state.editingGoal === g.id) resetGoalForm();
