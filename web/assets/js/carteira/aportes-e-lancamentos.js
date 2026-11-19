@@ -639,7 +639,8 @@ async function confirmBatch() {
 //#endregion
 
 //#region Histórico de lançamentos
-// Histórico de lançamentos (já em ordem do mais recente, vindo da estrutura da carteira), paginado.
+// Histórico de lançamentos (já em ordem do mais recente por data e hora de registro, vindo da
+// estrutura da carteira), paginado. A hora (r.time) só existe nos lançamentos registrados com ela.
 function renderHistory(st) {
     const rows = (st?.history || []).map(r => r.kind === 'tx' ? {
         ...r, qty: fmtQty(r.quantity), price: fmtMoney(r.price, r.currency),
@@ -655,7 +656,8 @@ function renderHistory(st) {
         return `
         <tr class="tl-row tl-${ENTRY_DIRECTION[kind] || 'other'}">
             <td class="nowrap"><div class="tl"><span class="tl-dot" aria-hidden="true"></span>
-                <div><strong>${r.date.slice(8, 10)}/${r.date.slice(5, 7)}</strong><div class="small muted">${r.date.slice(0, 4)}</div></div></div></td>
+                <div><strong>${r.date.slice(8, 10)}/${r.date.slice(5, 7)}</strong><div class="small muted">${r.date.slice(0, 4)}${r.time
+                    ? ` · <span data-tip="Registrado em ${fmtDate(r.registeredDate)} às ${r.time}.">${r.time}</span>` : ''}</div></div></div></td>
             <td><div class="asset"><span class="avatar solo" style="--a1:${classColor(cls, k)}" aria-hidden="true">${escapeHTML(r.asset.slice(0, 2).toUpperCase())}</span>
                 <div class="asset-text"><strong>${escapeHTML(r.asset)}</strong>${cls ? `<div class="small muted">${escapeHTML(cls)}</div>` : ''}</div></div></td>
             <td><span class="badge entry-pill ${ENTRY_PILL[kind] || 'badge-low'}">${ENTRY_ARROW[ENTRY_DIRECTION[kind]] || ''}${r.type}</span></td>

@@ -42,7 +42,7 @@ def structure(portfolio):
         for e in f["entries"]:
             history.append({"date": e["date"], "kind": "fi", "id": e["id"], "item": f["id"], "asset": f["name"],
                             "type": FI_LABELS.get(e["type"], e["type"]), "amount": e["amount"]})
-    history.sort(key=lambda r: r["date"], reverse=True)
+    history = history_order(history, portfolio)
     assets = portfolio["assets"]
     settings = st.load()
 
@@ -63,6 +63,23 @@ def structure(portfolio):
                        + [{"key": f"fi:{f['id']}", "label": f"{f['name']} ({f['class']})"} for f in portfolio["fixedIncome"]],
         "history": history,
     }
+
+
+def history_order(history, portfolio):
+    """Histórico de lançamentos do mais recente para o mais antigo: pela data da operação e, na
+    mesma data, pela data e hora em que foi registrado (created, "AAAA-MM-DDTHH:MM:SS" em São
+    Paulo). Lançamentos de antes do registro da hora ficam abaixo dos que a têm, na ordem em que
+    foram gravados. Cada linha leva time ("HH:MM") e registeredDate quando a hora é conhecida."""
+    created = {t["id"]: t.get("created") for t in portfolio["transactions"]}
+    created.update({e["id"]: e.get("created") for f in portfolio["fixedIncome"] for e in f["entries"]})
+    for r in history:
+        stamp = created.get(r["id"])
+        if stamp:
+            r["time"] = stamp[11:16]
+            r["registeredDate"] = stamp[:10]
+    order = sorted(range(len(history)),
+                   key=lambda k: (history[k]["date"], created.get(history[k]["id"]) or "", k), reverse=True)
+    return [history[k] for k in order]
 
 
 def asset_info(portfolio, ticker, market):

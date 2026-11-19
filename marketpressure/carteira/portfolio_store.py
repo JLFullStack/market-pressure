@@ -10,6 +10,7 @@ com a versão anterior em data/backup/). Se a validação falha, nada é gravado
 """
 
 import threading
+import time
 import uuid
 
 from ..comum import database as db
@@ -17,7 +18,7 @@ from . import goals as gl
 from . import portfolio as pf
 from . import portfolio_service as svc
 from . import tax_alert
-from ..comum.core import fmt_brl, fmt_qty, today_iso
+from ..comum.core import fmt_brl, fmt_qty, local_time, today_iso
 
 # region Tabelas e documento
 DOC_VERSION = 2
@@ -63,8 +64,8 @@ def read_raw() -> dict:
             grouped.setdefault(r["portfolio_id"], []).append(r)
     entries = {}
     for r in rows["fixed_income_entries"]:
-        entries.setdefault((r["portfolio_id"], r["item_id"]), []).append(
-            {"id": r["id"], "date": r["date"], "type": r["type"], "amount": _num(r["amount"])})
+        entries.setdefault((r["portfolio_id"], r["item_id"]), []).append(_optional(
+            {"id": r["id"], "date": r["date"], "type": r["type"], "amount": _num(r["amount"])}, "created", r.get("created")))
     portfolios = []
     for p in rows["portfolios"]:
         pid = p["id"]
@@ -73,7 +74,8 @@ def read_raw() -> dict:
         transactions = []
         for t in by_portfolio["transactions"].get(pid, []):
             tx = {k: _num(t[k]) for k in ("id", "date", "ticker", "type", "quantity", "price")}
-            transactions.append(_optional(_optional(tx, "fees", t["fees"]), "fx", t["fx"]))
+            transactions.append(_optional(_optional(_optional(tx, "fees", t["fees"]), "fx", t["fx"]),
+                                          "created", t.get("created")))
         fixed_income = [{**_optional({"id": f["id"], "name": f["name"], "class": f["class"]}, "target", f["target"]),
                          "entries": entries.get((pid, f["id"]), [])}
                         for f in by_portfolio["fixed_income"].get(pid, [])]
@@ -142,17 +144,23 @@ def _find(doc, portfolio_id):
     return cur
 
 
+def created_stamp(now=None):
+    """Data e hora (São Paulo, "AAAA-MM-DDTHH:MM:SS") em que o lançamento foi registrado; ordena o
+    histórico entre lançamentos da mesma data."""
+    return local_time(time.time() if now is None else now).strftime("%Y-%m-%dT%H:%M:%S")
+
+
 def _add_transaction(cur, tx, cls, market):
     """Ativo novo entra com a classe e o mercado dados."""
     cur["assets"].setdefault(tx["ticker"], {"class": cls, "market": market})
-    cur["transactions"].append(tx)
+    cur["transactions"].append({**tx, "created": tx.get("created") or created_stamp()})
 
 
 def _add_fixed_income_entry(cur, item_id, entry):
     fi = next((f for f in cur["fixedIncome"] if f["id"] == item_id), None)
     if not fi:
         raise ActionError("Título de renda fixa não encontrado.")
-    fi["entries"].append(entry)
+    fi["entries"].append({**entry, "created": entry.get("created") or created_stamp()})
 
 
 def _percent(value, message):

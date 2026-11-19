@@ -3,7 +3,7 @@
 import unittest
 from unittest import mock
 
-from marketpressure.carteira import portfolio as pf, portfolio_store as store
+from marketpressure.carteira import portfolio as pf, portfolio_service as svc, portfolio_store as store
 from marketpressure.comum import database
 from tests.support import DatabaseTestCase
 
@@ -76,6 +76,28 @@ class ActionsTest(DatabaseTestCase):
         self.assertEqual(store.get_portfolio(pid)["transactions"], [])
         rows[1]["qty"] = "5"
         self.assertEqual(self.act("registrar_lote", id=pid, rows=rows)["message"], "2 compras registradas.")
+
+    def test_history_is_ordered_by_date_and_registration_time(self):
+        pid = self.new_portfolio()
+        stamps = iter(["2026-11-19T10:00:00", "2026-11-19T09:00:00", "2026-11-19T11:30:00"])
+        with mock.patch.object(store, "created_stamp", lambda: next(stamps)):
+            first = self.buy(pid, ticker="PETR4", date="2021-06-01")
+            self.buy(pid, ticker="VALE3", date="2021-06-02")
+            self.buy(pid, ticker="ITUB4", date="2021-06-01")
+        p = store.get_portfolio(pid)
+        self.assertEqual(p["transactions"][0]["created"], "2026-11-19T10:00:00")
+        history = svc.structure(p)["history"]
+        self.assertEqual([r["asset"] for r in history], ["VALE3", "ITUB4", "PETR4"])
+        self.assertEqual((history[1]["time"], history[1]["registeredDate"]), ("11:30", "2026-11-19"))
+        self.assertEqual(first["message"], "Compra de 100 PETR4 registrada.")
+
+    def test_old_entries_without_time_keep_saved_order(self):
+        p = {"transactions": [{"id": "a", "date": "2021-06-01"}, {"id": "b", "date": "2021-06-01"},
+                              {"id": "c", "date": "2021-06-01", "created": "2026-01-01T08:00:00"}],
+             "fixedIncome": []}
+        rows = [{"id": t["id"], "date": t["date"]} for t in p["transactions"]]
+        self.assertEqual([r["id"] for r in svc.history_order(rows, p)], ["c", "b", "a"])
+        self.assertNotIn("time", rows[0])
 
     def test_tables_round_trip(self):
         pid = self.new_portfolio()
