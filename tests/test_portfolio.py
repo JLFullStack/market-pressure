@@ -392,6 +392,27 @@ class AssetTargetRowTest(unittest.TestCase):
 
 
 class PatrimonyBarsTest(unittest.TestCase):
+    def test_same_day_fixed_income_follows_registration_order(self):
+        # "Valor atual" informado e depois resgate total no mesmo dia: o título termina em 0.
+        entries = [{"id": "a", "date": "2026-11-18", "type": "aporte", "amount": 59.21, "created": "2026-11-18T10:00:00"},
+                   {"id": "c", "date": "2026-11-19", "type": "resgate", "amount": 59.24, "created": "2026-11-19T11:05:42"},
+                   {"id": "b", "date": "2026-11-19", "type": "valor_atual", "amount": 59.24, "created": "2026-11-19T11:05:13"}]
+        ordered = pf.by_date(entries)
+        self.assertEqual([e["id"] for e in ordered], ["a", "b", "c"])
+        self.assertAlmostEqual(pf.fixed_income_value_at(ordered, "2026-11-19"), 0)
+        self.assertEqual(pf.fixed_income_invested_at(entries, "2026-11-19"), 0)
+        # Sem created (lançamentos antigos), o "valor atual" do dia continua por último.
+        old = [{k: v for k, v in e.items() if k != "created"} for e in entries]
+        self.assertEqual(pf.by_date(old)[-1]["type"], "valor_atual")
+
+    def test_redemption_above_value_is_profit(self):
+        # Resgate total sem "valor atual" antes: o rendimento não informado vira lucro, sem valor negativo.
+        entries = [{"id": "a", "date": "2026-11-18", "type": "aporte", "amount": 59.21},
+                   {"id": "b", "date": "2026-11-19", "type": "resgate", "amount": 59.24}]
+        s = pf.fixed_income_summary({"id": "f", "name": "CDB", "entries": entries}, "2026-11-19")
+        self.assertEqual(s["value"], 0)
+        self.assertAlmostEqual(s["profit"], 0.03)
+
     def test_full_redemption_with_tax_zeroes_title(self):
         # Resgate total que reteve IR/IOF: o "valor atual" 0 no mesmo dia zera valor e aplicado.
         entries = [{"id": "a", "date": "2026-01-10", "type": "aporte", "amount": 100},

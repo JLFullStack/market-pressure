@@ -235,13 +235,23 @@ def normalize_doc(doc):
 
 
 # region Posições e vendas
-# Ordem cronológica estável. No mesmo dia, entradas vêm antes de saídas (compra antes de
-# venda; aporte e resgate antes de "valor atual", que já inclui o movimento do dia).
+# Ordem cronológica estável. No mesmo dia, compra vem antes de venda. Na renda fixa, os
+# lançamentos do mesmo dia seguem a ordem em que foram registrados (created): um "valor atual"
+# informado antes de um resgate no mesmo dia não pode desfazer o resgate. Sem created (lançamentos
+# antigos), aporte e resgate vêm antes de "valor atual", que então já incluiria o movimento do dia.
 SAME_DAY_ORDER = {"compra": 0, "venda": 1, "aporte": 0, "resgate": 0, "valor_atual": 1}
+FIXED_INCOME_TYPES = ("aporte", "resgate", "valor_atual")
+
+
+def _date_key(x):
+    order = SAME_DAY_ORDER.get(x.get("type"), 0)
+    if x.get("type") in FIXED_INCOME_TYPES:
+        return (x["date"], x.get("created") or "", order)
+    return (x["date"], "", order)
 
 
 def by_date(items):
-    return sorted(items, key=lambda x: (x["date"], SAME_DAY_ORDER.get(x.get("type"), 0)))
+    return sorted(items, key=_date_key)
 
 
 def signed_qty(tx):
@@ -913,15 +923,19 @@ def indicators_memo(candles, memo):
 # region Renda fixa
 def fixed_income_value_at(entries, iso):
     """Valor de um título de renda fixa ao fim do dia iso: último "valor atual" informado até a
-    data, mais aportes e menos resgates posteriores a ele; antes do primeiro, o líquido aportado."""
+    data, mais aportes e menos resgates posteriores a ele; antes do primeiro, o líquido aportado.
+    Nunca negativo: um resgate acima do valor conhecido (o rendimento que não foi informado) zera o
+    título, e a diferença vira lucro."""
     value = 0
     for e in entries:
         if e["date"] > iso:
             break
         if e["type"] == "valor_atual":
             value = e["amount"]
+        elif e["type"] == "aporte":
+            value += e["amount"]
         else:
-            value += e["amount"] if e["type"] == "aporte" else -e["amount"]
+            value = max(0, value - e["amount"])
     return value
 
 
