@@ -652,7 +652,7 @@ def advice(a, lots, strategy, kind=None, rank=None):
     if nearest and gap < dist:
         return {"action": "aguardar", "label": "AGUARDAR", "reason": (
             f"Já comprado nesta região: compra de {fmt_date(nearest['date'])} a {fmt_brl(nearest['price'])}, "
-            f"a {fmt_num(gap * 100)}% do preço atual.\nA estratégia só recompra em outro pullback, "
+            f"a {fmt_num(gap * 100)}% do preço de {fmt_brl(price)} desta base.\nA estratégia só recompra em outro pullback, "
             f"a {fmt_pct_value(dist)}% ou mais de cada compra aberta.")}
     bt = a["bt"]
     weak = []

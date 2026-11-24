@@ -19,7 +19,7 @@ from .portfolio import (APORTE_MODES, BENCHMARK, CLASS_GROUP, FI_LABELS, FX, JCP
                         analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_history,
                         contribution_items, contribution_path, contribution_plan, dividends_by_month, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
                         market_of, net_flows, normalize_ticker, open_lots, parse_number, patrimony_bars, period_start, receivables_by_month,
-                        rebase_series, split_pending_dividends,
+                        rebase_series, split_pending_dividends, unbooked_receivables, held_members, zero_target_text,
                         suggest_class, targets_off, tx_flow)
 from .portfolio import asset_chart as pf_asset_chart
 
@@ -52,10 +52,13 @@ def structure(portfolio):
     return {
         "today": today_iso(),
         "hasEntries": has_entries(portfolio),
-        "classes": [{"name": c["name"], "target": c["target"], "members": class_members(portfolio, c["name"]),
+        "classes": [{"name": c["name"], "target": c["target"], "members": held_members(portfolio, c["name"]),
                      "rule": rule_text(c["name"])} for c in classes],
         "targetSum": add_up(c["target"] for c in classes),
         "targetsOff": bool(classes) and targets_off(add_up(c["target"] for c in classes)),
+        "zeroTargets": zero_target_text(portfolio),
+        # O que falta para 100% (fatia cinza "Sem meta" na rosca), 0 quando as metas somam 100% ou mais.
+        "targetsRest": max(0.0, 100 - add_up(c["target"] for c in classes)),
         "defaultClass": suggest_class("", "b3", classes),
         "fixedIncomeClass": fixed_income_class(classes),
         "fixedIncome": [{"id": f["id"], "name": f["name"]} for f in portfolio["fixedIncome"]],
@@ -249,6 +252,7 @@ def analysis_payload(portfolio):
         "open": [{k: v for k, v in p.items() if k != "setup"} for p in a["open"]],
         "fixed": [{k: v for k, v in f.items() if k != "entries"} for f in a["fixed"]],
         "allocation": a["allocation"], "targetSum": a["targetSum"], "targetsOff": targets_off(a["targetSum"]),
+        "zeroTargets": zero_target_text(portfolio),
         "kpis": a["kpis"], "hasForeign": a["hasForeign"],
         "chart": _chart(series), "patrimony": patrimony_bars(series), "lastDay": series["dates"][-1] if series else None,
         "live": a["live"], "failed": a["failed"], "loadedAt": a["loadedAt"],
@@ -303,6 +307,7 @@ def received_dividends(analysis, rows, failed=()):
     return {"dividends": received, "totals": sorted(by_ticker.items(), key=lambda kv: -kv[1]),
             "total": add_up(d["total"] for d in received), "months": months, "year": add_up(m["total"] for m in months),
             "pendingTotal": pending_total, "pendingTotals": pending_totals,
+            "unbooked": unbooked_receivables(analysis["dividends"], rows),
             "pendingNote": f"{fmt_brl(pending_total)} a receber ({pending_list}) já contam no lucro e na rentabilidade"
                            if pending else "",
             "warning": "Sem a data de pagamento desses ativos agora: os proventos deles contam como recebidos pela data-ex."

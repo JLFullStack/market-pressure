@@ -172,6 +172,17 @@ class PartialExitTest(unittest.TestCase):
         lots = pf.open_lots(two, "PETR4", self.CANDLES)
         self.assertEqual(pf.position_signal(ind, 0, pf.partial_to_sell(lots, "b3"), lots)["label"], "VENDER 50%")
 
+    def test_too_small_partial_names_the_hit_buy_not_the_position(self):
+        # 1 cota atingiu o alvo e outras 2, compradas acima, não: a conta é 50% de 1 cota, não de 3.
+        txs = [tx("2024-01-02", "compra", 1, 10), tx("2024-01-02", "compra", 2, 100)]
+        lots = pf.open_lots(txs, "PETR4", self.CANDLES)
+        partial = pf.partial_to_sell(lots, "b3")
+        self.assertEqual((partial["held"], partial["dueHeld"]), (3, 1))
+        ind = {"candles": self.CANDLES[-1:], "closes": [20.5], "mm20": [9], "mm50": [9], "mm200": [8]}
+        reason = pf.position_signal(ind, 0, partial, lots)["reason"]
+        self.assertIn("nessa compra, 50% de 1 cota não chega", reason)
+        self.assertNotIn("de 3 cotas", reason)
+
     def test_strategy_changes_the_partial(self):
         txs = [tx("2024-01-02", "compra", 10, 10)]
         reversal = {"key": "reversao", "target": 0.10, "fraction": 0.5}
@@ -368,6 +379,13 @@ class PendingDividendsTest(unittest.TestCase):
         expected = {**self.ROW, "confirmed": False}           # previsto: outro provento, ainda por vir
         self.assertEqual(pf.split_pending_dividends(self.DIVIDENDS, [expected])[1], [])
 
+    def test_confirmed_without_yahoo_event_is_unbooked(self):
+        # Data-com ontem e data-ex hoje antes do pregão: a B3 já confirma, o Yahoo ainda não tem o evento.
+        today = {**self.ROW, "ticker": "UGPA3", "comDate": "2026-11-23"}
+        self.assertEqual(pf.unbooked_receivables(self.DIVIDENDS, [self.ROW, today]), [today])
+        expected = {**today, "confirmed": False}            # previsto não é "fora do lucro"
+        self.assertEqual(pf.unbooked_receivables(self.DIVIDENDS, [expected]), [])
+
     def test_received_payload_leaves_the_pending_out(self):
         from marketpressure.carteira import portfolio_service as ps
         out = ps.received_dividends({"dividends": self.DIVIDENDS[:2]}, [self.ROW])
@@ -489,3 +507,49 @@ class PatrimonyBarsTest(unittest.TestCase):
         fi = bars["groups"][2]["bars"]
         self.assertEqual((fi[0]["value"], fi[0]["invested"]), (1000, 1000))
         self.assertEqual((fi[-1]["value"], fi[-1]["gain"]), (1100, 100))
+
+
+class PromptTechnicalTest(unittest.TestCase):
+    def test_closed_indicators_say_the_day_and_compare_the_live_price(self):
+        from marketpressure.carteira import portfolio_prompt as pp
+        from tests.support import candles
+        data = candles(300)
+        lines = pp._technical(data, "b3", "R$", data[-1]["c"] * 0.9)
+        self.assertIn("no fechamento de", lines[0])
+        self.assertTrue(any(l.startswith("  - Preço agora") for l in lines))
+        same = pp._technical(data, "b3", "R$", data[-1]["c"])   # sem pregão: sem a linha de agora
+        self.assertFalse(any("Preço agora" in l for l in same))
+
+
+class ClassMembersTest(unittest.TestCase):
+    PORTFOLIO = {
+        "classes": [{"name": "Ações", "target": 100}, {"name": "Internacionais", "target": 0},
+                    {"name": "Renda fixa", "target": 0}],
+        "assets": {"PETR4": {"class": "Ações"}, "CSMG3": {"class": "Ações"}, "SPXI11": {"class": "Internacionais"}},
+        "transactions": [tx("2026-09-28", "compra", 1, 49, ticker="PETR4"), tx("2026-09-28", "compra", 1, 57, ticker="CSMG3"),
+                         tx("2026-11-11", "venda", 1, 53, ticker="CSMG3"), tx("2026-11-13", "compra", 2, 59, ticker="SPXI11")],
+        "fixedIncome": [{"name": "CDB", "class": "Renda fixa", "entries": [
+            {"id": "a", "date": "2026-10-28", "type": "aporte", "amount": 100},
+            {"id": "b", "date": "2026-11-13", "type": "resgate", "amount": 100.4}]}],
+    }
+
+    def test_only_what_is_held(self):
+        self.assertEqual(pf.held_members(self.PORTFOLIO, "Ações", "2026-11-24"), ["PETR4"])   # CSMG3 vendida
+        self.assertEqual(pf.held_members(self.PORTFOLIO, "Renda fixa", "2026-11-24"), [])     # CDB resgatado
+
+    def test_zero_target_with_holdings_warns(self):
+        text = pf.zero_target_text(self.PORTFOLIO, "2026-11-24")
+        self.assertTrue(text.startswith("Internacionais tem ativos na carteira, mas meta 0%"))
+        fixed = {**self.PORTFOLIO, "classes": [{**c, "target": 50 if c["name"] != "Renda fixa" else 0}
+                                               for c in self.PORTFOLIO["classes"]]}
+        self.assertEqual(pf.zero_target_text(fixed, "2026-11-24"), "")
+
+
+class ExDateNoteTest(unittest.TestCase):
+    def test_day_change_without_the_dividend(self):
+        from marketpressure.carteira import portfolio_prompt as pp
+        p = {"ticker": "UGPA3", "market": "b3", "hasQuote": True, "priceDate": "2026-11-24",
+             "priceNative": 30.63, "dayChange": (30.63 / 31.57 - 1) * 100}
+        divs = [{"ticker": "UGPA3", "exDate": "2026-11-24", "amount": 1.0}]
+        self.assertEqual(pp._ex_note(p, divs), ", com a data-ex de R$ 1,00 por ação: sem ela, +0,19%")
+        self.assertEqual(pp._ex_note({**p, "priceDate": "2026-11-25"}, divs), "")

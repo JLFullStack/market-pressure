@@ -17,7 +17,7 @@ from . import portfolio_service as svc
 from ..configuracoes import strategy as st
 from . import tax_alert
 from ..screener.ai_prompt import EVENTS, ROLE, _bova, _pct, _ratio_pct
-from ..comum.core import add_up, compute_indicators, fmt_brl, fmt_date, fmt_num, fmt_qty, local_time, today_iso
+from ..comum.core import add_up, compute_indicators, day_of, fmt_brl, fmt_date, fmt_num, fmt_qty, local_time, today_iso
 
 log = logging.getLogger(__name__)
 
@@ -183,6 +183,23 @@ def _rankings():
         return []
 
 
+def _clones():
+    """{ticker: (ETF mais líquido de que ele é clone, preço no fechamento)} na varredura atual
+    (screener.mark_duplicates: o clone fica fora do ranking), ou {} sem varredura."""
+    scan = screener.scan_job.scan or {}
+    return {a["ticker"]: (a["duplicateOf"], (a.get(SETUP_MODE) or {}).get("price"))
+            for a in scan.get("analyses") or () if a.get("duplicateOf")}
+
+
+def _scan_day():
+    """Dia do último pregão fechado da varredura (base do ranking), ou None."""
+    try:
+        return screener.scan_job.payload("padrao")["views"][SETUP_MODE]["refDate"]
+    except Exception:
+        log.warning("data da varredura indisponível para a análise da carteira", exc_info=True)
+        return None
+
+
 def _ranked(rankings):
     """{ticker: (posição, tipo, linha)} dos ativos nos rankings."""
     return {row["ticker"]: (pos, r["kind"], row) for r in rankings for pos, row in enumerate(r["loose"]["top"], 1)}
@@ -198,20 +215,28 @@ def _advice_label(row, kind, lots, settings, rank=None):
     return a["label"] + (" com prioridade" if a.get("priority") else "") + (" (histórico recente negativo)" if screener.recent_negative(row["bt"], group) else "")
 
 
-def _screener_section(portfolio, rankings, settings):
+def _screener_section(portfolio, rankings, settings, clones=None, scan_day=None):
     """Ranking do Screener de hoje só das classes da carteira com meta acima de 0% (a classe de cada
     ativo do ranking pelo grupo da regra de venda: BDRs e ETFs do exterior em Internacionais)."""
     classes = [c for c in portfolio["classes"] if (c.get("target") or 0) > 0 and pf.CLASS_GROUP.get(c["name"])]
     if not classes:
         return []
-    lines = ["# Ranking do Screener hoje (só as classes com meta na minha carteira)", ""]
+    when = f"fechamento de {fmt_date(scan_day)}" if scan_day else "último fechamento"
+    lines = [f"# Ranking do Screener ({when}; só as classes com meta na minha carteira)", ""]
     if not rankings:
         return lines + ["- Sem varredura do Screener disponível agora.", ""]
     lines += ["O Screener cobre só a B3 e deixa de fora os ETFs de cripto: ações dos EUA e cripto fazem parte da "
               "classe Internacionais da carteira (e estão em \"Posições\", se eu tiver), mas não têm ranking. No "
               "ranking de Internacionais entram os BDRs e os ETFs de ações do exterior listados na B3. São os "
-              "candidatos do app para novas compras; a Indicação é a regra fixa do Screener (só um dado).", ""]
+              "candidatos do app para novas compras; a Indicação é a regra fixa do Screener (só um dado). "
+              "Preços, Score e Indicação são do último fechamento, não do pregão em andamento. Um ETF com clones "
+              "(mesmo índice, retornos quase iguais) aparece sozinho, e os clones vêm citados na linha dele: "
+              "qualquer um serve para a mesma tese, e um mais barato pode caber melhor no aporte.", ""]
     lots = svc.held_lots(portfolio, set(_ranked(rankings)))  # compras abertas dos ativos do ranking (B3)
+    held = set(portfolio.get("assets") or ())
+    copies = {}
+    for t, (of, price) in (clones or {}).items():
+        copies.setdefault(of, []).append(f"{t} {fmt_brl(price) if price else '—'}" + (" (na carteira)" if t in held else ""))
     for c in classes:
         group = pf.CLASS_GROUP[c["name"]]
         rows = [(pos, r, row) for r in rankings for pos, row in enumerate(r["loose"]["top"], 1)
@@ -227,7 +252,7 @@ def _screener_section(portfolio, rankings, settings):
         if not rows:
             lines += ["- Nenhum ativo desta classe no setup hoje.", ""]
             continue
-        lines += ["", "| Pos. | Ativo | Setor | Preço | Score | Pressão | Garrafa | Histórico (10 anos · 3 anos) | Indicação | Na carteira |",
+        lines += ["", "| Pos. | Ativo | Setor | Preço no fechamento | Score | Pressão | Garrafa | Histórico (10 anos · 3 anos) | Indicação | Na carteira |",
                   "|---|---|---|---|---|---|---|---|---|---|"]
         for pos, r, row in sorted(rows, key=lambda x: -x[2]["score"]):
             bt = row["bt"]
@@ -236,6 +261,8 @@ def _screener_section(portfolio, rankings, settings):
                        if bt.get("trades") else "sem compras encerradas")
             place = f"{pos}º" + (f" {screener.KIND_LABEL.get(r['kind'], r['kind'])}" if len(kinds) > 1 else "")
             name = (row.get("name") or row["ticker"]).replace("|", "/")
+            if copies.get(row["ticker"]):
+                name += "; clones: " + ", ".join(copies[row["ticker"]])
             lines.append(f"| {place} | {row['ticker']} — {name} | {row.get('sector') or '—'} | {fmt_brl(row['price'])} | "
                          f"{fmt_num(row['score'])} | {fmt_num(row['pressure'], 0)}% | {row['bottle']} | {history} | "
                          f"{_advice_label(row, r['kind'], lots.get(row['ticker']), settings, pos)} | "
@@ -257,9 +284,10 @@ def _history(ticker, market):
         return []
 
 
-def _technical(candles, market, currency):
-    """Indicadores dos pregões fechados, na moeda do ativo, em uma lista de linhas, ou None sem
-    histórico suficiente."""
+def _technical(candles, market, currency, now_price=None):
+    """Indicadores dos pregões fechados, na moeda do ativo, em uma lista de linhas (a primeira com o
+    dia do fechamento), ou None sem histórico suficiente. now_price: o preço do pregão em andamento,
+    comparado às mesmas médias quando difere do fechamento."""
     candles = pf.closed_for(candles, market)
     if len(candles) < 221:
         return None
@@ -277,16 +305,35 @@ def _technical(candles, market, currency):
         momentum.append(f"ATR (14) {fmt_num(ind['atr14'][i] / c * 100, 2)}% do preço")
     returns = " · ".join(f"{label} {_pct(_ratio_pct(c, ind['closes'][i - n]))}"
                          for label, n in (("3 meses", 63), ("12 meses", 252)) if i - n >= 0)
+    now = []
+    if now_price and abs(now_price / c - 1) > 1e-9:
+        now = [f"  - Preço agora ({_money(now_price, currency)}, pregão em andamento) em relação às mesmas médias: "
+               + " · ".join(f"{name.upper()} {_pct(_ratio_pct(now_price, ind[name][i]))}" for name in ("mm20", "mm50", "mm200"))]
     return [
-        f"  - Médias (preço em relação a cada uma): {mas}",
+        f"- Indicadores técnicos (diário, no fechamento de {fmt_date(day_of(candles[i]['date']))}):",
+        f"  - Médias (fechamento de {_money(c, currency)} em relação a cada uma): {mas}",
+        *now,
         "  - " + " · ".join(momentum),
         f"  - Retorno: {returns} · preço {_pct(_ratio_pct(c, high52))} da máxima de 52 semanas e "
         f"{_pct(_ratio_pct(c, low52))} da mínima",
     ]
 
 
-def _position(p, info, ranked, rule, transactions):
-    """Bloco de uma posição aberta."""
+def _ex_note(p, dividends):
+    """", com a data-ex de R$ 1,00 por ação: sem ela, +0,20%" quando o dia do preço é a data-ex de
+    um provento do ativo (só B3: o valor por ação está na moeda do preço), senão ""."""
+    if p["market"] != "b3" or not p.get("hasQuote"):
+        return ""
+    amount = add_up(d["amount"] for d in dividends if d["ticker"] == p["ticker"] and d["exDate"] == p["priceDate"])
+    if not amount:
+        return ""
+    prev = p["priceNative"] / (1 + p["dayChange"] / 100)
+    return (f", com a data-ex de {fmt_brl(amount)} por ação: sem ela, "
+            f"{_pct(_ratio_pct(p['priceNative'] + amount, prev), 2)}")
+
+
+def _position(p, info, ranked, rule, transactions, clones=None, dividends=()):
+    """Bloco de uma posição aberta. dividends: os proventos pela data-ex (analysis["dividends"])."""
     t, currency = p["ticker"], p["currency"]
     name = info.get("name") or t
     head = f"## {t} — {name}" if name != t else f"## {t}"
@@ -298,7 +345,7 @@ def _position(p, info, ranked, rule, transactions):
     avg_native = p["avgPrice"] / (p["fx"] or 1) if currency != "R$" else p["avgPrice"]
     lines += [
         f"- Quantidade {fmt_qty(p['quantity'])} · preço atual {_money(p['priceNative'], currency)} em {fmt_date(p['priceDate'])}"
-        + (f" ({_pct(p['dayChange'], 2)} no dia)" if p.get("dayChange") is not None else "")
+        + (f" ({_pct(p['dayChange'], 2)} no dia{_ex_note(p, dividends)})" if p.get("dayChange") is not None else "")
         + f" · preço médio {_money(avg_native, currency)}" + (" (aprox., pelo dólar de hoje)" if currency != "R$" else ""),
         f"- Valor {fmt_brl(p['value'])} ({fmt_num(p['weight'], 1)}% da carteira) · lucro {fmt_brl(p['profit'])} "
         f"({_pct(p['returnPct'])}), com {fmt_brl(p['dividends'])} de proventos e {fmt_brl(p['realized'])} realizados em vendas",
@@ -312,22 +359,27 @@ def _position(p, info, ranked, rule, transactions):
                          f"{_money(force['mm20'], currency)})")
     elif not p.get("hasQuote"):
         lines.append("- Situação do app: sem cotação (valores pelo último preço lançado)")
+    candles = _history(t, p["market"]) if p.get("hasQuote") else []
+    closed = pf.closed_for(candles, p["market"])
+    on = f"no fechamento de {fmt_date(day_of(closed[-1]['date']))}" if closed else "no último fechamento"
     setup = (p.get("setup") or {}).get(SETUP_MODE) or {}
     if setup.get("ok"):
-        lines.append(f"- No setup de recuo agora, testando a {setup['ma']['name']}")
+        lines.append(f"- No setup de recuo {on}, testando a {setup['ma']['name']}")
     if t in ranked:
         pos, kind, row = ranked[t]
-        lines.append(f"- **No ranking do Screener**: {pos}º de {screener.KIND_LABEL.get(kind, kind)}, Score "
-                     f"{fmt_num(row['score'])}, pressão {fmt_num(row['pressure'], 0)}%")
-    candles = _history(t, p["market"]) if p.get("hasQuote") else []
+        lines.append(f"- **No ranking do Screener** ({on}, a {_money(row['price'], currency)}): {pos}º de "
+                     f"{screener.KIND_LABEL.get(kind, kind)}, Score {fmt_num(row['score'])}, pressão {fmt_num(row['pressure'], 0)}%")
+    elif (clones or {}).get(t):
+        of = clones[t][0]
+        lines.append(f"- Fora do ranking do Screener: é clone de {of} (retornos diários com correlação de 98% ou "
+                     f"mais); o ranking mostra só o mais negociado, {of}, e cita {t} na linha dele")
     lots = pf.open_lots(transactions, t, candles, rule["target"], pf.partial_fraction(rule))
     if lots:
         lines.append("- Compras abertas: " + "; ".join(
             f"{fmt_date(lot['date'])}: {fmt_qty(lot['remaining'])} a {_money(lot['price'], currency)} "
             f"({_pct(_ratio_pct(p['priceNative'], lot['price']))})" for lot in lots))
-    technical = _technical(candles, p["market"], currency)
+    technical = _technical(candles, p["market"], currency, p["priceNative"] if p.get("hasQuote") else None)
     if technical:
-        lines.append("- Indicadores técnicos (diário):")
         lines += technical
     return lines + [""]
 
@@ -341,10 +393,14 @@ def _asset_label(ticker, names):
     return f"{ticker} ({name})" if name and name != ticker else ticker
 
 
-def _receivable_line(r, names):
-    """Um provento a receber (portfolio.dividends_to_receive) em uma linha."""
+def _receivable_line(r, names, unbooked=()):
+    """Um provento a receber (portfolio.dividends_to_receive) em uma linha. unbooked: os confirmados
+    que ainda não entraram no lucro (portfolio.unbooked_receivables)."""
     pay = fmt_date(r["paymentDate"]) if r["paymentDate"] else "a definir"
     status = "confirmado" if r["confirmed"] else "previsto (só se eu mantiver até a data-com)"
+    if r in unbooked:
+        status += (" (ainda fora do lucro: as cotações usadas ainda não descontaram o provento, que só entra no lucro "
+                   "quando o Yahoo registrar a data-ex e o preço cair)")
     return (f"  - {_asset_label(r['ticker'], names)}: {r['type']} de {fmt_brl(r['total'])} "
             f"({fmt_qty(r['quantity'])} × {fmt_brl(r['amount'])}), data-com {fmt_date(r['comDate'])}, "
             f"pagamento {pay}, {status}")
@@ -364,22 +420,38 @@ def build(portfolio, analysis, settings, received, receivable=()):
     rule_for = st.asset_rules(settings, classes)
     txs = portfolio.get("transactions") or []
     stamp = local_time(analysis["loadedAt"] / 1000).strftime("%d/%m/%Y %H:%M")
+    clones = _clones()
+    price_day = max((p["priceDate"] for p in analysis["open"] if p.get("hasQuote")), default=None)
+    if analysis.get("live"):
+        quotes = f"- Cotações de {stamp} (horário de Brasília), com o pregão em andamento"
+    elif price_day and price_day < today_iso():
+        quotes = (f"- Cotações carregadas em {stamp} (horário de Brasília), antes do pregão de hoje: os preços são "
+                  f"do fechamento de {fmt_date(price_day)}")
+    else:
+        quotes = f"- Cotações de {stamp} (horário de Brasília), do fechamento do pregão"
 
     lines = [ROLE, "", TASK, "", DECIDE, "", EVENTS, "", METHOD, ""]
     lines += [
         f"# Minha carteira: {portfolio['name']}",
         "",
-        f"- Cotações de {stamp} (horário de Brasília)" + (", com o pregão em andamento" if analysis.get("live") else ""),
+        quotes,
         f"- **Patrimônio**: {fmt_brl(total)} · investido líquido {fmt_brl(k['invested'])}",
         f"- **Lucro total**: {fmt_brl(k['profit'])} ({_pct(k['profitPct'])} sobre o investido) = valorização não "
-        f"realizada {fmt_brl(k['unrealized'])} + lucro realizado {fmt_brl(k['realized'])} + proventos {fmt_brl(k['dividendsTotal'])}",
+        f"realizada {fmt_brl(k['unrealized'])} + lucro realizado {fmt_brl(k['realized'])}"
+        + (f" (vendas de ativos {fmt_brl(k['realized'] - k['realizedFixed'])} e renda fixa resgatada por inteiro "
+           f"{fmt_brl(k['realizedFixed'])})" if k.get("closedFixed") else "")
+        + f" + proventos {fmt_brl(k['dividendsTotal'])}",
     ]
     if k.get("day"):
-        lines.append(f"- Último pregão ({fmt_date(k['day']['date'])}): {fmt_brl(k['day']['value'])} ({_pct(k['day']['pct'], 2)})")
+        label = "Hoje, até agora" if analysis.get("live") else "Último pregão"
+        lines.append(f"- {label} ({fmt_date(k['day']['date'])}): {fmt_brl(k['day']['value'])} ({_pct(k['day']['pct'], 2)}; "
+                     "variação dos preços mais os proventos com data-ex no dia)")
     since, last12 = k.get("sinceStart"), k.get("last12")
     for label, w in (("Desde o início", since), ("Últimos 12 meses", last12 if last12 != since else None)):
         if w:
-            lines.append(f"- **{label}** (desde {fmt_date(w['from'])}): carteira {_pct(w['portfolio'])} · "
+            lines.append(f"- **{label}** (desde {fmt_date(w['from'])}"
+                         + (", até agora, com o pregão em andamento" if analysis.get("live") else "")
+                         + f"): carteira {_pct(w['portfolio'])} · "
                          f"CDI {_pct(w['cdi'])} · BOVA11 {_pct(w['bova'])}")
     open_ = analysis["open"]
     if open_ and total:
@@ -388,7 +460,9 @@ def build(portfolio, analysis, settings, received, receivable=()):
         if len(top) > 3:
             concentration += f"; as três maiores somam {fmt_num(add_up(h['weight'] for h in top[:3]), 1)}%"
         lines.append(concentration)
-    lines.append(f"- {len(open_)} ativo(s) em carteira e {len(analysis['fixed'])} título(s) de renda fixa")
+    lines.append(f"- {len(open_)} ativo(s) em carteira e {len(analysis['fixed'])} título(s) de renda fixa"
+                 + (f" (mais {k['closedFixed']} resgatado(s) por inteiro, que só entram no lucro realizado)"
+                    if k.get("closedFixed") else ""))
     if (tax := tax_alert.prompt_line(portfolio, analysis["open"])):
         lines.append(tax)
     if analysis.get("failed"):
@@ -402,6 +476,8 @@ def build(portfolio, analysis, settings, received, receivable=()):
             continue
         lines.append(f"| {a['cls']} | {fmt_brl(a['value'])} | {fmt_num(a['pct'], 1)}% | {fmt_num(a['target'], 1)}% | "
                      f"{_pct(a['diff'])} ({'falta' if a['toTarget'] > 0 else 'sobra'} {fmt_brl(abs(a['toTarget']))}) |")
+    if (zero := pf.zero_target_text(portfolio)):
+        lines.append(f"\nAtenção: {zero}")
     if pf.targets_off(analysis["targetSum"]):
         lines.append(f"\nAs metas somam {fmt_num(analysis['targetSum'], 1)}%, não 100%.")
     lines.append("")
@@ -416,9 +492,10 @@ def build(portfolio, analysis, settings, received, receivable=()):
 
     lines += ["# Posições (da maior para a menor)", ""]
     for p in open_:
-        lines += _position(p, names.get(p["ticker"]) or {}, ranked, rule_for(p["ticker"], p["market"]), txs)
+        lines += _position(p, names.get(p["ticker"]) or {}, ranked, rule_for(p["ticker"], p["market"]), txs, clones,
+                           analysis["dividends"])
 
-    lines += _screener_section(portfolio, rankings, settings)
+    lines += _screener_section(portfolio, rankings, settings, clones, _scan_day())
 
     if analysis["fixed"]:
         lines += ["# Renda fixa", ""]
@@ -439,18 +516,29 @@ def build(portfolio, analysis, settings, received, receivable=()):
         detail = ", ".join(f"{_asset_label(t, names)} {fmt_brl(v)}" for t, v in received.get("pendingTotals", ()))
         lines.append(f"- Com data-com já passada e ainda não pagos: {fmt_brl(received['pendingTotal'])}"
                      + (f" ({detail})" if detail else "") + " (já contam no lucro e na rentabilidade)")
+        # O lucro usa o valor do Yahoo pela data-ex; a lista "A receber" usa o anunciado na B3.
+        b3 = {}
+        for r in receivable:
+            if r["confirmed"] and r not in received.get("unbooked", ()):
+                b3[r["ticker"]] = b3.get(r["ticker"], 0) + r["total"]
+        diffs = [f"{t}: {fmt_brl(v)} no lucro e {fmt_brl(b3[t])} na B3" for t, v in received.get("pendingTotals", ())
+                 if t in b3 and fmt_brl(v) != fmt_brl(b3[t])]
+        if diffs:
+            lines.append("- O lucro usa o valor por ação do Yahoo (na data-ex) e a lista abaixo o anunciado na B3, que "
+                         "vale para o pagamento; diferem em centavos (" + "; ".join(diffs) + ")")
     by_ticker = received["totals"][:5]
     if by_ticker:
         lines.append("- Maiores pagadores desde o início: "
                      + " · ".join(f"{_asset_label(t, names)} {fmt_brl(v)}" for t, v in by_ticker))
     if receivable:
         lines.append(f"- A receber, anunciados na B3 e ainda não pagos ({fmt_brl(add_up(r['total'] for r in receivable))} brutos):")
-        lines += [_receivable_line(r, names) for r in receivable]
+        lines += [_receivable_line(r, names, received.get("unbooked", ())) for r in receivable]
     lines.append("")
 
     bova = _bova(SETUP_MODE)
     lines += ["# Contexto de mercado", ""]
-    lines.append(bova or "- BOVA11 indisponível agora.")
+    lines.append(bova.replace("- BOVA11 (Ibovespa):", "- BOVA11 (Ibovespa), no último fechamento:") if bova
+                 else "- BOVA11 indisponível agora.")
     lines += ["", "# Limitações dos dados", "",
               "- Cotações diárias do Yahoo Finance; podem ter atraso de alguns minutos.",
               "- A renda fixa vale o último valor que eu lancei; entre atualizações, não rende.",

@@ -512,6 +512,18 @@ def split_pending_dividends(dividends, rows):
         (pending if unpaid else received).append(d)
     return received, pending
 
+
+def unbooked_receivables(dividends, rows):
+    """Os confirmados de rows (data-com já passada) sem provento do Yahoo correspondente em
+    dividends: ainda fora do lucro, porque o Yahoo só registra o provento na data-ex, e antes do
+    pregão dela a cotação usada ainda tem o direito (o preço não caiu). Entram sozinhos depois."""
+    booked = {}
+    for d in dividends:
+        booked.setdefault(d["ticker"], []).append(date.fromisoformat(d["comDate"]))
+    return [r for r in rows if r["confirmed"]
+            and not any(abs((date.fromisoformat(r["comDate"]) - other).days) <= PENDING_MATCH_DAYS
+                        for other in booked.get(r["ticker"], ()))]
+
 # endregion
 
 
@@ -585,14 +597,15 @@ def partial_to_sell(lots, market, strategy=DEFAULT_STRATEGY):
     """Quantidade a vender pela saída parcial (lotes que atingiram o alvo e ainda não venderam a
     parte deles). Na B3 a quantidade é inteira, arredondada para baixo: com 1 cota, 50% dá 0 e não
     há venda parcial (quantity 0; a posição sai inteira na reversão). due: os lotes que atingiram
-    o alvo; held: quantidade aberta. None quando nenhuma compra tem parte a vender."""
+    o alvo; held: quantidade aberta; dueHeld: quantidade aberta só dessas compras. None quando
+    nenhuma compra tem parte a vender."""
     due = [lot for lot in lots if lot["pending"] > EPS]
     exact = add_up(lot["pending"] for lot in due)
     if exact <= EPS:
         return None
     quantity = math.floor(exact + EPS) if market == "b3" else exact
     return {"quantity": quantity, "exact": exact, "held": add_up(lot["remaining"] for lot in lots),
-            "rounded": abs(quantity - exact) > EPS, "lots": len(due),
+            "dueHeld": add_up(lot["remaining"] for lot in due), "rounded": abs(quantity - exact) > EPS, "lots": len(due),
             "due": [{"date": lot["date"], "price": lot["price"], "hitDate": lot["hitDate"], "dueDate": lot["dueDate"]}
                     for lot in due],
             "timing": partial_timing(strategy),
@@ -691,15 +704,17 @@ def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="
         if strength and partial_timing(strategy) != "forca":
             reason += "\n" + _strength_text(strength, money)
         return signal("partial", reason, f"VENDER {fmt_pct_value(partial_fraction(strategy))}%", strength)
-    def no_partial(held):
-        return [f"Mas {fmt_pct_value(partial_fraction(strategy))}% de {fmt_qty(held)} "
+    def no_partial(held, lots_count):
+        """held: quantidade aberta das compras que atingiram o alvo (não a posição inteira)."""
+        where = "nessa compra" if lots_count == 1 else "nessas compras"
+        return [f"Mas, {where}, {fmt_pct_value(partial_fraction(strategy))}% de {fmt_qty(held)} "
                 f"{'cota' if held == 1 else 'cotas'} não chega a 1 cota inteira (na B3 não há fração de cota), "
                 "então não há venda parcial.",
                 "A posição sai inteira na reversão de tendência."]
 
     too_small = []
     if partial:  # atingiu o alvo, mas a parte a vender não chega a 1 cota inteira (B3)
-        too_small = [f"{_hit_text(partial, strategy, money)}.", *no_partial(partial["held"])]
+        too_small = [f"{_hit_text(partial, strategy, money)}.", *no_partial(partial["dueHeld"], partial["lots"])]
     if ind is None:
         return signal("hold", ["Histórico curto para as médias (menos de 200 pregões).", *too_small]) if partial else None
 
@@ -744,11 +759,11 @@ def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="
             lot = min(armed, key=lambda lot: lot["hitDate"])
             more = f" (e mais {len(armed) - 1} compra(s))" if len(armed) > 1 else ""
             st = trend_strength(ind, i)
-            now = f" Hoje: {_strength_numbers(st, money)}." if st else ""
+            now = f" No fechamento de {day}: {_strength_numbers(st, money)}." if st else ""
             hit = (f"A compra de {fmt_date(lot['date'])} a {money(lot['price'])} atingiu "
                    f"+{fmt_pct_value(strategy['target'])}% em {fmt_date(lot['hitDate'])}{more}.")
             if whole and math.floor(add_up(lot["waiting"] for lot in armed) + EPS) < 1:
-                reason += [hit, *no_partial(add_up(lot["remaining"] for lot in lots))]
+                reason += [hit, *no_partial(add_up(lot["remaining"] for lot in armed), len(armed))]
             else:
                 reason.append(f"{hit} A venda de {fmt_pct_value(partial_fraction(strategy))}% fica para a abertura "
                               f"seguinte ao primeiro fechamento em que a alta perder força ({WEAK_TEXT}), com o preço "
@@ -1713,7 +1728,8 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, str
     total = add_up(p["value"] for p in open_) + add_up(f["value"] for f in fixed)
     invested = add_up(p["bought"] - p["soldProceeds"] for p in positions) + add_up(f["invested"] for f in titles)
     dividends_sum = add_up(d["total"] for d in dividends)
-    realized = add_up(p["realized"] for p in positions) + add_up(f["profit"] for f in closed)
+    realized_fixed = add_up(f["profit"] for f in closed)  # títulos resgatados por inteiro
+    realized = add_up(p["realized"] for p in positions) + realized_fixed
     unrealized = add_up(p["value"] - p["cost"] for p in open_) + add_up(f["value"] - f["invested"] for f in fixed)
     profit = total - invested + dividends_sum  # = valorização + proventos + lucro realizado
     for h in open_ + fixed:
@@ -1736,7 +1752,8 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, str
         "hasForeign": any(p["market"] != "b3" for p in positions),
         "kpis": {"total": total, "invested": invested, "profit": profit,
                  "profitPct": profit / invested * 100 if invested > 0 else None, "dividendsTotal": dividends_sum,
-                 "realized": realized, "unrealized": unrealized, "day": day, "sinceStart": since_start,
+                 "realized": realized, "realizedFixed": realized_fixed,
+                 "closedFixed": len(closed), "unrealized": unrealized, "day": day, "sinceStart": since_start,
                  "last12": last12},
     }
 
@@ -1867,6 +1884,30 @@ def class_members(portfolio, name):
     """Ativos e títulos que impedem a remoção de uma classe (é preciso movê-los antes)."""
     return ([t for t, a in (portfolio.get("assets") or {}).items() if a.get("class") == name]
             + [f["name"] for f in portfolio.get("fixedIncome") or [] if f.get("class") == name])
+
+
+def held_members(portfolio, name, as_of=None):
+    """Ativos e títulos da classe que estão na carteira hoje (ativo com quantidade, título com valor);
+    os vendidos ou resgatados por inteiro ficam de fora (class_members inclui todos)."""
+    as_of = as_of or today_iso()
+    positions = build_positions(portfolio.get("transactions") or [])
+    return ([t for t, a in (portfolio.get("assets") or {}).items()
+             if a.get("class") == name and (positions.get(t) or {}).get("quantity", 0) > EPS]
+            + [f["name"] for f in portfolio.get("fixedIncome") or []
+               if f.get("class") == name and fixed_income_value_at(f.get("entries") or [], as_of) > 0])
+
+
+def zero_target_text(portfolio, as_of=None):
+    """Aviso das classes com meta 0% que têm ativos ou títulos na carteira ("" sem nenhuma): o
+    aporte não manda nada para elas e a análise as trata como sobra, o que costuma ser meta esquecida."""
+    names = [c["name"] for c in portfolio.get("classes") or []
+             if not (c.get("target") or 0) > 0 and held_members(portfolio, c["name"], as_of)]
+    if not names:
+        return ""
+    which = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " e " + names[-1]
+    return (f"{which} {'tem' if len(names) == 1 else 'têm'} ativos na carteira, mas meta 0%: o aporte não "
+            f"manda nada para {'ela' if len(names) == 1 else 'elas'} e tudo o que há nela conta como acima da meta. "
+            "Confira se a meta não ficou esquecida.")
 
 
 def net_flows(portfolio):

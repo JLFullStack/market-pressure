@@ -33,23 +33,29 @@ function renderClassConfig(st) {
     warn.style.color = off ? 'var(--warning)' : 'var(--text-muted)';
     warn.innerText = off ? `As metas somam ${fmtNum(st.targetSum)}%, não 100%. Ajuste os valores para que "para atingir a meta" e o aporte façam sentido.`
         : 'A meta é salva na carteira ao editar.';
+    if (st?.zeroTargets) {
+        warn.style.color = 'var(--warning)';
+        warn.innerText += ' ' + st.zeroTargets;
+    }
 }
 
 // Configurações: rosca das metas das classes (a soma, que deve dar 100%, no meio).
 function renderTargetsDonut(st) {
     const classes = (st?.classes || []).filter(c => c.target > 0);
+    const rest = st?.targetsRest > 0.005 ? st.targetsRest : 0;   // fatia cinza até 100%
     $('targetsTotal').innerText = st ? `${fmtNum(st.targetSum)}%` : '—';
     $('targetsTotal').className = `num ${st?.targetsOff ? 'warn-text' : ''}`;
     if (typeof Chart === 'undefined') return;
     whenVisible('targetsDonut', () => {
         state.targetsChart?.destroy();
         state.targetsChart = null;
-        if (!classes.length) return;
+        if (!classes.length && !rest) return;
         state.targetsChart = new Chart($('targetsDonut'), {
             type: 'doughnut',
             data: {
-                labels: classes.map(c => c.name),
-                datasets: [{ data: classes.map(c => c.target), backgroundColor: classes.map((c, k) => classColor(c.name, k)),
+                labels: [...classes.map(c => c.name), ...(rest ? ['Sem meta'] : [])],
+                datasets: [{ data: [...classes.map(c => c.target), ...(rest ? [rest] : [])],
+                             backgroundColor: [...classes.map((c, k) => classColor(c.name, k)), ...(rest ? [cssVar('--border-strong')] : [])],
                              borderColor: cssVar('--panel-bg'), borderWidth: 3, hoverOffset: 8 }]
             },
             options: {

@@ -300,6 +300,7 @@ function renderAllocation(a) {
             <td class="r nowrap"><strong>${fmtNum(a.targetSum)}%</strong></td><td colspan="3"></td></tr>`;
     revealItems($('allocationViewBody'));
     $('allocationNote').innerHTML = (a.targetsOff ? `<span class="warn-text">As metas somam ${fmtNum(a.targetSum)}%, não 100%.</span> ` : '')
+        + (a.zeroTargets ? `<span class="warn-text">${escapeHTML(a.zeroTargets)}</span> ` : '')
         + 'Barra: preenchimento = % atual; traço = % meta.';
     renderAllocationDonut(a);
 }
