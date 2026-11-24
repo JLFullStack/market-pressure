@@ -220,7 +220,9 @@ class ServerTest(DatabaseTestCase):
         self.assertAlmostEqual(data["received"]["pendingTotal"], 0.7)
         self.assertAlmostEqual(data["total"], 0.7)                           # só em "a receber"
         self.assertEqual(taxes["declaration"]["income"], [])
-        self.assertIn("ainda não pagos: R$ 0,70", text)
+        self.assertIn("ainda não pagos: R$ 0,70 (PETR4", text)
+        self.assertIn("R$ 0,70 a receber (PETR4 R$ 0,70)", data["received"]["pendingNote"])
+        self.assertIn(f"Dividendo de R$ 0,70 (2 × R$ 0,35), data-com {core.fmt_date(com)}, pagamento 01/01/2099, confirmado", text)
 
     def test_contribution_route(self):
         pid = self.request("POST", "/api/carteira/acao", {"action": "criar_carteira", "name": "Aporte"})[1]["id"]

@@ -295,10 +295,16 @@ def received_dividends(analysis, rows, failed=()):
         by_ticker[d["ticker"]] = by_ticker.get(d["ticker"], 0) + d["total"]
     months = dividends_by_month(received, today_iso())
     pending_total = add_up(d["total"] for d in pending)
+    pending_by = {}
+    for d in pending:
+        pending_by[d["ticker"]] = pending_by.get(d["ticker"], 0) + d["total"]
+    pending_totals = sorted(pending_by.items(), key=lambda kv: -kv[1])
+    pending_list = ", ".join(f"{t} {fmt_brl(v)}" for t, v in pending_totals)
     return {"dividends": received, "totals": sorted(by_ticker.items(), key=lambda kv: -kv[1]),
             "total": add_up(d["total"] for d in received), "months": months, "year": add_up(m["total"] for m in months),
-            "pendingTotal": pending_total,
-            "pendingNote": f"{fmt_brl(pending_total)} a receber já contam no lucro e na rentabilidade" if pending else "",
+            "pendingTotal": pending_total, "pendingTotals": pending_totals,
+            "pendingNote": f"{fmt_brl(pending_total)} a receber ({pending_list}) já contam no lucro e na rentabilidade"
+                           if pending else "",
             "warning": "Sem a data de pagamento desses ativos agora: os proventos deles contam como recebidos pela data-ex."
                        if failed else ""}
 

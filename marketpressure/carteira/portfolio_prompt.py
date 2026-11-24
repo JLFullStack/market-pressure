@@ -335,10 +335,26 @@ def _position(p, info, ranked, rule, transactions):
 
 
 # region Montagem do texto
-def build(portfolio, analysis, settings, received):
+def _asset_label(ticker, names):
+    """"GOAU4 (METALURGICA GERDAU S.A.)", ou só o código sem nome conhecido."""
+    name = (names.get(ticker) or {}).get("name")
+    return f"{ticker} ({name})" if name and name != ticker else ticker
+
+
+def _receivable_line(r, names):
+    """Um provento a receber (portfolio.dividends_to_receive) em uma linha."""
+    pay = fmt_date(r["paymentDate"]) if r["paymentDate"] else "a definir"
+    status = "confirmado" if r["confirmed"] else "previsto (só se eu mantiver até a data-com)"
+    return (f"  - {_asset_label(r['ticker'], names)}: {r['type']} de {fmt_brl(r['total'])} "
+            f"({fmt_qty(r['quantity'])} × {fmt_brl(r['amount'])}), data-com {fmt_date(r['comDate'])}, "
+            f"pagamento {pay}, {status}")
+
+
+def build(portfolio, analysis, settings, received, receivable=()):
     """Texto da análise da carteira em Markdown. analysis: portfolio_service.full_analysis;
     settings: strategy.load (a regra de venda de cada classe); received: os proventos já pagos
-    (portfolio_service.received_dividends)."""
+    (portfolio_service.received_dividends); receivable: as linhas de proventos a receber
+    (portfolio_service.receivables()["rows"])."""
     k = analysis["kpis"]
     total = k["total"]
     names = _names()
@@ -420,11 +436,16 @@ def build(portfolio, analysis, settings, received):
               f"{fmt_brl(add_up(d['total'] for d in last_year))}"
               + (f" ({fmt_num(add_up(d['total'] for d in last_year) / total * 100, 2)}% do patrimônio atual)" if total else "")]
     if received["pendingTotal"]:
-        lines.append(f"- Com data-com já passada e ainda não pagos: {fmt_brl(received['pendingTotal'])} "
-                     "(já contam no lucro e na rentabilidade)")
+        detail = ", ".join(f"{_asset_label(t, names)} {fmt_brl(v)}" for t, v in received.get("pendingTotals", ()))
+        lines.append(f"- Com data-com já passada e ainda não pagos: {fmt_brl(received['pendingTotal'])}"
+                     + (f" ({detail})" if detail else "") + " (já contam no lucro e na rentabilidade)")
     by_ticker = received["totals"][:5]
     if by_ticker:
-        lines.append("- Maiores pagadores desde o início: " + " · ".join(f"{t} {fmt_brl(v)}" for t, v in by_ticker))
+        lines.append("- Maiores pagadores desde o início: "
+                     + " · ".join(f"{_asset_label(t, names)} {fmt_brl(v)}" for t, v in by_ticker))
+    if receivable:
+        lines.append(f"- A receber, anunciados na B3 e ainda não pagos ({fmt_brl(add_up(r['total'] for r in receivable))} brutos):")
+        lines += [_receivable_line(r, names) for r in receivable]
     lines.append("")
 
     bova = _bova(SETUP_MODE)
@@ -441,6 +462,7 @@ def build(portfolio, analysis, settings, received):
 def prompt(portfolio):
     """{name, text} para a rota: a análise (a última, se a carteira não mudou) e o texto."""
     analysis = svc.full_analysis(portfolio, reuse=True)
-    return {"name": portfolio["name"], "text": build(portfolio, analysis, st.load(), svc.receivables(portfolio)["received"])}
+    rec = svc.receivables(portfolio)
+    return {"name": portfolio["name"], "text": build(portfolio, analysis, st.load(), rec["received"], rec["rows"])}
 
 # endregion
