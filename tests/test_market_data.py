@@ -6,6 +6,7 @@ com os 10 anos."""
 import unittest
 import json
 import urllib.parse
+from datetime import date, timedelta
 from unittest import mock
 
 from marketpressure import browser
@@ -234,3 +235,112 @@ class SplitAdjustTest(unittest.TestCase):
         self.assertEqual(market_data.adjust_splits(crash, [], "AMER3")[0], crash)
         back = self.series([40.0, 40.2, 20.1, 40.3, 40.1, 40.0, 40.2, 40.4])   # metade num dia e volta
         self.assertEqual(market_data.adjust_splits(back, [], "XXXX3")[0], back)
+
+
+class ClosedSessionsTest(DatabaseTestCase):
+    """market_data.closed_sessions(): quem só usa pregões fechados (os backtests) não pede o candle
+    do pregão em andamento quando o salvo já está em dia."""
+
+    def setUp(self):
+        super().setUp()
+        market_data.raw_history = self._raw_history   # o real, com o Yahoo falso abaixo
+        market_data._cache.clear()
+        self.addCleanup(market_data._cache.clear)
+
+    def test_saved_history_is_enough_during_the_session(self):
+        data = series(1001)
+        now = at(data[-1], 15)   # pregão aberto, salvo até o pregão anterior
+        yahoo = FakeYahoo(data, at(data[-1], 11))
+        with mock.patch.object(market_data, "http_json", yahoo):
+            market_data.load_history("PETR4", now=at(data[-1], 11))
+        yahoo.ranges.clear()
+        with mock.patch.object(market_data, "http_json", yahoo), mock.patch("time.time", return_value=now):
+            self.assertEqual(market_data.update_range(market_data.stored_history("PETR4", "b3"), "b3", now, live=False), None)
+            with market_data.closed_sessions():
+                closed = market_data.raw_history("PETR4")
+            self.assertEqual(yahoo.ranges, [])            # nenhum pedido
+            self.assertEqual(len(closed["candles"]), 1000)  # sem o candle ao vivo
+            live = market_data.raw_history("PETR4")       # a Carteira continua com o candle ao vivo
+            self.assertEqual(yahoo.ranges, ["5d"])
+            self.assertEqual(len(live["candles"]), 1001)
+            with market_data.closed_sessions():           # com o completo no cache, ele serve
+                self.assertIs(market_data.raw_history("PETR4"), live)
+            self.assertEqual(yahoo.ranges, ["5d"])
+
+    def test_context_reaches_the_threads(self):
+        seen = []
+        with market_data.closed_sessions():
+            for _item, result, _err in runtime.run_all(lambda x: market_data._closed_only.get(), range(4), 2):
+                seen.append(result)
+        self.assertEqual(seen, [True] * 4)
+        self.assertFalse(market_data._closed_only.get())
+
+
+class FakeBcb:
+    """Responde a série 12 do Banco Central com uma taxa por dia útil entre as datas pedidas."""
+
+    def __init__(self, rate=0.04, fail=False):
+        self.calls, self.rate, self.fail = [], rate, fail
+
+    def __call__(self, url):
+        if self.fail:
+            raise market_data.UpstreamError("BCB fora do ar")
+        q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+        d1 = date(*reversed([int(x) for x in q["dataInicial"][0].split("/")]))
+        d2 = date(*reversed([int(x) for x in q["dataFinal"][0].split("/")]))
+        self.calls.append((d1.isoformat(), d2.isoformat()))
+        out, d = [], d1
+        while d <= d2:
+            if d.weekday() < 5:
+                out.append({"data": d.strftime("%d/%m/%Y"), "valor": str(self.rate)})
+            d += timedelta(days=1)
+        return out
+
+
+class CdiTest(DatabaseTestCase):
+    TODAY = date(2026, 11, 26)   # quinta-feira
+
+    def load(self, start, bcb, today=None):
+        with mock.patch.object(market_data, "http_json", bcb):
+            return market_data.load_cdi(start, today or self.TODAY)["rates"]
+
+    def test_first_load_fetches_and_saves(self):
+        bcb = FakeBcb()
+        rates = self.load(date(2026, 1, 1), bcb)
+        self.assertEqual(bcb.calls, [("2026-01-01", "2026-11-26")])
+        self.assertEqual(rates[0]["date"], "2026-01-01")
+        self.assertEqual(len(database.read_table("cdi")), len(rates))
+
+    def test_up_to_date_fetches_nothing(self):
+        self.load(date(2026, 1, 5), FakeBcb())             # segunda-feira
+        bcb = FakeBcb()
+        rates = self.load(date(2026, 3, 1), bcb)          # início dentro do salvo
+        self.assertEqual(bcb.calls, [])
+        self.assertEqual(rates[0]["date"], "2026-03-02")   # 01/03 é domingo
+        self.assertEqual(self.load(date(2026, 1, 3), bcb)[0]["date"], "2026-01-05")  # só o fim de semana antes
+        self.assertEqual(bcb.calls, [])
+
+    def test_only_the_missing_parts_are_fetched(self):
+        self.load(date(2026, 1, 1), FakeBcb(), today=date(2026, 11, 10))
+        bcb = FakeBcb(rate=0.05)
+        rates = self.load(date(2025, 6, 1), bcb)
+        self.assertEqual(bcb.calls, [("2025-06-01", "2025-12-31"), ("2026-11-03", "2026-11-26")])
+        by_day = {r["date"]: r["rate"] for r in rates}
+        self.assertEqual(by_day["2026-11-02"], 0.04)   # antes da sobreposição: o salvo
+        self.assertEqual(by_day["2026-11-05"], 0.05)   # sobreposição: o BCB corrige os últimos dias
+        self.assertEqual(rates[-1]["date"], "2026-11-26")
+        self.assertEqual(len(database.read_table("cdi")), len(rates))
+
+    def test_bcb_down_uses_the_saved_rates(self):
+        self.load(date(2026, 1, 1), FakeBcb(), today=date(2026, 11, 10))
+        rates = self.load(date(2026, 1, 1), FakeBcb(fail=True))
+        self.assertEqual(rates[-1]["date"], "2026-11-10")
+        with self.assertRaises(market_data.UpstreamError):   # sem nada salvo, a falha aparece
+            database.write_tables({"cdi": []})
+            self.load(date(2026, 1, 1), FakeBcb(fail=True))
+
+    def test_regular_user_does_not_save(self):
+        with mock.patch.object(runtime, "SHARED_WRITES", False):
+            self.load(date(2026, 1, 1), FakeBcb())
+        self.assertFalse(database.exists("cdi"))
+

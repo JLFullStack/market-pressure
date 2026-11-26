@@ -9,6 +9,7 @@ presença no ranking do Screener), renda fixa, proventos e a estratégia de vend
 
 import logging
 
+from ..comum import cruzamento as cz
 from ..comum import database as db
 from ..comum import market_data
 from ..screener import screener
@@ -129,6 +130,21 @@ A mistura de classes protege: 60% ações e 40% internacionais ganhou de 100% a�
 início testados.
 - A **pressão** sozinha (garrafa cheia) não antecipou compras melhores nos testes do app: ela vale \
 dentro do Score, junto com o histórico do ativo, não como motivo isolado.
+- **Previsão de cruzamento das médias** (seção própria, só nos ativos com fechamento abaixo da MM200 \
+e a MM50 ainda acima): é a chance histórica de a MM50 cruzar abaixo da MM200, a última condição da \
+reversão (o VENDER), e acerta: nos testes fora da amostra, 85–87% das previsões acima de 50% se \
+confirmaram. Mesmo assim, ela só avisa que a venda pode estar perto: não recomende vender antes do \
+VENDER por causa dela. Vender quando o cruzamento era provável rendeu 13–15% ao ano contra 16% da \
+regra (2017 a 2026, com IR e CDI) e perdeu em quase todos os anos de início: cada perda ficou menor, \
+mas houve mais compras perdedoras e os vencedores foram cortados. Esperar mais para vender depois do \
+VENDER também não ajudou (confirmar por 2–5 pregões, exigir distância entre as médias, MM200 caindo \
+ou margem abaixo da MM200 renderam menos ou empataram, na maioria dos anos de início e em menos de \
+40% dos ativos). A previsão do cruzamento para cima (recompra) não passou na validação e o app não a \
+mostra.
+- **VENDER perto da MM200**: quando a reversão dispara com o fechamento até cerca de 3% abaixo da \
+MM200, o preço costuma voltar acima dela (75–80% das vezes, nos testes), mas 60 pregões depois \
+estava, em média, cerca de 2% abaixo do preço de venda. Não recomende manter uma posição com VENDER \
+só por ela estar perto da MM200.
 - A **Situação** de cada ativo é uma regra fixa do app, só um dado: confronte-a com o resto."""
 
 METHOD = """# Como o app calcula os números
@@ -383,6 +399,38 @@ def _position(p, info, ranked, rule, transactions, clones=None, dividends=()):
         lines += technical
     return lines + [""]
 
+def _crossing_section(open_, names):
+    """Ativos da carteira com o fechamento abaixo da MM200 e a MM50 ainda acima: a previsão do
+    cruzamento da MM50 abaixo da MM200 (cruzamento.forecast), nos pregões fechados, e o acerto do
+    modelo (validação e registro ao vivo). Vazio quando nenhum está nesse caso."""
+    rows = []
+    for p in open_:
+        if not p.get("hasQuote"):
+            continue
+        closed = pf.closed_for(_history(p["ticker"], p["market"]), p["market"])
+        if len(closed) < 221:
+            continue
+        i = len(closed) - 1
+        f = cz.forecast(compute_indicators(closed), i, day_of(closed[i]["date"]))
+        if f:
+            rows.append((p, f))
+    if not rows:
+        return []
+    lines = ["# Previsão de cruzamento das médias (ativos abaixo da MM200)", "",
+             "Ativos com o fechamento abaixo da MM200 e a MM50 ainda acima dela. A probabilidade é a frequência histórica "
+             "de a MM50 cruzar abaixo da MM200 (a última condição do VENDER) no prazo, pelo encontro projetado das médias "
+             f"no ritmo dos últimos {cz.PROJ_WINDOW} pregões. A data é aproximada (dias úteis, sem feriados). Só informa: "
+             "a venda continua sendo a da regra.", "",
+             "| Ativo | Fechamento | Preço vs. MM200 | Spread MM50/MM200 | Evento previsto | Prob. 10 / 20 / 40 pregões | Data estimada |",
+             "|---|---|---|---|---|---|---|"]
+    for p, f in rows:
+        probs = " / ".join(f"{fmt_num(f['probs'][str(h)], 0)}%" for h in cz.HORIZONS)
+        when = fmt_date(f["date"]) if f["date"] else "as médias não se aproximam"
+        lines.append(f"| {_asset_label(p['ticker'], names)} | {fmt_date(f['day'])} | {_pct(f['distance'])} | {_pct(f['spread'])} | "
+                     f"Cruza abaixo (risco de VENDER) | {probs} | {when} |")
+    lines += ["", cz.accuracy_text(cz.live_stats(cz.read_log())), ""]
+    return lines
+
 # endregion
 
 
@@ -494,6 +542,8 @@ def build(portfolio, analysis, settings, received, receivable=()):
     for p in open_:
         lines += _position(p, names.get(p["ticker"]) or {}, ranked, rule_for(p["ticker"], p["market"]), txs, clones,
                            analysis["dividends"])
+
+    lines += _crossing_section(open_, names)
 
     lines += _screener_section(portfolio, rankings, settings, clones, _scan_day())
 

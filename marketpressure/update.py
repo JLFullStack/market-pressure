@@ -19,6 +19,7 @@ Sai com código 1 se a varredura falhar ou não puder ser salva.
 import logging
 import os
 import sys
+from datetime import date, timedelta
 
 from .comum import config, runtime
 
@@ -38,6 +39,10 @@ def run():
             market_data.raw_history(ticker, market)
         except Exception:
             log.warning("não foi possível atualizar o histórico de %s", ticker, exc_info=True)
+    try:   # CDI salvo (tabela cdi) até o último dia publicado, desde o início dos históricos
+        market_data.cdi(date.today() - timedelta(days=market_data.HISTORY_DAYS))
+    except Exception:
+        log.warning("não foi possível atualizar o CDI", exc_info=True)
 
     def progress(done, total):
         if done == total or done % 25 == 0:

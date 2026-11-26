@@ -11,6 +11,7 @@ navegador: use_remote troca http_request por requisições ao site publicado, co
 serviço, e REMOTE faz o banco e as fontes externas irem pelo /db e pelo /proxy do Worker.
 """
 
+import contextvars
 import sys
 import urllib.error
 import urllib.request
@@ -36,8 +37,10 @@ def run_all(fn, items, workers=8):
             except Exception as err:
                 yield item, None, err
         return
+    # Cada tarefa roda numa cópia do contexto de quem chamou (contextvars), para que um
+    # market_data.closed_sessions() ativo valha também nas threads.
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [(item, pool.submit(fn, item)) for item in items]
+        futures = [(item, pool.submit(contextvars.copy_context().run, fn, item)) for item in items]
         for item, future in futures:
             try:
                 yield item, future.result(), None

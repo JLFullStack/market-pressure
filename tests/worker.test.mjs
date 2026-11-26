@@ -164,7 +164,7 @@ test("usuário comum lê as tabelas comuns, mas não grava", async () => {
     assert.equal((await put(admin, { scan: '[{"version":1}]' })).status, 200);
     const read = await call("GET", "/db?names=scan", alice);
     assert.deepEqual(await read.json(), { scan: [{ version: 1 }] });
-    for (const name of ["scan", "scan_analyses", "scan_failures", "universe", "history_b3_petr4", "history_novo"]) {
+    for (const name of ["scan", "scan_analyses", "scan_failures", "crossing_log", "universe", "history_b3_petr4", "history_novo"]) {
         assert.equal((await put(alice, { [name]: "[]" })).status, 403, name);
     }
     assert.equal(stored("scan"), '[{"version":1}]');

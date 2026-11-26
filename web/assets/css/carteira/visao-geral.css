@@ -124,6 +124,10 @@ tr.in .weight-bar i { animation: grow-x 0.9s var(--ease-out) backwards; animatio
 /* :not(#tipBox) dá a mesma força da regra da cascata acima, que senão venceria. */
 .chart-dialog[open] > .bt-chart.drawing:not(#tipBox) { animation: wipe-in 1.1s cubic-bezier(0.65, 0, 0.35, 1) backwards; }
 /* Alvos: chips âmbar que ligam e desligam a linha de cada alvo */
+/* Previsão do cruzamento da MM50 abaixo da MM200: rótulo e acerto do modelo, abaixo do gráfico */
+.crossing-note { display: flex; flex-direction: column; gap: 4px; margin: 12px 0 0; padding: 10px 12px;
+    border: 1px dashed var(--border-strong); border-radius: var(--radius); background: var(--panel-raised); }
+.crossing-label { color: var(--text-color); }
 .price-targets { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color); }
 .price-target-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 .price-target-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }

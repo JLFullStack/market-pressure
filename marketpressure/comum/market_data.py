@@ -16,6 +16,8 @@ históricos em paralelo no JavaScript e os entrega antes (prime), já que lá n�
 """
 
 import base64
+import contextvars
+import functools
 import http.cookiejar
 import json
 import logging
@@ -25,6 +27,7 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 
 from . import config, runtime
@@ -495,13 +498,14 @@ def legacy_history(stored: dict) -> bool:
     return LEGACY_HISTORY_DAYS - 10 <= span <= LEGACY_HISTORY_DAYS + 1
 
 
-def update_range(stored: dict | None, market: str, now: float) -> str | None:
-    """Range a pedir ao Yahoo agora (ver acima); None = o salvo basta."""
+def update_range(stored: dict | None, market: str, now: float, live: bool = True) -> str | None:
+    """Range a pedir ao Yahoo agora (ver acima); None = o salvo basta. live False: salvo em dia
+    basta mesmo com o pregão aberto (quem só usa pregões fechados não precisa do candle ao vivo)."""
     if not stored or legacy_history(stored):
         return FULL_RANGE
     last = stored["candles"][-1]["date"]
     if _day(last, market) >= last_closed_day(market, now):
-        return LIVE_RANGE if live_session(market, now) else None
+        return LIVE_RANGE if live and live_session(market, now) else None
     days = (now - last) / 86400 + HISTORY_OVERLAP_DAYS
     for range_, covered in HISTORY_RANGES:
         if days <= covered:
@@ -559,7 +563,7 @@ def _save_history(ticker, market, stored, hist, now):
         log.warning("não foi possível salvar o histórico de %s", ticker, exc_info=True)
 
 
-def load_history(ticker: str, market: str = "b3", now: float | None = None) -> dict:
+def load_history(ticker: str, market: str = "b3", now: float | None = None, live: bool = True) -> dict:
     """Candles diários de 10 anos do Yahoo Finance (OHLC sem ajuste por proventos) e proventos,
     a partir do histórico salvo no banco mais o que falta (ver acima).
 
@@ -572,10 +576,11 @@ def load_history(ticker: str, market: str = "b3", now: float | None = None) -> d
     adjustedClose; a carteira o usa só para a rentabilidade do BOVA11.
     dividends: [{"date": ts, "amount": valor por cota}], em ordem de data. A data do Yahoo
     é a data-ex (primeiro pregão sem direito); a data-com é o pregão anterior.
+    live False: com o salvo em dia, não pede o candle do pregão em andamento (update_range).
     """
     now = time.time() if now is None else now
     stored = stored_history(ticker, market, consume=True)
-    range_ = update_range(stored, market, now)
+    range_ = update_range(stored, market, now, live)
     if range_ is None:
         hist = stored
     else:
@@ -594,9 +599,42 @@ def load_history(ticker: str, market: str = "b3", now: float | None = None) -> d
     return {"ticker": ticker, **hist}
 
 
+_closed_only = contextvars.ContextVar("closed_only", default=False)
+
+
+@contextmanager
+def closed_sessions():
+    """Dentro do bloco, o histórico não pede ao Yahoo o candle do pregão em andamento quando o
+    salvo já chega ao último pregão fechado: para quem só usa pregões fechados (os backtests), o
+    que evita um pedido por ativo durante o pregão. Usa outra chave no cache em memória (o histórico
+    sem o candle ao vivo não pode servir à Carteira), mas aproveita o completo se já estiver nele.
+    Vale nas threads de runtime.run_all (contextvars)."""
+    token = _closed_only.set(True)
+    try:
+        yield
+    finally:
+        _closed_only.reset(token)
+
+
+def closed_only(fn):
+    """Decorador: fn roda dentro de closed_sessions()."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with closed_sessions():
+            return fn(*args, **kwargs)
+    return wrapper
+
+
 def raw_history(ticker: str, market: str = "b3") -> dict:
     # O mercado entra na chave: BTC (cripto) e um eventual BTC da B3 são ativos diferentes.
-    return cached(f"history:{market}:{ticker}", lambda: load_history(ticker, market))
+    key = f"history:{market}:{ticker}"
+    if _closed_only.get():
+        with _cache_lock:
+            hit = _cache.get(key)
+        if hit and time.time() - hit[0] < CACHE_TTL_SECONDS:
+            return hit[1]
+        return cached(f"history-closed:{market}:{ticker}", lambda: load_history(ticker, market, live=False))
+    return cached(key, lambda: load_history(ticker, market))
 
 # endregion
 
@@ -721,20 +759,88 @@ def history(ticker: str, market: str = "b3") -> dict:
 
 
 # region CDI
-def load_cdi(start: date) -> dict:
-    """Taxas diárias do CDI (% ao dia) desde start, em janelas de até 10 anos (limite do BCB)."""
+# O CDI fica salvo na tabela cdi (um trecho contínuo de dias, comum a todos na versão publicada,
+# como os históricos): cada consulta pede ao Banco Central só o que falta — o trecho antes do
+# primeiro dia salvo, se pedirem um início mais antigo, e o fim, a partir de CDI_OVERLAP_DAYS antes
+# do último dia salvo (o BCB pode corrigir os últimos dias). Com o salvo e o BCB fora do ar, vale o
+# salvo (com um aviso no log); só falha quando o trecho que falta não pode ser buscado.
+CDI_TABLE = "cdi"
+CDI_OVERLAP_DAYS = 7
+CDI_START_SLACK = 2   # dias úteis antes do primeiro salvo tratados como sem taxa (fins de semana e feriados)
+
+
+def fetch_cdi(start: date, end: date) -> list:
+    """Taxas diárias do CDI (% ao dia) de start a end no Banco Central (série SGS 12), em janelas
+    de até 10 anos (limite do BCB). UpstreamError se o BCB falhar."""
     rates: list[dict] = []
-    today = date.today()
-    while start <= today:
-        end = min(start + timedelta(days=CDI_MAX_WINDOW_DAYS - 1), today)
+    while start <= end:
+        stop = min(start + timedelta(days=CDI_MAX_WINDOW_DAYS - 1), end)
         query = urllib.parse.urlencode({"formato": "json", "dataInicial": start.strftime("%d/%m/%Y"),
-                                        "dataFinal": end.strftime("%d/%m/%Y")})
+                                        "dataFinal": stop.strftime("%d/%m/%Y")})
         rows = http_json(f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?{query}")
         for row in rows if isinstance(rows, list) else []:
             day = datetime.strptime(row["data"], "%d/%m/%Y").date()
             rates.append({"date": day.isoformat(), "rate": float(row["valor"])})
-        start = end + timedelta(days=1)
-    return {"rates": rates}
+        start = stop + timedelta(days=1)
+    return rates
+
+
+def _weekdays(start: date, end: date) -> int:
+    """Dias úteis (segunda a sexta) de start até o dia antes de end."""
+    return sum(1 for k in range((end - start).days) if (start + timedelta(days=k)).weekday() < 5)
+
+
+def _previous_weekday(day: date) -> date:
+    day -= timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day
+
+
+def stored_cdi() -> list:
+    """Taxas salvas na tabela cdi, em ordem de data (vazio sem a tabela ou se a leitura falhar)."""
+    try:
+        return sorted(({"date": r["date"], "rate": r["rate"]} for r in db.read_table(CDI_TABLE)
+                       if r.get("date") and r.get("rate") is not None), key=lambda r: r["date"])
+    except Exception:
+        log.warning("não foi possível ler o CDI salvo; buscando no Banco Central", exc_info=True)
+        return []
+
+
+def load_cdi(start: date, today: date | None = None) -> dict:
+    """Taxas diárias do CDI (% ao dia) desde start: o salvo mais o que falta (ver acima)."""
+    today = date.today() if today is None else today
+    stored = stored_cdi()
+    rates = stored
+    if not stored:
+        rates = fetch_cdi(start, today)
+    else:
+        first, last = date.fromisoformat(stored[0]["date"]), date.fromisoformat(stored[-1]["date"])
+        if start < first and _weekdays(start, first) > CDI_START_SLACK:
+            rates = [r for r in fetch_cdi(start, first - timedelta(days=1)) if r["date"] < stored[0]["date"]] + rates
+        if last < _previous_weekday(today):
+            since = last - timedelta(days=CDI_OVERLAP_DAYS)
+            try:
+                fresh = fetch_cdi(since, today)
+            except UpstreamError as err:
+                log.warning("CDI do Banco Central indisponível (%s); usando o salvo, até %s", err, last.isoformat())
+                fresh = []
+            if fresh:
+                cut = fresh[0]["date"]
+                rates = [r for r in rates if r["date"] < cut] + fresh
+    if rates != stored:
+        _save_cdi(rates)
+    return {"rates": [r for r in rates if r["date"] >= start.isoformat()]}
+
+
+def _save_cdi(rates):
+    """Grava o CDI (só quem pode gravar o que é comum, como os históricos)."""
+    if not rates or not runtime.SHARED_WRITES:
+        return
+    try:
+        db.write_tables({CDI_TABLE: rates})
+    except Exception:
+        log.warning("não foi possível salvar o CDI", exc_info=True)
 
 
 def cdi(start: date) -> dict:

@@ -498,6 +498,7 @@ async function openAssetChart(ticker) {
     $('assetChartAvatar').textContent = ticker.slice(0, 2).toUpperCase();
     $('assetChartLegend').innerHTML = '';
     $('assetTargets').hidden = true;
+    $('assetCrossing').hidden = true;
     $('assetChartMsg').innerText = `Carregando ${ticker}...`;
     if (!dlg.open) dlg.showModal();
     // A caixa de ajuda flutuante precisa estar dentro do card (camada de cima do diálogo).
@@ -525,12 +526,17 @@ async function openAssetChart(ticker) {
         `<span class="chip"><strong>${data.transactions}</strong> lançamento(s) · <strong>${data.openLots}</strong> compra(s) aberta(s)</span>`,
         `<span class="chip">${escapeHTML(rule)}</span>`].join('')}</span>`;
     renderAssetStats(data);
+    const projected = data.crossing?.projection?.length > 0;
     $('assetChartLegend').innerHTML = priceLegend([[COLORS.buy, 'C = compra'], [COLORS.exit, 'V = venda'],
-        ...(data.targets.length ? [[COLORS.target, 'Alvo da venda parcial']] : [])]);
+        ...(data.targets.length ? [[COLORS.target, 'Alvo da venda parcial']] : []),
+        ...(projected ? [[COLORS.mm50, 'Médias projetadas (tracejado)']] : [])]);
     $('assetChartMsg').innerText = data.note || '';
     state.assetPrice = priceChart($('assetChartBox'), data);
     showPriceType(state.assetPrice, data.markers, state.chartType);
-    if (data.range) state.assetPrice.chart.timeScale().setVisibleRange(data.range);
+    drawCrossing(data);
+    // Com a projeção das médias, o zoom inicial vai até o encontro projetado.
+    const range = data.range && projected ? { ...data.range, to: data.crossing.projection.at(-1).time } : data.range;
+    if (range) state.assetPrice.chart.timeScale().setVisibleRange(range);
     else state.assetPrice.chart.timeScale().fitContent();
     drawTargets();
     keepTipsWithText($('assetTargets'));
@@ -559,6 +565,23 @@ function renderAssetStats(data) {
         <span class="dlg-stat-badge">${signalBadge(p.status, p.statusReason, STATUS_BADGE[p.statusKey] || 'badge-low')}</span></div>`);
     $('assetChartStats').innerHTML = cards.join('');
     $('assetChartStats').querySelectorAll('[data-count]').forEach(countUp);
+}
+
+// Previsão do cruzamento da MM50 abaixo da MM200 (o servidor só a manda com o fechamento abaixo
+// da MM200 e a MM50 ainda acima): as duas médias projetadas, tracejadas, até o encontro, e o rótulo
+// com a probabilidade, o prazo e o acerto do modelo. Tudo vem pronto do Python.
+function drawCrossing(d) {
+    const c = d.crossing;
+    $('assetCrossing').hidden = !c;
+    if (!c) return;
+    for (const k of ['mm50', 'mm200']) {
+        if (!c.projection.length) break;
+        const s = state.assetPrice.chart.addLineSeries({ color: hexAlpha(COLORS[k], 0.85), lineWidth: k === 'mm200' ? 2 : 1,
+            lineStyle: LightweightCharts.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+        s.setData(c.projection.map(p => ({ time: p.time, value: p[k] })));
+    }
+    $('assetCrossing').innerHTML = `<span class="crossing-label"><strong>${escapeHTML(c.label)}</strong>${c.date ? ` · encontro perto de ${fmtDate(c.date)}` : ''}
+        ${tip(c.text)}</span><span class="small muted">${escapeHTML(c.accuracy || '')}</span>`;
 }
 
 // O alvo mostrado de início ("Próximo"): o mais próximo ainda não atingido, escolhido no servidor.

@@ -106,6 +106,11 @@ altas grandes, que pagam as perdas, e quedas em gap passam por qualquer stop. A 
 na reversão de tendência, da diversificação e do tamanho de cada compra. Não sugira stop curto; o preço \
 "em que a tese deixa de valer" é um ponto para repensar, não uma ordem de stop. Se o risco for alto, \
 prefira posição menor ou EVITAR.
+- **Plano de saída**: a venda do restante é a reversão de tendência do app; não proponha outra saída. \
+Nos testes de novembro de 2026, sair antes dela (ao perder a MM200, ou quando o cruzamento da MM50 \
+abaixo da MM200 já era provável) deixou cada perda um pouco menor, mas criou mais perdas e cortou \
+vencedores: rendeu 10–15% ao ano contra 16% da regra. Esperar mais depois dela (confirmar por alguns \
+pregões, exigir distância entre as médias) também não ajudou.
 - **Ativos internacionais (BDRs e ETFs de ações do exterior)**: nos mesmos testes, até os sinais que o \
 analista mandou evitar renderam em média cerca de +10% por compra. Pense duas vezes antes de vetar um \
 internacional; o câmbio sozinho não é motivo.

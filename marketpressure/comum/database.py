@@ -104,6 +104,11 @@ SCHEMAS = {
                         ("volume", _f64), ("avg_volume", _f64)),
     "scan": _schema(("version", _i64), ("timestamp", _i64), ("universe_size", _i64)),
     "scan_failures": _schema(("ticker", _str), ("reason", _str)),
+    # CDI diário (% ao dia) do Banco Central, guardado para não baixar tudo a cada consulta.
+    "cdi": _schema(("date", _str), ("rate", _f64)),
+    # Registro ao vivo da previsão de cruzamento (cruzamento.live_rows), regravado a cada varredura.
+    "crossing_log": _schema(("date", _str), ("ticker", _str), ("sessions", _f64), ("hit", _f64), ("avail", _i64),
+                            ("p10", _f64), ("p20", _f64), ("p40", _f64)),
     "scan_analyses": _schema(("ticker", _str), ("name", _str), ("sector", _str), ("kind", _str),
                              ("duplicate_of", _str), ("traded", _f64), ("mode", _str),
                              *[(col, kind) for col, _, kind in ANALYSIS_FIELDS]),

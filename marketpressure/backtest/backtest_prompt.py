@@ -112,6 +112,24 @@ Configurações. Confirmar a perda de força por 2, 3 ou 5 pregões seguidos nã
 tamanho da alta e saídas em duas etapas também não. Nos internacionais, a venda parcial vendia cedo \
 os grandes vencedores: a regra é só a reversão. Fundos e ETFs Brasil ainda não foram testados com a \
 parcial por força.
+- **Filtros na saída por reversão** (novembro de 2026; 60/40, fatia 10%, Indicação ligada, IR e CDI; \
+ajuste em 2017–2021 e validação em 2022–2026): vender só com a MM50 pelo menos 0,5–3% abaixo da \
+MM200, só depois de 2, 3 ou 5 pregões seguidos na condição, só com a MM200 caindo em 10 ou 20 \
+pregões, ou só com o fechamento 2–5% (ou 0,5–1 ATR) abaixo da MM200, e as combinações dos melhores: \
+**nenhum passou**. O melhor de cada filtro no ajuste rendeu menos ou empatou na validação (reversão \
+atual 15,2% ao ano), nenhum ganhou da regra atual na maioria dos 8 anos de início (no máximo 4 de 8) \
+nem das janelas de 3 anos, e cada um ganhou em menos de 40% dos ativos em que mudava o resultado. \
+Cerca de 40% das vendas pela reversão voltam acima do preço de venda e da MM200 em 30 pregões, mas \
+esperar mais atrasa as saídas que importam (AMER3 2026, PETR4 2022). A regra B ficou como está. Nas \
+janelas de 2 e 5 anos o F4 (margem abaixo da MM200) também não se sustentou: ganhos de décimos em 2 \
+anos, perdas em 5 anos, parâmetros vizinhos contraditórios.
+- **Antecipar a venda** pela previsão do cruzamento da MM50 abaixo da MM200 (fechamento abaixo da \
+MM200, MM50 ainda acima, encontro das médias projetado em até 10 ou 20 pregões, com ou sem queda de \
+20 pregões abaixo de −6,4%; novembro de 2026, mesma carteira): 10,2–14,9% ao ano contra 16,0% da \
+regra B, perdeu em 7 ou 8 dos 8 anos de início e em 2–3 das 5 janelas de 5 anos; só ganhou nas \
+janelas de 2 anos (até 7 de 8). A perda média por compra caiu (−14% para −10–12%), mas as compras \
+perdedoras subiram de 67 para 95–108 e a soma das perdas cresceu. Segurar a venda quando o \
+fechamento está perto da MM200 (até 3,3% abaixo) também perdeu nos períodos longos.
 - **Filtro de entrada (Indicação do Screener)**: compras em tendência fraca ou com o ativo mais \
 fraco que o BOVA11 em 6 meses renderam menos por compra nas duas metades do período; as do Top 5 \
 ou com Score ≥ 65 renderam mais. No lucro total da carteira, porém, nenhum conjunto de regras de \

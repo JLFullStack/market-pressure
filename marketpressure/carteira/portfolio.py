@@ -11,6 +11,7 @@ import time
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
+from ..comum import cruzamento as cz
 from ..comum.core import (ENTRY, EXIT, REENTRY_DISTANCE, add_up, trend_strength, weak_close, closed_candles, compute_indicators, day_of, entry_stats,
                   entry_warnings, evaluate_setup, exit_signal,
                   fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_qty, iso_day_in, js_round, today_iso)
@@ -922,6 +923,9 @@ def asset_chart(transactions, ticker, candles, market, strategy=DEFAULT_STRATEGY
         "markers": markers, "targets": levels, "nextTarget": upcoming, "note": note,
         "openLots": len(lots), "transactions": len(txs),
         "range": {"from": days[max(0, first - CHART_MARGIN_SESSIONS)], "to": days[-1]} if days else None,
+        # Previsão do cruzamento da MM50 abaixo da MM200 (só com o fechamento abaixo da MM200 e a
+        # MM50 ainda acima), nos pregões fechados, como a reversão.
+        "crossing": cz.forecast(ind, len(closed) - 1, days[len(closed) - 1]) if ind else None,
     }
 
 

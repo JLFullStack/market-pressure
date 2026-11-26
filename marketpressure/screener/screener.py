@@ -13,6 +13,7 @@ import math
 import threading
 import time
 
+from ..comum import cruzamento as cz
 from ..comum import database as db
 from ..configuracoes import strategy as st
 from ..comum import market_data, runtime
@@ -408,7 +409,19 @@ def analyze_ticker(asset, now=None):
         candles = adjusted_candles(candles)
     intradiario = analyze_asset(candles, live, kind)
     fechamento = analyze_asset(candles[:-1], False, kind) if live else intradiario
-    return {**asset, "kind": kind, "traded": traded, "fechamento": fechamento, "intradiario": intradiario}
+    return {**asset, "kind": kind, "traded": traded, "fechamento": fechamento, "intradiario": intradiario,
+            "crossingLog": crossing_log(asset["ticker"], candles[:-1] if live else candles)}
+
+
+def crossing_log(ticker, candles):
+    """Previsões de cruzamento do ativo desde cruzamento.FREEZE, com o resultado (registro ao vivo,
+    gravado por write_scan). Só os pregões fechados; as médias saem dos últimos pregões que bastam."""
+    days = [day_of(c["date"]) for c in candles]
+    since = bisect.bisect_left(days, cz.FREEZE)
+    if since >= len(days):
+        return []
+    start = max(0, since - 260)
+    return cz.live_rows(ticker, compute_indicators(candles[start:]), days[start:])
 
 # endregion
 
@@ -788,11 +801,15 @@ def write_scan(scan):
     for a in scan["analyses"]:
         asset = {col: a.get(key) for col, key in ASSET_COLUMNS}
         analyses += [{**asset, "mode": mode, **db.flatten_analysis(a[mode])} for mode in MODES]
-    db.write_tables({
+    tables = {
         "scan": [{"version": scan["version"], "timestamp": scan["timestamp"], "universe_size": scan["universeSize"]}],
         "scan_failures": scan["failures"],
         "scan_analyses": analyses,
-    })
+    }
+    if any("crossingLog" in a for a in scan["analyses"]):   # registro ao vivo da previsão de cruzamento
+        rows = [r for a in scan["analyses"] for r in a.get("crossingLog") or ()]
+        tables[cz.LOG_TABLE] = cz.merge_log(cz.read_log(), rows, {a["ticker"] for a in scan["analyses"]})
+    db.write_tables(tables)
 
 
 def read_scan():
@@ -1059,6 +1076,7 @@ def lot_wait_reasons(ind, signal_i, group, bench6m):
                           bench6m.get(day))
 
 
+@market_data.closed_only
 def backtest_view(ticker, market="b3", target=None, fraction=None, strict=False, start=None, end=None,
                   amount=BACKTEST_AMOUNT, timing="alvo"):
     """Tudo o que a aba Backtest mostra de um ativo: candles e médias (pregões fechados; fundos no

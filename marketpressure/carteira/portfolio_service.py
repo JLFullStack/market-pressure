@@ -9,6 +9,7 @@ import threading
 import time
 from datetime import date
 
+from ..comum import cruzamento as cz
 from ..comum import database as db
 from . import goals as gl
 from ..comum import market_data, runtime
@@ -411,6 +412,8 @@ def asset_chart(portfolio, ticker):
             name = next((u.get("name") for u in db.read_table("universe") if u["ticker"] == ticker), None) or ticker
         except Exception:
             log.warning("não foi possível ler a lista de ativos salva; gráfico sem o nome do ativo", exc_info=True)
+    if out.get("crossing"):   # acerto do modelo: o da validação e o do registro ao vivo
+        out["crossing"]["accuracy"] = cz.accuracy_text(cz.live_stats(cz.read_log()))
     return {**out, "cls": classes.get(ticker), "name": name, "ruleLabel": st.STRATEGIES[rule["key"]]}
 
 

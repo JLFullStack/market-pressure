@@ -812,6 +812,7 @@ def _params_out(params):
                          for k, v in (params.get("rules") or {}).items()}})
 
 
+@market_data.closed_only
 def run(params):
     """Tudo o que o modo Carteira da aba Backtest mostra. ValueError com a mensagem para a página."""
     loaded = _load(params)
@@ -958,6 +959,7 @@ def _median(values):
     return values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
 
 
+@market_data.closed_only
 def robustness(params):
     """A mesma carteira em vários períodos (o "De" do formulário é ignorado): a partir de cada ano de
     início até o mesmo fim, ou em janelas de params["window"] anos. Como poucos ganhos grandes decidem
