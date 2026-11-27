@@ -99,9 +99,8 @@ function renderFavorites(d) {
             <td class="r nowrap">${f.price === undefined ? '—' : fmtMoney(f.price, f.currency)}${f.date ? `<div class="small muted">${fmtDate(f.date)}</div>` : ''}</td>
             <td class="r nowrap">${f.change === undefined || f.change === null ? '—' : `<span class="delta-pill ${signClass(f.change)}">${fmtPct(f.change, 2)}</span>`}</td>
             <td class="r nowrap small">${f.mas ? `MM20 ${dist(f.mas.mm20)} · MM50 ${dist(f.mas.mm50)} · MM200 ${dist(f.mas.mm200)}` : '—'}</td>
-            <td class="c nowrap">${f.rank ? `${f.rank}º<div class="small muted">Score ${fmtNum(f.score, 0)}</div>` : '<span class="small muted">fora</span>'}
-                ${f.pressure != null ? `<div class="fav-bottle">${bottleIcon(f.pressure, f.bottle, d.bottleLevels)}</div>` : ''}</td>
-            <td class="c">${signalBadge(f.status.label, f.status.reason, FAV_BADGE[f.status.key] || 'badge-low')}</td>
+            <td class="c nowrap">${f.rank ? `${f.rank}º<div class="small muted">Score ${fmtNum(f.score, 0)}</div>` : '<span class="small muted">fora</span>'}</td>
+            <td class="c">${withBottle(f, d.bottleLevels, signalBadge(f.status.label, f.status.reason, FAV_BADGE[f.status.key] || 'badge-low'))}</td>
             <td class="c">${favoriteStar(f.ticker, f.market, true)}</td>
         </tr>`).join('')
         : '<tr><td colspan="7" class="empty-row">Nenhum favorito ainda. Adicione um código acima ou toque na ★ de um ativo no ranking do Screener.</td></tr>';

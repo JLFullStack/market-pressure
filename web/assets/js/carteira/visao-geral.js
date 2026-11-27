@@ -460,9 +460,8 @@ function renderPositions(a) {
             <td class="r nowrap">${deltaPill(p.returnPct)}</td>
             <td class="r nowrap">${fmtBRL(p.dividends)}</td>
             <td class="r nowrap">${weightCell(p.weight, maxWeight)}</td>
-            <td class="c">${p.status ? signalBadge(p.status, p.statusReason, STATUS_BADGE[p.statusKey] || 'badge-low') : '<span class="small muted">—</span>'}
-                ${p.partial ? `<div class="small muted nowrap">${fmtQty(p.partial.quantity)} ${p.partial.quantity === 1 ? 'cota' : 'cotas'} de ${p.partial.lots} compra(s)</div>` : ''}
-                ${p.pressure != null ? `<div class="pos-bottle">${bottleIcon(p.pressure, p.bottle, a.bottleLevels)}</div>` : ''}</td>
+            <td class="c">${withBottle(p, a.bottleLevels, `${p.status ? signalBadge(p.status, p.statusReason, STATUS_BADGE[p.statusKey] || 'badge-low') : '<span class="small muted">—</span>'}
+                ${p.partial ? `<div class="small muted nowrap">${fmtQty(p.partial.quantity)} ${p.partial.quantity === 1 ? 'cota' : 'cotas'} de ${p.partial.lots} compra(s)</div>` : ''}`)}</td>
         </tr>`;
     const fixedRow = (f) => `
         <tr class="fi-section" data-reveal>

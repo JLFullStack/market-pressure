@@ -99,6 +99,9 @@ tr.in .gas-fill { animation: gas-fill 1.2s var(--ease-out) backwards; animation-
     border: 1px solid color-mix(in srgb, var(--c1) 40%, transparent); background: color-mix(in srgb, var(--c1) 9%, transparent); }
 .gas-note > i { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; background: var(--c1); box-shadow: 0 0 10px var(--c1); }
 .gas-note strong { display: block; margin-bottom: 2px; color: var(--c1); }
+/* Situação com a garrafa (Posições, Favoritos; withBottle): garrafa à esquerda, situação e estado à direita. */
+.cell-bottle { display: inline-flex; align-items: center; gap: 12px; text-align: left; }
+.cell-bottle-info { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 /* Fora do setup: a linha que explica por que não há pressão, no lugar do painel. */
 .gas-none { display: flex; align-items: center; gap: 10px; margin: 4px 0 14px; padding: 10px 14px; font-size: 13px; color: var(--text-muted);
     border: 1px dashed var(--border-strong); border-radius: 12px; background: rgba(255, 255, 255, 0.02); }

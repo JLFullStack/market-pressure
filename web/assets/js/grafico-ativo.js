@@ -345,6 +345,15 @@ function bottleIcon(pressure, state, levels = { quase: 60, cheia: 75 }, { size =
         ${gasVessel(pressure, state, levels, size)}${label ? `<span class="bottle-label">${BOTTLE_LABEL[state]}</span>` : ''}</span>`;
 }
 
+// Célula de Situação com a garrafa (Posições e Favoritos, como a coluna Pressão do Screener): a garrafa
+// no tamanho da tabela, igual em todas as linhas, e ao lado o conteúdo da célula com o nome do estado.
+// Sem pressão (fora do setup), só o conteúdo.
+function withBottle(x, levels, content) {
+    if (x.pressure === null || x.pressure === undefined || !BOTTLE_LABEL[x.bottle]) return content;
+    return `<div class="cell-bottle">${bottleIcon(x.pressure, x.bottle, levels, { size: 'cell', label: false })}
+        <div class="cell-bottle-info">${content}<span class="bottle-label bottle-${x.bottle}">${BOTTLE_LABEL[x.bottle]} · ${fmtNum(x.pressure, 0)}%</span></div></div>`;
+}
+
 // Painel "Pressão acumulada" do card do gráfico: a garrafa grande, o número, o estado, a régua das
 // faixas (a do ativo em destaque), a explicação e os 4 componentes. p = {value, state, levels,
 // states (BOTTLE_STATES do Python), parts (pressure_parts)}.
