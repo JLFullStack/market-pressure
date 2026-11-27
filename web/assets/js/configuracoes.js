@@ -163,6 +163,41 @@ alertForm.addEventListener('submit', async (event) => {
 });
 //#endregion
 
+//#region Telegram
+// Notificações pelo Telegram (notificacoes.py, rotas /api/configuracoes/telegram). A validação, o
+// envio e as mensagens ficam no Python (e, publicado, no Worker); aqui só o formulário.
+const telegramForm = document.getElementById('telegramForm');
+const telegramOut = document.getElementById('telegramMsg');
+function showTelegram(data) {
+    telegramForm.elements.enabled.checked = data.telegram.enabled;
+    telegramForm.elements.chatId.value = data.telegram.chatId || '';
+    document.getElementById('telegramText').textContent = data.text;
+    const link = document.getElementById('botLink');
+    document.getElementById('botName').textContent = data.bot.name || 'o bot do MarketPressure';
+    if (data.bot.link) link.href = data.bot.link; else link.removeAttribute('href');
+    document.getElementById('helperBotLink').href = data.helperBot;
+}
+async function postTelegram(path, busyText) {
+    const busy = busyStart(busyText);
+    try {
+        const data = await apiPost(path, { enabled: telegramForm.elements.enabled.checked, chatId: telegramForm.elements.chatId.value });
+        showTelegram(data);
+        telegramOut.className = `form-msg ${data.ok ? 'ok' : 'error'}`;
+        telegramOut.textContent = data.message;
+    } catch (e) {
+        telegramOut.className = 'form-msg error';
+        telegramOut.textContent = e.message;
+    } finally {
+        busy();
+    }
+}
+telegramForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    postTelegram('/configuracoes/telegram', 'Salvando notificações...');
+});
+document.getElementById('telegramTestBtn').addEventListener('click', () => postTelegram('/configuracoes/telegram/teste', 'Enviando mensagem de teste...'));
+//#endregion
+
 //#region Feriados
 // Feriados (holidays.py, rotas /api/configuracoes/feriados). As regras ficam no Python; aqui só a lista e o formulário.
 const holidayForm = document.getElementById('holidayForm');
@@ -247,6 +282,10 @@ observeReveal();
 apiGet('/configuracoes/feriados').then(showHolidays, (e) => {
     holidayOut.className = 'form-msg error';
     holidayOut.textContent = `Não foi possível carregar os feriados (${e.message}).`;
+});
+apiGet('/configuracoes/telegram').then(showTelegram, (e) => {
+    telegramOut.className = 'form-msg error';
+    telegramOut.textContent = `Não foi possível carregar as notificações (${e.message}).`;
 });
 apiGet('/configuracoes/avisos').then(showAlert, (e) => {
     document.getElementById('alertMsg').className = 'form-msg error';

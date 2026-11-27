@@ -13,6 +13,10 @@ e não é salvo) e a varredura salva inclui o candle em andamento, como a feita 
 - Local: sem essas variáveis, usa o banco em data/ e as fontes direto (o servidor local também
   faz isto sozinho, ver server.daily_update).
 
+Depois de salvar a varredura, envia pelo Telegram o aviso do ranking (screener/ranking_alert.py) a
+quem o ligou na aba Configurações: publicado, pelo Worker (que guarda o token do bot); local, direto,
+com o TELEGRAM_BOT_TOKEN do .env. Uma falha no aviso não falha a atualização.
+
 Sai com código 1 se a varredura falhar ou não puder ser salva.
 """
 
@@ -51,7 +55,19 @@ def run():
     scan = screener.run_scan(progress)
     screener.write_scan(scan)
     log.info("varredura salva: %d ativos analisados, %d falhas", len(scan["analyses"]), len(scan["failures"]))
+    notify(scan)
     return scan
+
+
+def notify(scan):
+    """Aviso do ranking pelo Telegram; qualquer falha só vai para o log."""
+    from .screener import ranking_alert
+    try:
+        result = ranking_alert.notify(scan, os.environ.get("MARKETPRESSURE_REMOTE_URL", ""))
+    except Exception:
+        log.warning("não foi possível enviar o aviso do ranking pelo Telegram", exc_info=True)
+        return
+    log.info("aviso do ranking pelo Telegram: %s", result)
 
 
 def main():

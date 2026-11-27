@@ -23,7 +23,7 @@ from .carteira import portfolio_prompt
 from .carteira import portfolio_service as svc
 from .carteira import portfolio_store as store
 from .configuracoes import strategy as st
-from .configuracoes import holidays
+from .configuracoes import holidays, notificacoes
 from .carteira import tax_alert, tax_report
 from .comum.core import PARTIAL_TIMINGS
 
@@ -236,7 +236,7 @@ def get_backtest_prompt(req):
 # endregion
 
 
-# region Configurações (estratégia, aviso de imposto e feriados)
+# region Configurações (estratégia, aviso de imposto, Telegram e feriados)
 @route("GET", "/api/configuracoes")
 def get_settings(req):
     return st.payload()
@@ -266,6 +266,36 @@ def post_alert_settings(req):
         raise HTTPError(400, error)
     tax_alert.save(alert)
     return {**tax_alert.payload(alert), "message": "Aviso salvo. A Carteira já segue esta configuração."}
+
+
+@route("GET", "/api/configuracoes/telegram")
+def get_telegram_settings(req):
+    return notificacoes.payload()
+
+
+def _save_telegram(req):
+    s, error = notificacoes.from_form(req.json_object())
+    if error:
+        raise HTTPError(400, error)
+    return notificacoes.save(s)
+
+
+@route("POST", "/api/configuracoes/telegram")
+def post_telegram_settings(req):
+    """Salva as notificações pelo Telegram ({enabled, chatId})."""
+    s = _save_telegram(req)
+    return {**notificacoes.payload(s), "ok": True,
+            "message": "Notificações salvas." + (" O próximo aviso do ranking vai para este chat." if s["enabled"] else "")}
+
+
+@route("POST", "/api/configuracoes/telegram/teste")
+def post_telegram_test(req):
+    """Salva o formulário e envia a mensagem de teste ao chat salvo. ok=False com o motivo quando
+    o Telegram não entregou (a configuração fica salva mesmo assim)."""
+    s = _save_telegram(req)
+    problem = notificacoes.send_test(s)
+    return {**notificacoes.payload(s), "ok": problem is None,
+            "message": problem or "Mensagem de teste enviada. Confira o seu Telegram."}
 
 
 @route("GET", "/api/configuracoes/feriados")

@@ -129,6 +129,16 @@
 .tax-panel.off .tax-grid, .tax-panel.off .tax-facts { opacity: 0.45; filter: grayscale(0.6); }
 /* #endregion */
 
+/* #region Telegram */
+.telegram-grid { grid-template-columns: minmax(0, 360px); margin-bottom: 14px; }
+.telegram-input { cursor: text; }
+.telegram-input .select { width: 100%; text-align: left; font-variant-numeric: tabular-nums; }
+.telegram-input .kpi-note a, .tax-fact a { color: var(--accent); }
+@media (max-width: 640px) {
+    .telegram-input .select { width: 100%; font-size: 22px; }
+}
+/* #endregion */
+
 /* #region Feriados */
 .holiday-title { margin: 22px 0 8px; font-size: 15px; }
 .holiday-links { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 10px; }

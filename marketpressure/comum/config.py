@@ -38,6 +38,11 @@ LOG_LEVEL = os.environ.get("MARKETPRESSURE_LOG_LEVEL", "INFO")
 # brapi (lista de ações). Sem token, a lista vem da última cópia salva no banco (tabela universe).
 BRAPI_TOKEN = os.environ.get("BRAPI_TOKEN", "")
 
+# Telegram (comum/telegram.py), só no envio direto (servidor local ou atualização sem o site): token do
+# bot e, opcional, um chat extra além dos salvos na aba Configurações. Publicado, o token é segredo do Worker.
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
 # Cache em memória dos dados externos (segundos).
 CACHE_TTL_SECONDS = 15 * 60          # cotações e lista de ações
 CDI_TTL_SECONDS = 12 * 60 * 60

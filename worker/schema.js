@@ -19,6 +19,8 @@ export const SCHEMA = [
 // (carteiras) são de cada usuário e ficam em mp_tables com o nome "{id do usuário}/{tabela}";
 // o Python não sabe disso. Todos os usuários leem as comuns; só o administrador e a atualização
 // diária gravam nelas (index.js), porque um valor errado ali apareceria para todo mundo.
-export const SHARED_TABLES = new Set(["universe", "scan", "scan_failures", "scan_analyses", "crossing_log", "cdi"]);
+// ranking_alerts: o último aviso do ranking pelo Telegram (marketpressure/screener/ranking_alert.py).
+export const SHARED_TABLES = new Set(["universe", "scan", "scan_failures", "scan_analyses", "crossing_log", "cdi",
+    "ranking_alerts"]);
 export const SHARED_PREFIX = "history_";
 export const isShared = (name) => SHARED_TABLES.has(name) || name.startsWith(SHARED_PREFIX);

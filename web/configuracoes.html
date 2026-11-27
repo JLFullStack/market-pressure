@@ -192,6 +192,41 @@
     </form>
     <!-- #endregion -->
 
+    <!-- #region Telegram -->
+    <form id="telegramForm" novalidate>
+        <div class="panel tax-panel" data-reveal id="notificacoes">
+            <div class="panel-head">
+                <div class="panel-title"><span class="icon-chip tone-cyan" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 4L3 11l6 2 2 6 3-4 5 4z"/><path d="M9 13l12-9"/></svg></span><h2>Notificações pelo Telegram</h2></div>
+                <label class="toggle switch tax-switch"><input type="checkbox" name="enabled"><span class="switch-track" aria-hidden="true"></span>
+                    <span>Receber o aviso diário do ranking no meu Telegram</span></label>
+            </div>
+            <div class="tax-grid telegram-grid">
+                <label class="param-card tone-cyan telegram-input">
+                    <span class="kpi-label">Id do seu chat no Telegram</span>
+                    <span class="param-input"><input name="chatId" class="select" type="text" inputmode="numeric" autocomplete="off" maxlength="21" placeholder="ex.: 123456789" aria-label="Id do seu chat no Telegram"></span>
+                    <span class="kpi-note">só números; peça o seu ao <a id="helperBotLink" href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a></span>
+                </label>
+            </div>
+            <div class="tax-facts">
+                <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4L3 11l6 2 2 6 3-4 5 4z"/></svg>
+                    <span><strong>1. Abra o bot</strong>No Telegram, abra <a id="botLink" href="#" target="_blank" rel="noopener"><b id="botName">o bot do MarketPressure</b></a> e toque em <b>Iniciar</b>. Sem isso, o bot não pode falar com você.</span></div>
+                <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+                    <span><strong>2. Descubra o seu id</strong>Mande qualquer mensagem ao <b>@userinfobot</b>: ele responde com o seu <b>Id</b>, um número. Cole aqui em cima.</span></div>
+                <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>
+                    <span><strong>3. Teste</strong>Ligue a chave e toque em <b>Enviar mensagem de teste</b>: ele salva e manda uma mensagem padrão para o seu Telegram.</span></div>
+                <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg>
+                    <span><strong>O que chega</strong>Depois do fechamento, quando há novidade: os ativos que <b>entraram</b> no Top com COMPRAR e a mudança de regime de cada tipo. A indicação não considera a sua carteira.</span></div>
+            </div>
+            <p class="small muted" id="telegramText"></p>
+            <div class="strategy-actions">
+                <button type="submit" class="btn">Salvar</button>
+                <button type="button" class="btn btn-accent" id="telegramTestBtn">Enviar mensagem de teste</button>
+            </div>
+            <div class="form-msg" id="telegramMsg" role="status"></div>
+        </div>
+    </form>
+    <!-- #endregion -->
+
     <!-- #region Feriados -->
     <div class="panel" data-reveal id="feriados">
         <div class="panel-title"><span class="icon-chip tone-warn" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span><h2>Feriados</h2></div>

@@ -4,6 +4,8 @@
 # (sobretudo no celular) só leia a varredura pronta em vez de baixar o universo e calcular.
 # Tudo passa pelo Worker do site (/proxy e /db) com o token de serviço: o segredo
 # MARKETPRESSURE_SERVICE_TOKEN deste repositório tem o mesmo valor do segredo SERVICE_TOKEN do Worker.
+# Depois do fechamento, pede ao Worker que envie pelo Telegram o aviso do ranking a quem o ligou na aba
+# Configurações (marketpressure/screener/ranking_alert.py); o token do bot é segredo do Worker.
 name: Atualização diária
 
 on:

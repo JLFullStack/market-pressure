@@ -98,6 +98,8 @@ SCHEMAS = {
     # Sub-aba Impostos (tax_report): DARFs marcados como pagos e prejuízos de antes dos lançamentos
     "tax_payments": _schema(("portfolio_id", _str), ("month", _str), ("amount", _f64), ("paid_on", _str)),
     "tax_opening": _schema(("portfolio_id", _str), ("common", _f64), ("funds", _f64)),
+    # Notificações pelo Telegram (notificacoes.py): aviso ligado e o id do chat do usuário
+    "settings_telegram": _schema(("enabled", _bool), ("chat_id", _str)),
     "holidays": _schema(("date", _str), ("name", _str), ("kind", _str)),   # feriados (holidays.py); date "MM-DD" = todo ano
     # Screener
     "universe": _schema(("ticker", _str), ("name", _str), ("sector", _str), ("kind", _str), ("close", _f64),
@@ -109,6 +111,9 @@ SCHEMAS = {
     # Registro ao vivo da previsão de cruzamento (cruzamento.live_rows), regravado a cada varredura.
     "crossing_log": _schema(("date", _str), ("ticker", _str), ("sessions", _f64), ("hit", _f64), ("avail", _i64),
                             ("p10", _f64), ("p20", _f64), ("p40", _f64)),
+    # Último aviso do ranking pelo Telegram (screener/ranking_alert.py), uma linha por tipo de ativo:
+    # o pregão avisado, o regime e os tickers com COMPRAR (separados por vírgula).
+    "ranking_alerts": _schema(("kind", _str), ("ref_date", _str), ("regime", _str), ("tickers", _str)),
     "scan_analyses": _schema(("ticker", _str), ("name", _str), ("sector", _str), ("kind", _str),
                              ("duplicate_of", _str), ("traded", _f64), ("mode", _str),
                              *[(col, kind) for col, _, kind in ANALYSIS_FIELDS]),

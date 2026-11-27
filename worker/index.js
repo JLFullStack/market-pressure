@@ -11,20 +11,23 @@
 //                    juntas (uma transação) e, com backup, copia a versão anterior para mp_backup.
 //                    As tabelas das carteiras são de cada usuário (schema.js: SHARED_TABLES).
 //   /auth/*          login, sessão e contas (auth.js).
+//   /notify/*        notificações pelo Telegram (notify.js): o token do bot (segredo
+//                    TELEGRAM_BOT_TOKEN) fica aqui; teste para o próprio chat e o envio diário.
 //
 // Permissões. O Python roda no navegador, que não é confiável, então valem as daqui:
 //   qualquer usuário  as próprias tabelas; lê as comuns; candles, CDI e proventos pelo /proxy.
 //   administrador     também grava as comuns, atualiza a lista de ativos (brapi e screener do
 //                     Yahoo, pelo /proxy) e gerencia as contas (auth.js).
-//   token de serviço  só as tabelas comuns e o /proxy (atualização diária).
+//   token de serviço  só as tabelas comuns, o /proxy e o /notify/send (atualização diária).
 //   o resto          arquivos de dist/ (páginas, CSS, JS e o pacote Python), via ASSETS.
 //
 // Tudo exige login, menos a tela de login (PUBLIC): sem sessão, as páginas redirecionam para
 // /login e o resto responde 401. A exceção é a atualização diária (GitHub Actions), que manda
-// o token de serviço (segredo SERVICE_TOKEN) e só usa /proxy e as tabelas comuns do /db. Por isso o wrangler.jsonc tem run_worker_first (sem ele, os
+// o token de serviço (segredo SERVICE_TOKEN) e só usa /proxy, as tabelas comuns do /db e o /notify/send. Por isso o wrangler.jsonc tem run_worker_first (sem ele, os
 // arquivos de dist/ seriam servidos sem passar por aqui).
 
 import { currentUser, handleAuth } from "./auth.js";
+import { handleNotify } from "./notify.js";
 import { SCHEMA, isShared } from "./schema.js";
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
@@ -58,15 +61,17 @@ export default {
                 return env.ASSETS.fetch(request);
             }
             if (!user) {
-                // Atualização diária (marketpressure/update.py no GitHub Actions): só /proxy e as
-                // tabelas comuns do /db, com o token de serviço (segredo SERVICE_TOKEN).
+                // Atualização diária (marketpressure/update.py no GitHub Actions): só /proxy, as
+                // tabelas comuns do /db e o /notify/send, com o token de serviço (segredo SERVICE_TOKEN).
                 if (!(await isService(request, env))) return unauthenticated(request, url);
                 if (url.pathname === "/proxy") return await proxy(request, url, env, SERVICE);
                 if (url.pathname === "/db") return await database(request, url, env, SERVICE);
+                if (url.pathname.startsWith("/notify/")) return await handleNotify(request, url, env, SERVICE);
                 return json(404, { message: "não encontrado" });
             }
             if (url.pathname === "/proxy") return await proxy(request, url, env, user);
             if (url.pathname === "/db") return await database(request, url, env, user);
+            if (url.pathname.startsWith("/notify/")) return await handleNotify(request, url, env, user);
         } catch (err) {
             console.error(err);
             return json(500, { message: `erro interno: ${err.message}` });

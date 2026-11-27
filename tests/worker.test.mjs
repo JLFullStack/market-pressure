@@ -5,6 +5,7 @@ import { before, beforeEach, test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import worker from "../worker/index.js";
 import { hashPassword } from "../worker/auth.js";
+import { TEST_TEXT } from "../worker/notify.js";
 
 // O Node não tem este método do Cloudflare (usado no token de serviço).
 crypto.subtle.timingSafeEqual = (a, b) => Buffer.from(a).equals(Buffer.from(b));
@@ -42,13 +43,17 @@ function fakeD1() {
 
 const db = fakeD1();
 const env = {
-    DB: db, SERVICE_TOKEN, BRAPI_TOKEN: "segredo-brapi",
+    DB: db, SERVICE_TOKEN, BRAPI_TOKEN: "segredo-brapi", TELEGRAM_BOT_TOKEN: "segredo-bot",
     ASSETS: { fetch: async () => new Response("arquivo", { status: 200 }) },
 };
 const upstream = [];  // pedidos que saíram para as fontes externas
 
 globalThis.fetch = async (target, init = {}) => {
-    upstream.push({ url: String(target), method: init.method || "GET" });
+    upstream.push({ url: String(target), method: init.method || "GET", body: init.body });
+    if (String(target).endsWith("/getMe")) return Response.json({ ok: true, result: { username: "MPBot" } });
+    if (String(target).endsWith("/sendMessage") && JSON.parse(init.body).chat_id === "99999") {
+        return Response.json({ ok: false, description: "Bad Request: chat not found" }, { status: 400 });
+    }
     if (String(target).startsWith("https://fc.yahoo.com")) return new Response("", { headers: { "Set-Cookie": "A=1; Path=/" } });
     if (String(target).includes("getcrumb")) return new Response("miolo");
     return new Response('{"ok":true}', { headers: { "Content-Type": "application/json" } });
@@ -164,7 +169,7 @@ test("usuário comum lê as tabelas comuns, mas não grava", async () => {
     assert.equal((await put(admin, { scan: '[{"version":1}]' })).status, 200);
     const read = await call("GET", "/db?names=scan", alice);
     assert.deepEqual(await read.json(), { scan: [{ version: 1 }] });
-    for (const name of ["scan", "scan_analyses", "scan_failures", "crossing_log", "universe", "history_b3_petr4", "history_novo"]) {
+    for (const name of ["scan", "scan_analyses", "scan_failures", "crossing_log", "ranking_alerts", "universe", "history_b3_petr4", "history_novo"]) {
         assert.equal((await put(alice, { [name]: "[]" })).status, 403, name);
     }
     assert.equal(stored("scan"), '[{"version":1}]');
@@ -179,8 +184,10 @@ test("um pedido com tabela comum e própria não grava nenhuma", async () => {
 test("administrador e token de serviço gravam as comuns", async () => {
     assert.equal((await put(admin, { history_b3_vale3: '[{"a":1}]' })).status, 200);
     assert.equal((await put({ bearer: SERVICE_TOKEN }, { universe: '[{"b":2}]' })).status, 200);
+    assert.equal((await put({ bearer: SERVICE_TOKEN }, { ranking_alerts: '[{"kind":"acoes"}]' })).status, 200);
     assert.equal(stored("history_b3_vale3"), '[{"a":1}]');
     assert.equal(stored("universe"), '[{"b":2}]');
+    assert.equal(stored("ranking_alerts"), '[{"kind":"acoes"}]');
 });
 
 // ---------------------------------------------------------------- Tabelas de cada usuário
@@ -242,4 +249,49 @@ test("o repasse não aceita outros sites, nem para o administrador", async () =>
     }
     assert.equal((await call("POST", proxyPath(YAHOO_CHART), { ...admin, body: {} })).status, 405);
     assert.equal(upstream.length, 0);
+});
+
+// ---------------------------------------------------------------- Telegram
+
+const telegramSettings = (who, chatId, enabled = true) =>
+    put(who, { settings_telegram: JSON.stringify([{ enabled, chat_id: chatId }]) });
+const messages = () => upstream.filter(u => u.url.endsWith("/sendMessage")).map(u => JSON.parse(u.body));
+
+test("o bot é informado sem o token", async () => {
+    assert.equal((await call("GET", "/notify/info")).status, 401);
+    const response = await call("GET", "/notify/info", alice);
+    assert.deepEqual(await response.json(), { configured: true, bot: "MPBot" });
+});
+
+test("o teste vai para o chat salvo do próprio usuário, nunca para um chat do pedido", async () => {
+    assert.equal((await call("POST", "/notify/test", { ...alice, body: {} })).status, 400);   // nada salvo
+    await telegramSettings(alice, "1234567");
+    const response = await call("POST", "/notify/test", { ...alice, body: { chat_id: "7654321" } });
+    assert.equal(response.status, 200);
+    assert.doesNotMatch(await response.text(), /segredo-bot/);
+    assert.deepEqual(messages().map(m => [m.chat_id, m.text]), [["1234567", TEST_TEXT]]);
+    assert.ok(upstream.every(u => !u.url.includes("api.telegram.org") || u.url.includes("botsegredo-bot/")));
+});
+
+test("o teste diz o motivo quando o Telegram recusa e tem limite por usuário", async () => {
+    await telegramSettings(bob, "99999");
+    const refused = await call("POST", "/notify/test", { ...bob, body: {} });
+    assert.equal(refused.status, 502);
+    assert.match((await refused.json()).description, /chat not found/);
+    for (let i = 0; i < 4; i++) await call("POST", "/notify/test", { ...bob, body: {} });
+    assert.equal((await call("POST", "/notify/test", { ...bob, body: {} })).status, 429);
+    assert.equal(messages().length, 5);
+});
+
+test("só a atualização diária envia a todos, e só a quem ligou o aviso", async () => {
+    await telegramSettings(alice, "1234567");
+    await telegramSettings(bob, "99999");                 // o Telegram recusa este chat
+    await telegramSettings(admin, "7777777", false);      // aviso desligado
+    assert.equal((await call("POST", "/notify/send", { ...alice, body: { text: "oi" } })).status, 403);
+    assert.equal((await call("POST", "/notify/test", { bearer: SERVICE_TOKEN, body: {} })).status, 403);
+    assert.equal((await call("POST", "/notify/send", { bearer: SERVICE_TOKEN, body: { text: "" } })).status, 400);
+    upstream.length = 0;
+    const response = await call("POST", "/notify/send", { bearer: SERVICE_TOKEN, body: { text: "ranking" } });
+    assert.deepEqual(await response.json(), { configured: true, recipients: 2, sent: 1, failed: 1 });
+    assert.deepEqual(messages().map(m => [m.chat_id, m.text]).sort(), [["1234567", "ranking"], ["99999", "ranking"]]);
 });
