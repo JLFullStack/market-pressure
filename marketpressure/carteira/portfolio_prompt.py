@@ -16,7 +16,7 @@ from ..screener import screener
 from . import portfolio as pf
 from . import portfolio_service as svc
 from ..configuracoes import strategy as st
-from . import tax_alert
+from . import risco, tax_alert
 from ..screener.ai_prompt import EVENTS, ROLE, _bova, _pct, _ratio_pct
 from ..comum.core import add_up, compute_indicators, day_of, fmt_brl, fmt_date, fmt_num, fmt_qty, local_time, today_iso
 
@@ -454,6 +454,35 @@ def _receivable_line(r, names, unbooked=()):
             f"pagamento {pay}, {status}")
 
 
+def _risk_section(series, total):
+    """"# Risco" (carteira/risco.py): maior queda, queda atual, VaR/CVaR de 1 dia e de 1 mês e a
+    volatilidade, da carteira e do BOVA11 no mesmo período; nada sem histórico suficiente."""
+    r = risco.analyze(series, total)
+    if not r:
+        return []
+    p, b = r["portfolio"], r["bova"]
+    dd = p["maxDrawdown"]
+    pct = lambda v: f"{fmt_num(v, 1)}%" if v is not None else "—"
+    lines = [f"# Risco (histórico da carteira, rentabilidade pela cota; {fmt_date(r['from'])} a {fmt_date(r['to'])}, "
+             f"{r['sessions']} pregões)", "",
+             "Contexto para a nota de saúde, a concentração e o tamanho das posições: não é motivo de venda (a venda "
+             "segue a regra configurada). Medidas históricas, olham só o passado.", "",
+             "| Medida | Carteira | BOVA11 (mesmo período) |", "|---|---|---|",
+             f"| Maior queda (topo → fundo) | {pct(dd['pct'])} ({fmt_date(dd['peak'])} a {fmt_date(dd['trough'])}, "
+             + (f"recuperada em {fmt_date(dd['recovered'])}" if dd["recovered"] else "ainda não recuperada")
+             + f") | {pct(b['maxDrawdown']['pct'])} |",
+             f"| Queda atual desde o topo | {pct(p['current']['pct'])} | {pct(b['current']['pct'])} |",
+             f"| Dia ruim: VaR {r['level']}% / CVaR | {pct(p['day']['var'])} / {pct(p['day']['cvar'])} "
+             f"({fmt_brl(p['day']['varBRL'])} / {fmt_brl(p['day']['cvarBRL'])}) | {pct(b['day']['var'])} / {pct(b['day']['cvar'])} |",
+             f"| Mês ruim (21 pregões): VaR {r['level']}% / CVaR | {pct(p['month']['var'])} / {pct(p['month']['cvar'])} "
+             f"({fmt_brl(p['month']['varBRL'])} / {fmt_brl(p['month']['cvarBRL'])}) | {pct(b['month']['var'])} / {pct(b['month']['cvar'])} |",
+             f"| Volatilidade ao ano | {pct(p['volatility'])} | {pct(b['volatility'])} |", ""]
+    lines += [f"- {t}" for t in r["text"]]
+    if r["warning"]:
+        lines.append(f"- Atenção: {r['warning']}")
+    return lines + [""]
+
+
 def build(portfolio, analysis, settings, received, receivable=()):
     """Texto da análise da carteira em Markdown. analysis: portfolio_service.full_analysis;
     settings: strategy.load (a regra de venda de cada classe); received: os proventos já pagos
@@ -518,6 +547,7 @@ def build(portfolio, analysis, settings, received, receivable=()):
                      "preço lançado; sem o CDI, a comparação com ele fica em 0%)")
     lines.append("")
 
+    lines += _risk_section(analysis.get("series"), total)
     lines += ["# Alocação por classe", "", "| Classe | Valor | % atual | Meta | Diferença |", "|---|---|---|---|---|"]
     for a in analysis["allocation"]:
         if not a["target"] and not a["value"]:

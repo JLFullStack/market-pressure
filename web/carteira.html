@@ -202,6 +202,26 @@
                 <p class="small muted" id="chartNote"></p>
             </div>
 
+            <div class="panel" data-reveal id="riskPanel" hidden>
+                <div class="panel-head">
+                    <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M12 8v5M12 16h.01"/></svg></span><h2>Risco <span class="tip" tabindex="0" data-tip="Quanto a carteira já caiu e o tamanho de um dia ou mês ruim, pelo histórico da própria carteira (rentabilidade pela cota, sem o efeito dos aportes), comparado ao BOVA11 no mesmo período." aria-label="Ajuda: Quanto a carteira já caiu e o tamanho de um dia ou mês ruim, pelo histórico da própria carteira (rentabilidade pela cota, sem o efeito dos aportes), comparado ao BOVA11 no mesmo período.">?</span></h2></div>
+                    <span class="small muted" id="riskSub"></span>
+                </div>
+                <p class="risk-warning" id="riskWarning" role="status" hidden></p>
+                <div class="kpis kpi-cards risk-kpis" id="riskKpis"></div>
+                <ul class="notes risk-text" id="riskText"></ul>
+                <h3 class="risk-subhead">Queda desde o topo</h3>
+                <div class="chart-wrap chart-small" data-reveal="late">
+                    <canvas id="riskChart" role="img" aria-label="Queda da carteira e do BOVA11 desde o topo anterior, dia a dia"></canvas>
+                </div>
+                <ul class="notes">
+                    <li><strong>Maior queda</strong>: a pior perda de um topo até o fundo seguinte; <strong>queda atual</strong>: quanto a carteira está abaixo do seu último topo.</li>
+                    <li><strong>VaR 95%</strong>: a perda que só 1 em cada 20 dias (ou meses) superou; <strong>CVaR 95%</strong>: a perda média nesses dias (ou meses) ruins. Em R$, sobre o patrimônio de hoje.</li>
+                    <li>Medidos nos dias reais da carteira, sem supor uma distribuição: olham só o passado, e uma crise maior que as do histórico não aparece.</li>
+                    <li>"1 mês" = 21 pregões, em janelas móveis.</li>
+                </ul>
+            </div>
+
             <div class="panel" data-reveal>
                 <div class="panel-head">
                     <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg></span><h2>Alocação por classe</h2></div>

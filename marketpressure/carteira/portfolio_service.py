@@ -14,7 +14,7 @@ from ..comum import database as db
 from . import goals as gl
 from ..comum import market_data, runtime
 from ..configuracoes import strategy as st
-from . import tax_alert, tax_report
+from . import risco, tax_alert, tax_report
 from ..comum.core import add_up, day_of, fmt_brl, fmt_date, session_in_progress, today_iso
 from .portfolio import (APORTE_MODES, BENCHMARK, CLASS_GROUP, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
                         analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_history,
@@ -260,6 +260,7 @@ def analysis_payload(portfolio):
         "assetTargets": _asset_target_groups(portfolio, a),
         "taxAlert": tax_alert.status(portfolio, a["open"]),
         "darfAlert": tax_report.due_alert(portfolio),
+        "risk": risco.analyze(series, a["kpis"]["total"]),
     }
 
 # endregion

@@ -283,6 +283,82 @@ function renderChart() {
 // ---------------------------------------------------------------- Alocação e classes
 //#endregion
 
+//#region Risco
+// Bloco "Risco" (carteira/risco.py): maior queda, queda atual, VaR/CVaR de 1 dia e de 1 mês e a
+// volatilidade, da carteira e do BOVA11; gráfico da queda desde o topo, dia a dia.
+function renderRisk(a) {
+    const r = a.risk;
+    $('riskPanel').hidden = !r;
+    if (!r) { state.riskChart?.destroy(); state.riskChart = null; return; }
+    const p = r.portfolio, b = r.bova;
+    const pct = (v, d = 1) => v === null || v === undefined ? '—' : fmtPct(v, d);
+    const unsigned = (v) => v === null || v === undefined ? '—' : `${fmtNum(v, 1)}%`;  // volatilidade: sem sinal
+    const sd = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}`;
+    $('riskSub').innerText = `${fmtDate(r.from)} a ${fmtDate(r.to)} · ${fmtNum(r.sessions, 0)} pregões`;
+    $('riskWarning').hidden = !r.warning;
+    $('riskWarning').innerText = r.warning || '';
+    const dd = p.maxDrawdown;
+    const back = dd.recovered ? `recuperada em ${sd(dd.recovered)} (${fmtNum(dd.recoverySessions, 0)} pregões)` : 'ainda não recuperada';
+    const card = (label, value, note, tone, help) => `<div class="kpi kpi-card ${tone}" data-reveal>
+            <div class="kpi-top"><span class="kpi-label">${label} ${tip(help)}</span></div>
+            <div class="kpi-value num">${value}</div><div class="kpi-note">${note}</div></div>`;
+    const tail = (x, bx, unit) => card(`${unit === 'day' ? 'Dia' : 'Mês'} ruim (VaR ${r.level}%)`,
+        `${pct(x.var)} <span class="kpi-delta">${fmtBRL(-x.varBRL)}</span>`,
+        `média nos ruins (CVaR): ${pct(x.cvar)} · ${fmtBRL(-x.cvarBRL)}<br>BOVA11: ${pct(bx.var)} · CVaR ${pct(bx.cvar)}`,
+        'tone-red', unit === 'day'
+            ? `Em 1 de cada 20 dias a carteira perdeu isso ou mais. CVaR: a perda média nesses dias. Em R$ sobre o patrimônio de hoje.`
+            : `Em 1 de cada 20 meses (21 pregões, janelas móveis) a carteira perdeu isso ou mais. CVaR: a perda média nesses meses.`);
+    $('riskKpis').innerHTML = [
+        card('Maior queda', pct(dd.pct), `${dd.pct < -0.05 ? `de ${sd(dd.peak)} a ${sd(dd.trough)} · ${back}` : 'sem queda no período'}<br>BOVA11: ${pct(b.maxDrawdown.pct)}`, dd.pct < -0.05 ? 'tone-red' : 'tone-green',
+            'A pior perda de um topo até o fundo seguinte, pela rentabilidade da cota (os aportes não contam como ganho).'),
+        card('Queda atual', pct(p.current.pct), p.current.pct < -0.05 ? `abaixo do topo de ${sd(p.current.peak)}` : 'no topo ou perto dele',
+            p.current.pct < -0.05 ? 'tone-red' : 'tone-green', 'Quanto a carteira está abaixo do seu último topo hoje.'),
+        tail(p.day, b.day, 'day'),
+        tail(p.month, b.month, 'month'),
+        card('Volatilidade', `${unsigned(p.volatility)} <span class="kpi-delta">ao ano</span>`, `BOVA11: ${unsigned(b.volatility)} ao ano`, 'tone-violet',
+            'Quanto a rentabilidade oscila: o desvio-padrão dos retornos diários, anualizado. Quanto maior, maiores os sobes e desces.')
+    ].join('');
+    $('riskKpis')._itemsSeen = false;
+    revealItems($('riskKpis'), '.kpi-card');
+    $('riskText').innerHTML = r.text.map(t => `<li>${escapeHTML(t)}</li>`).join('');
+
+    if (typeof Chart === 'undefined') return;
+    const labels = r.chart.labels.map(sd);
+    const data = [r.chart.portfolio, r.chart.bova];
+    if (state.riskChart) {
+        state.riskChart.data.labels = labels;
+        state.riskChart.data.datasets.forEach((ds, k) => { ds.data = data[k]; });
+        state.riskChart.update();
+        return;
+    }
+    const muted = cssVar('--text-muted'), text = cssVar('--text-color');
+    whenVisible('riskChart', () => {
+        if (state.riskChart) return;
+        state.riskChart = new Chart($('riskChart'), {
+            type: 'line',
+            data: { labels, datasets: [
+                { label: 'Carteira', data: data[0], borderColor: '#ff7b72', backgroundColor: verticalGradient('#ff7b72', 0, 0.3), fill: 'origin',
+                  borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 6, tension: 0.1 },
+                { label: 'BOVA11', data: data[1], borderColor: '#4ad991', borderDash: [5, 4], borderWidth: 1.4, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.1 }
+            ] },
+            plugins: [crosshairPlugin],
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: { duration: 900, easing: 'easeOutCubic' },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: text, usePointStyle: true, pointStyle: 'line', boxWidth: 24 } },
+                    tooltip: { ...chartTooltip(), callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtPct(ctx.parsed.y, 1)}` } }
+                },
+                scales: {
+                    x: { ticks: { color: muted, maxTicksLimit: 8, maxRotation: 0 }, grid: { display: false }, border: { color: CHART_GRID } },
+                    y: { max: 0, ticks: { color: muted, callback: (v) => `${fmtNum(v, 0)}%` }, grid: { color: CHART_GRID }, border: { display: false } }
+                }
+            }
+        });
+    });
+}
+//#endregion
+
 //#region Alocação por classe
 // Visão geral: alocação por classe só para leitura (a edição fica em Configurações).
 function renderAllocation(a) {

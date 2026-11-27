@@ -72,6 +72,7 @@ const state = {
     pageSize: 0,         // linhas por página, a mesma em todas as tabelas (PAGE_SIZES; salva em PAGE_SIZE_KEY)
     batch: null,         // lista de compras sugeridas em conferência: { date, amount, rows }
     chart: null,
+    riskChart: null,     // gráfico "Queda desde o topo" do bloco Risco
     goals: null,         // resposta de /metas (null = ainda não carregada para a carteira atual)
     goalsSeq: 0,         // descarta respostas de metas fora de ordem
     goalCharts: [],      // gráficos dos cartões de meta (destruídos a cada redesenho)
@@ -305,6 +306,7 @@ async function loadPortfolio(busy) {
     renderAporte();
     renderPatrimony();
     renderChart();
+    renderRisk(a);
     renderAllocation(a);
     renderPositions(a);
     renderAssetTargets(a);
@@ -344,7 +346,7 @@ function showTab(name) {
     try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* preferência não salva */ }
     // Um canvas desenhado enquanto a seção estava escondida fica com tamanho zero.
     if (has && (name === 'visao' || name === 'aportes')) {
-        const charts = name === 'visao' ? [state.chart, state.patrimonyChart] : Object.values(state.aporteCharts);
+        const charts = name === 'visao' ? [state.chart, state.patrimonyChart, state.riskChart] : Object.values(state.aporteCharts);
         for (const c of charts) if (c) { c.resize(); c.update('none'); }
     }
     if (has && name === 'metas' && !state.goals) loadGoals();

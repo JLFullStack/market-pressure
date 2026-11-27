@@ -31,6 +31,16 @@
 .patrimony-classes { font-size: 13px; margin: 10px 0 0; line-height: 1.8; }
 /* #endregion */
 
+/* #region Risco */
+.risk-kpis { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 6px; }
+.risk-kpis .kpi-value { font-size: 22px; }
+.risk-kpis .kpi-note { line-height: 1.6; }
+.risk-warning { margin: 4px 0 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--warning);
+                background: rgba(219, 109, 40, 0.1); border: 1px solid rgba(219, 109, 40, 0.3); }
+.risk-text { margin-top: 12px; }
+.risk-subhead { margin: 16px 0 6px; font-size: 14px; }
+/* #endregion */
+
 /* #region Alocação por classe */
 /* O nome da classe numa linha no desktop; no celular quebra (a coluna é a fixa, estreita), com o
    quadradinho da cor ao lado da primeira linha. */
