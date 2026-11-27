@@ -344,6 +344,47 @@ def entry_warnings(stats, ma_name=None, bench6m=None):
     return reasons
 
 
+# Preço travado (OPA, fechamento de capital, fusão com preço fixado): o preço cola no valor da oferta,
+# a volatilidade some e o gráfico parece um pullback perfeito, sem ter para onde subir (DESK3 em
+# out/2026). Travado = volatilidade anualizada dos retornos diários dos últimos `window` pregões abaixo
+# de maxVol E abaixo de maxRatio da habitual do ativo (mediana da mesma medida entre pastFrom e pastTo
+# pregões antes, a cada pastStep). Calibrado em 27/11/2026 nos 10 anos salvos: nas ações só marcou
+# AALR3 (2022–23), CBAV3, DESK3 e MILS3 (2026), todas com OPA, e o resultado não mudou com limites
+# de 10–15% e 0,30–0,45; nos fundos marcou fases calmas de FIIs comuns (MXRF11, HGLG11...) e por isso
+# só vale para as ações (kinds; na Carteira, o grupo "acoes" na B3). ETFs e BDRs nunca marcaram.
+LOCK = {"window": 60, "maxVol": 0.12, "maxRatio": 0.35, "pastFrom": 500, "pastTo": 120, "pastStep": 10,
+        "kinds": ("acoes",)}
+
+
+def _volatility(closes, i, window):
+    """Volatilidade anualizada dos retornos logarítmicos diários dos `window` pregões até i."""
+    rets = [math.log(closes[k] / closes[k - 1]) for k in range(i - window + 1, i + 1)]
+    mean = add_up(rets) / len(rets)
+    return math.sqrt(add_up((r - mean) ** 2 for r in rets) / len(rets)) * math.sqrt(252)
+
+
+def price_lock_stats(closes, i):
+    """{priceVol, priceVolPast} no candle i (LOCK), em fração; None em cada um sem histórico."""
+    w = LOCK["window"]
+    if i < w or any(not closes[k] or closes[k] <= 0 for k in range(max(0, i - LOCK["pastFrom"] - w), i + 1)):
+        return {"priceVol": None, "priceVolPast": None}
+    now = _volatility(closes, i, w)
+    past = sorted(_volatility(closes, j, w) for j in range(i - LOCK["pastFrom"], i - LOCK["pastTo"], LOCK["pastStep"])
+                  if j >= w)
+    median = (past[len(past) // 2] if len(past) % 2 else (past[len(past) // 2 - 1] + past[len(past) // 2]) / 2) if past else None
+    return {"priceVol": now, "priceVolPast": median}
+
+
+def price_locked(stats):
+    """Texto curto do preço travado (stats: price_lock_stats) ou None."""
+    vol, past = (stats or {}).get("priceVol"), (stats or {}).get("priceVolPast")
+    if vol is None or not past or vol >= LOCK["maxVol"] or vol / past >= LOCK["maxRatio"]:
+        return None
+    return (f"preço travado: volatilidade de {fmt_num(vol * 100, 1)}% ao ano nos últimos {LOCK['window']} pregões, "
+            f"{fmt_num(vol / past * 100, 0)}% da habitual do ativo ({fmt_num(past * 100, 1)}%), o padrão de uma OPA, "
+            "fechamento de capital ou fusão com preço fixado")
+
+
 def exit_signal(ind, i):
     """Regra de venda (regra "B"): fechamento abaixo de MM20, MM50 e MM200 E tendência de baixa
     formada (MM50 < MM200). Usada no backtest do screener e na situação das posições da carteira."""

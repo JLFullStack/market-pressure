@@ -18,7 +18,7 @@ from ..comum import database as db
 from ..configuracoes import strategy as st
 from ..comum import market_data, runtime
 from ..comum.core import (ENTRY, EXIT, REENTRY_DISTANCE, SETUP, add_up, adjusted_candles, avg, clamp01, closed_candles, compute_indicators, day_of,
-                  entry_stats, entry_warnings, evaluate_setup, exit_signal, fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_sessions,
+                  entry_stats, entry_warnings, evaluate_setup, LOCK, price_lock_stats, price_locked, exit_signal, fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_sessions,
                   in_session_hours, last_close, session_in_progress, weak_close)
 
 # region Configuração
@@ -364,6 +364,8 @@ def analyze_asset(candles, confirm_previous=False, kind="acoes"):
         # Força da tendência (indicação COMPRAR/AGUARDAR, core.entry_warnings): inclinação da MM200
         # em 20 pregões e retornos de 12 e 6 meses, em fração.
         **entry_stats(ind["closes"], ind["mm200"], i),
+        # Preço travado (core.LOCK; só nas ações): volatilidade de 60 pregões e a habitual do ativo.
+        **(price_lock_stats(ind["closes"], i) if kind in LOCK["kinds"] else {"priceVol": None, "priceVolPast": None}),
         "setup": {k: setup[k] for k in ("ok", "okStrict", "pullback", "ma", "pattern")},
     }
     if not setup["ok"]:
@@ -602,7 +604,7 @@ def ranking_view(analyses, strict, kinds=None, benchmark6m=None):
     6 meses do BOVA11 na mesma base (força relativa da indicação)."""
     ranking = build_ranking([a for a in analyses if not a.get("duplicateOf")], strict, kinds)
     top = [{k: a.get(k) for k in ("ticker", "name", "sector", "price", "change", "setup", "bt", "score",
-                                  "mm200Slope", "return12m", "return6m")}
+                                  "mm200Slope", "return12m", "return6m", "priceVol", "priceVolPast")}
            | {"benchmark6m": benchmark6m, "pressure": a["pressure"]["total"], "bottle": bottle_state(a["pressure"]["total"]),
               "pressureParts": pressure_parts(a["pressure"], a.get("kind")),
               "justification": justification(a)} for a in ranking[:CONFIG["topN"]]]
@@ -649,7 +651,8 @@ def advice(a, lots, strategy, kind=None, rank=None):
     """Coluna "Indicação" do ranking: COMPRAR ou AGUARDAR, com o motivo (o Screener não indica
     venda; isso é da Carteira). Todo ativo do ranking está no setup. AGUARDAR quando a carteira já
     tem uma compra aberta a menos de reentryDistance do preço (mesmo pullback: a estratégia só
-    recompra em outro) ou, fora de adviceIgnoreKinds, quando a tendência está fraca (weak_trend) ou o
+    recompra em outro), com o preço travado (core.price_locked, só nas ações: OPA ou fusão com preço
+    fixado; vem antes de tudo) ou, fora de adviceIgnoreKinds, quando a tendência está fraca (weak_trend) ou o
     ativo está mais fraco que o BOVA11 em 6 meses (weak_relative). COMPRAR com prioridade
     (COMPRAR com "priority" e o motivo começando por "Prioridade") no Top priorityRank do tipo (rank)
     ou com Score ≥ priorityScore (is_priority). O
@@ -658,6 +661,14 @@ def advice(a, lots, strategy, kind=None, rank=None):
     strategy: a regra do grupo ({key, target, fraction}, strategy.for_group), para o texto da
     saída; kind: o grupo (rule_group).
     O motivo vem em parágrafos separados por "\n"."""
+    locked = price_locked(a) if (kind or "acoes") in LOCK["kinds"] else None
+    if locked:
+        return {"action": "aguardar", "label": "AGUARDAR", "locked": True, "reason": (
+            f"Está no setup, mas com {locked}.\n"
+            "Um preço colado no valor de uma oferta parece um pullback perfeito, mas não tem para onde subir. Confira "
+            "as notícias (fato relevante, edital de OPA) antes de comprar.\n"
+            "Nos 10 anos de histórico do app, todas as ações com esse padrão estavam com oferta em andamento (AALR3, "
+            "CBAV3, DESK3, MILS3).")}
     price = a["price"]
     dist = CONFIG["reentryDistance"]
     nearest = min(lots or [], key=lambda lot: abs(price / lot["price"] - 1), default=None)

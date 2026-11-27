@@ -13,7 +13,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from ..comum import cruzamento as cz
 from ..comum.core import (ENTRY, EXIT, REENTRY_DISTANCE, add_up, trend_strength, weak_close, closed_candles, compute_indicators, day_of, entry_stats,
-                  entry_warnings, evaluate_setup, exit_signal,
+                  entry_warnings, evaluate_setup, exit_signal, price_lock_stats, price_locked,
                   fmt_brl, fmt_date, fmt_num, fmt_pct_value, fmt_qty, iso_day_in, js_round, today_iso)
 
 # region Classes, mercados e constantes
@@ -721,7 +721,7 @@ def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="
 
     nearest = gap = pullback = None
     wait = (setup or {}).get("wait") or []
-    if setup and setup.get("ok") and not wait:
+    if setup and setup.get("ok") and not wait and not setup.get("locked"):
         nearest = min(lots, key=lambda lot: abs(c / lot["price"] - 1), default=None)
         gap = abs(c / nearest["price"] - 1) if nearest else None
         ma = setup["ma"]
@@ -782,12 +782,14 @@ def position_signal(ind, i, partial, lots, strategy=DEFAULT_STRATEGY, currency="
 
 
 def holding_signal(transactions, ticker, candles, market, strategy=DEFAULT_STRATEGY, now=None, memo=None,
-                   bench6m=None, check_entry=False):
+                   bench6m=None, check_entry=False, check_lock=False):
     """Lotes abertos, venda parcial pendente e indicação (position_signal) de um ativo com posição.
     candles: histórico na moeda do ativo (com o candle do pregão em andamento, se houver: a
     máxima do dia já conta para o alvo); a reversão, as médias e o setup usam só os pregões fechados.
     check_entry: aplica o filtro de entrada do Screener (core.entry_warnings, com bench6m = retorno
-    de 6 meses do BOVA11) ao COMPRAR — fora dos internacionais."""
+    de 6 meses do BOVA11) ao COMPRAR — fora dos internacionais. check_lock: procura o preço travado
+    (core.price_locked; ações na B3): sem COMPRAR e com o aviso no início do motivo; o texto curto
+    vai em "locked"."""
     closed = closed_for(candles, market, now)
     ind = indicators_memo(closed, memo) if len(closed) >= 200 else None
     lots = open_lots(transactions, ticker, candles, strategy["target"], partial_fraction(strategy),
@@ -797,17 +799,29 @@ def holding_signal(transactions, ticker, candles, market, strategy=DEFAULT_STRAT
     if setup and setup.get("ok") and check_entry:
         i = len(closed) - 1
         setup = {**setup, "wait": entry_warnings(entry_stats(ind["closes"], ind["mm200"], i), setup["ma"]["name"], bench6m)}
+    locked = price_locked(price_lock_stats(ind["closes"], len(closed) - 1)) if check_lock and ind else None
+    if setup and locked:
+        setup = {**setup, "locked": True}
     signal = position_signal(ind, len(closed) - 1, partial, lots, strategy, MARKETS[market]["currency"], setup,
                              whole=market == "b3")
+    if signal and locked:
+        signal = {**signal, "locked": locked, "reason": f"Atenção: {locked}.\n{LOCK_ADVICE}\n{signal['reason']}"}
     return {"lots": lots, "partial": partial if signal and signal["key"] == "partial" else None, "signal": signal}
 
 
-def setup_now(candles, market, mode, now=None, memo=None, bench6m=None, check_entry=False):
+# Preço travado numa posição (holding_signal): com uma oferta, a reversão de tendência pode nunca vir.
+LOCK_ADVICE = ("Se houver oferta (OPA, fechamento de capital, fusão), a venda pela reversão de tendência pode não "
+               "acontecer: confira as notícias (fato relevante, edital) e compare vender na bolsa com aceitar a oferta, "
+               "ficando com o que pagar mais. Sem nova compra enquanto o preço estiver travado.")
+
+
+def setup_now(candles, market, mode, now=None, memo=None, bench6m=None, check_entry=False, check_lock=False):
     """O ativo está no setup de pullback agora? Mesma regra e mesma base do screener: na base
     "fechamento" descarta o candle do pregão em andamento; no "intradiario" usa o candle do dia
     e exige que o último pregão fechado também esteja acima da média (confirm_previous).
     candles na moeda do ativo (o setup é lido no gráfico dele, não convertido).
-    memo: cache opcional de indicadores por quantidade de candles."""
+    memo: cache opcional de indicadores por quantidade de candles. check_lock: preço travado
+    (core.price_locked) → "locked" com o texto, e o ativo não conta como em pullback no aporte."""
     closed = closed_for(candles, market, now)
     live = len(closed) < len(candles)
     use = candles if mode == "intradiario" else closed
@@ -817,7 +831,8 @@ def setup_now(candles, market, mode, now=None, memo=None, bench6m=None, check_en
     s = evaluate_setup(ind, len(use) - 1, mode == "intradiario" and live)
     wait = (entry_warnings(entry_stats(ind["closes"], ind["mm200"], len(use) - 1), s["ma"]["name"], bench6m)
             if s["ok"] and check_entry else [])
-    return {"enough": True, "ok": bool(s["ok"]), "ma": s["ma"], "close": use[-1]["c"], "wait": wait}
+    locked = price_locked(price_lock_stats(ind["closes"], len(use) - 1)) if check_lock else None
+    return {"enough": True, "ok": bool(s["ok"]), "ma": s["ma"], "close": use[-1]["c"], "wait": wait, "locked": locked}
 
 # endregion
 
@@ -1432,6 +1447,8 @@ def contribution_plan(classes, items, total, amount, mode, selected=(), options=
             status = {"key": "fixed", "label": "Renda fixa"}
         elif i.get("candidate"):
             status = {"key": "candidate", "label": f"Novo · Screener ({setup['ma']['name']})" if setup.get("ma") else "Novo · Screener"}
+        elif setup.get("locked"):
+            status = {"key": "wait", "label": "Preço travado (possível OPA)"}
         elif setup.get("ok") and setup.get("wait"):
             status = {"key": "wait", "label": f"Pullback ({setup['ma']['name']}) em tendência fraca"}
         elif setup.get("ok"):
@@ -1443,6 +1460,8 @@ def contribution_plan(classes, items, total, amount, mode, selected=(), options=
             excluded = "Vender: fechamento abaixo da MM20, MM50 e MM200 com MM50 < MM200 — não recebe aporte"
         elif status["key"] == "candidate":
             excluded = None
+        elif setup.get("locked"):   # preço travado (possível OPA): sem compra em nenhum modo
+            excluded = "Aguardar: " + setup["locked"]
         elif mode == "escolher" and i["key"] not in chosen:
             excluded = "Não selecionado"
         elif mode == "pullback" and status["key"] == "wait":
@@ -1703,10 +1722,13 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, str
             if p["quantity"] > 0:
                 rule = rule_for(p["ticker"], market)
                 check = market == "b3" and rule.get("group") != "internacionais"
-                held = holding_signal(txs, p["ticker"], raw, market, rule, now, memo, bench6m["fechamento"], check)
+                lock = market == "b3" and rule.get("group") == "acoes"
+                held = holding_signal(txs, p["ticker"], raw, market, rule, now, memo, bench6m["fechamento"], check, lock)
                 signal, partial = held["signal"], held["partial"]
-            check = market == "b3" and rule_for(p["ticker"], market).get("group") != "internacionais"
-            setup = {mode: setup_now(raw, market, mode, now, memo, bench6m[mode], check) for mode in ("fechamento", "intradiario")}
+            group = rule_for(p["ticker"], market).get("group")
+            check, lock = market == "b3" and group != "internacionais", market == "b3" and group == "acoes"
+            setup = {mode: setup_now(raw, market, mode, now, memo, bench6m[mode], check, lock)
+                     for mode in ("fechamento", "intradiario")}
         positions.append({
             **p, "market": market, "currency": MARKETS[market]["currency"],
             "cls": (portfolio.get("assets", {}).get(p["ticker"]) or {}).get("class")
@@ -1720,6 +1742,7 @@ def analyze_portfolio(portfolio, histories, cdi_rates, as_of=None, now=None, str
             "returnPct": profit / p["bought"] * 100 if p["bought"] else None, "setup": setup,
             "status": signal and signal["label"], "statusKey": signal and signal["key"],
             "statusReason": signal and signal["reason"], "statusStrength": signal and signal.get("strength"),
+            "priceLock": signal and signal.get("locked"),
             "partial": partial,
         })
     open_ = sorted((p for p in positions if p["quantity"] > 0), key=lambda p: -p["value"])

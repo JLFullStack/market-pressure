@@ -139,7 +139,9 @@ Mercado ou cancelamento de registro;
   - recuperação judicial ou extrajudicial, falência, suspensão de negociação, liquidação do fundo.
 - Sinal desses eventos nos dados: o preço quase parado, colado num valor (o da oferta), com ATR muito \
 baixo para o ativo e candles minúsculos. Um "recuo perfeito" até a média com a volatilidade sumindo \
-pede essa checagem. O veto dura até o evento ser cancelado ou concluído.
+pede essa checagem. O veto dura até o evento ser cancelado ou concluído. Nas ações, o app marca esse \
+padrão como "preço travado" (volatilidade dos últimos 60 pregões muito abaixo da habitual) e indica \
+AGUARDAR; sem a marca, o evento ainda pode existir, então pesquise do mesmo jeito.
 - **Fato grave (posição menor, ou não comprar se a tese quebrou)**: fraude ou balanço refeito, calote \
 ou renegociação de dívida, investigação séria, perda do principal contrato ou cliente, corte brusco \
 de dividendos por falta de caixa, emissão de ações muito diluidora. Diga qual fato, a data e a fonte.
