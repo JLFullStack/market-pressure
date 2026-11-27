@@ -71,7 +71,9 @@
 .ranking .asset-text .small.muted { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 170px; }
 .ma-pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.03); }
 /* Barras dos componentes da pressão (equalizador) */
-.press { display: inline-flex; align-items: center; gap: 8px; }
+.press { display: inline-flex; align-items: center; gap: 12px; text-align: left; }
+.press-info { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.press-top { display: inline-flex; align-items: center; gap: 8px; }
 .press-num { font-weight: 700; }
 .eq { display: inline-flex; align-items: flex-end; gap: 3px; height: 28px; padding: 3px 4px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); cursor: help; }
 .eq:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

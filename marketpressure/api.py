@@ -354,7 +354,8 @@ def get_asset_info(req):
 
 @route("GET", f"/api/carteira/{PORTFOLIO_ID}/analise")
 def get_analysis(req):
-    return svc.analysis_payload(portfolio_of(req, needs_entries=True))
+    """Visão geral, com a pressão do recuo das posições no setup (favoritos.with_pressure)."""
+    return favoritos.with_pressure(svc.analysis_payload(portfolio_of(req, needs_entries=True)))
 
 
 @route("GET", f"/api/carteira/{PORTFOLIO_ID}/grafico")

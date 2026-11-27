@@ -18,6 +18,93 @@
 .fav-star:disabled { opacity: 0.5; cursor: wait; }
 /* #endregion */
 
+/* #region Garrafa da pressão (grafico-ativo.js: gasVessel, bottleIcon, pressurePanel) */
+/* Cores por estado (como a versão antiga): enchendo âmbar, quase cheia laranja, cheia vermelha. */
+.gas-enchendo, .bottle-enchendo { --c1: #ffb13d; --c2: #ffcb6b; }
+.gas-quase, .bottle-quase { --c1: #ff7a3d; --c2: #ffa257; }
+.gas-cheia, .bottle-cheia { --c1: #ff4d4d; --c2: #ff7a6b; }
+.gas { position: relative; display: inline-flex; flex-direction: column; align-items: center; flex: none; --w: 22px; --h: 38px; }
+.gas-mini { --w: 22px; --h: 38px; }
+/* Coluna Pressão do Screener: tamanho fixo, o mesmo em todas as linhas (perto da altura das linhas mais baixas). */
+.gas-cell { --w: 32px; --h: 88px; }
+.gas-big { --w: 84px; --h: 250px; }
+.gas-halo { position: absolute; inset: -25% -60%; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(ellipse, color-mix(in srgb, var(--c1) 34%, transparent) 0%, transparent 70%);
+    filter: blur(calc(var(--w) * 0.3)); animation: gas-halo 3.4s ease-in-out infinite; }
+.gas-valve { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; margin-bottom: -1px; }
+.gas-valve i { width: calc(var(--w) * 0.3); height: calc(var(--w) * 0.15); border-radius: 3px 3px 0 0; background: #344262; }
+.gas-valve b { width: calc(var(--w) * 0.44); height: max(2px, calc(var(--w) * 0.06)); border-radius: 3px; margin-top: 1px; background: #4a5a80; }
+.gas-vessel { position: relative; width: var(--w); height: var(--h); overflow: hidden; box-sizing: border-box;
+    border-radius: calc(var(--w) * 0.36) calc(var(--w) * 0.36) calc(var(--w) * 0.28) calc(var(--w) * 0.28);
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(90deg, rgba(10, 16, 32, 0.95), rgba(22, 32, 58, 0.9) 50%, rgba(10, 16, 32, 0.95));
+    box-shadow: inset 0 0 calc(var(--w) * 0.5) rgba(0, 0, 0, 0.55); }
+.gas-fill { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--lv) * 100%);
+    background: linear-gradient(0deg, var(--c1), var(--c2)); box-shadow: 0 -4px calc(var(--w) * 0.4) color-mix(in srgb, var(--c2) 70%, transparent); }
+.gas-surface { position: absolute; top: -2px; left: -10%; right: -10%; height: max(3px, calc(var(--w) * 0.1));
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--c2) 55%, #fff), transparent); filter: blur(1px);
+    animation: gas-wave 3s ease-in-out infinite; }
+.gas-bubbles i { position: absolute; bottom: 3%; border-radius: 50%; opacity: 0; background: color-mix(in srgb, var(--c2) 70%, #fff);
+    animation: gas-bubble var(--d) linear var(--dl) infinite; }
+.gas-bubbles i:nth-child(1) { left: 22%; width: calc(var(--w) * 0.07); height: calc(var(--w) * 0.07); --d: 2.4s; --dl: 0s; }
+.gas-bubbles i:nth-child(2) { left: 55%; width: calc(var(--w) * 0.09); height: calc(var(--w) * 0.09); --d: 3.1s; --dl: 0.8s; }
+.gas-bubbles i:nth-child(3) { left: 74%; width: calc(var(--w) * 0.055); height: calc(var(--w) * 0.055); --d: 2.8s; --dl: 1.5s; }
+.gas-mini .gas-bubbles i { min-width: 2px; min-height: 2px; }
+.gas-mark { position: absolute; left: 0; right: 0; height: 1px; bottom: calc(var(--at) * 100%); background: rgba(255, 255, 255, 0.16); }
+.gas-shine { position: absolute; top: 5%; left: 14%; width: 16%; height: 68%; border-radius: 999px; pointer-events: none;
+    background: linear-gradient(rgba(255, 255, 255, 0.2), transparent); }
+/* Enche ao aparecer: a linha (tr.in) ou o card aberto. */
+.js-reveal tr[data-reveal]:not(.in) .gas-fill { height: 0; }
+tr.in .gas-fill { animation: gas-fill 1.2s var(--ease-out) backwards; animation-delay: calc(var(--stagger, 0s) + 0.35s); }
+.chart-dialog[open] .gas-big .gas-fill { animation: gas-fill 1.5s var(--ease-out) 0.25s backwards; }
+@keyframes gas-fill { from { height: 0; } }
+@keyframes gas-halo { 0%, 100% { opacity: 0.45; transform: scale(1); } 50% { opacity: 0.9; transform: scale(1.06); } }
+@keyframes gas-wave { 0%, 100% { transform: scaleX(1.02) translateY(0); } 50% { transform: scaleX(0.96) translateY(-2px); } }
+@keyframes gas-bubble { 0% { transform: translateY(0) scale(1); opacity: 0; } 12% { opacity: 0.85; }
+    100% { transform: translateY(calc(var(--lv) * var(--h) * -0.92)) scale(0.6); opacity: 0; } }
+/* Célula da tabela */
+.bottle { display: inline-flex; align-items: center; gap: 8px; cursor: help; vertical-align: middle; padding: 2px 2px 0; }
+.bottle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+.bottle-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--c1); white-space: nowrap; }
+/* Painel "Pressão acumulada" do card do gráfico */
+.gas-panel { margin: 4px 0 14px; padding: 16px 18px; border-radius: var(--radius);
+    border: 1px solid color-mix(in srgb, var(--c1) 30%, var(--border-color));
+    background: radial-gradient(420px 220px at 8% 60%, color-mix(in srgb, var(--c1) 12%, transparent), transparent 70%), var(--panel-raised); }
+.gas-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.gas-tag { font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; color: var(--accent); background: rgba(56, 139, 253, 0.14); }
+.gas-panel-body { display: grid; grid-template-columns: auto minmax(180px, 1fr) minmax(220px, 1.2fr); gap: 20px 34px; align-items: center; padding: 22px 8px 4px 18px; }
+.gas-read { min-width: 0; }
+.gas-num { display: flex; align-items: flex-end; gap: 3px; line-height: 0.85; }
+.gas-num .num { font-size: 64px; font-weight: 800; letter-spacing: -0.03em; color: var(--text-color); }
+.gas-num small { font-size: 24px; font-weight: 600; color: var(--text-muted); padding-bottom: 4px; }
+.gas-state { display: flex; align-items: center; gap: 9px; margin: 12px 0 4px; font-size: 15px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--c1); }
+.gas-state i { width: 13px; height: 13px; border-radius: 50%; background: var(--c1); box-shadow: 0 0 10px var(--c1); }
+.gas-bands { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 4px; }
+.gas-band { display: grid; grid-template-columns: 8px 58px 1fr; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 8px; font-size: 12px; color: var(--text-muted); border: 1px solid transparent; }
+.gas-band i { width: 7px; height: 7px; border-radius: 50%; background: var(--c1); opacity: 0.7; }
+.gas-band b { font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; }
+.gas-band.on { color: var(--c1); border-color: color-mix(in srgb, var(--c1) 55%, transparent); background: color-mix(in srgb, var(--c1) 9%, transparent); }
+.gas-band.on i { opacity: 1; box-shadow: 0 0 6px var(--c1); }
+.gas-parts { display: grid; gap: 12px; min-width: 0; }
+.gas-part { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 5px; font-size: 12.5px; }
+.gas-part > .num { font-weight: 700; }
+.gas-part-bar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+.gas-part-bar i { display: block; height: 100%; border-radius: 3px; background: var(--c); transform: scaleX(var(--v)); transform-origin: left; }
+.gas-part-bar.eq-volume { --c: #5aa2ff; }
+.gas-part-bar.eq-momentum { --c: #22d3ee; }
+.gas-part-bar.eq-trend { --c: #9b7bff; }
+.gas-part-bar.eq-structure { --c: #ffb057; }
+.chart-dialog[open] .gas-part-bar i { animation: grow-x 0.9s var(--ease-out) backwards; animation-delay: calc(0.45s + var(--k, 0) * 0.1s); }
+.gas-note { display: flex; gap: 12px; align-items: flex-start; margin: 18px 0 0; padding: 12px 14px; border-radius: 12px; font-size: 13px; color: var(--text-muted);
+    border: 1px solid color-mix(in srgb, var(--c1) 40%, transparent); background: color-mix(in srgb, var(--c1) 9%, transparent); }
+.gas-note > i { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; background: var(--c1); box-shadow: 0 0 10px var(--c1); }
+.gas-note strong { display: block; margin-bottom: 2px; color: var(--c1); }
+/* Fora do setup: a linha que explica por que não há pressão, no lugar do painel. */
+.gas-none { display: flex; align-items: center; gap: 10px; margin: 4px 0 14px; padding: 10px 14px; font-size: 13px; color: var(--text-muted);
+    border: 1px dashed var(--border-strong); border-radius: 12px; background: rgba(255, 255, 255, 0.02); }
+.gas-none-icon { flex: none; width: 12px; height: 20px; border-radius: 4px 4px 3px 3px; border: 1.5px solid var(--text-muted); opacity: 0.7; }
+/* #endregion */
+
 /* #region Card flutuante "Operações no gráfico" */
 /* Sem transform no próprio diálogo (a caixa de ajuda, position fixed, mora dentro dele); os filhos
    entram em cascata e o gráfico se desenha. A altura segue a área visível de verdade (dvh; no
@@ -44,9 +131,13 @@
 /* Fechar: sempre no canto de cima à direita do card, em vermelho (a ação de fechar). */
 .chart-dialog > .panel-head { flex-wrap: nowrap; align-items: flex-start; padding-right: 46px; }
 .chart-dialog > .panel-head > .result-head { flex: 1 1 auto; }
+/* O "X" fica numa faixa grudada no topo do card (altura 0, não empurra o conteúdo): ao rolar o card, ele
+   continua à mão no canto de cima à direita. */
+.chart-dialog-closebar { position: sticky; top: 0; z-index: 6; height: 0; display: flex; justify-content: flex-end; }
 .chart-dialog-close.icon-btn {
-    position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border-radius: 50%;
-    color: #ff6b6b; background: rgba(255, 107, 107, 0.14); border-color: rgba(255, 107, 107, 0.55);
+    position: relative; top: -6px; right: -6px; width: 34px; height: 34px; border-radius: 50%; flex: none;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    color: #ff6b6b; background: color-mix(in srgb, #ff6b6b 14%, var(--panel-bg)); border-color: rgba(255, 107, 107, 0.55);  /* fundo opaco: passa por cima do conteúdo rolado */
 }
 .chart-dialog-close.icon-btn svg { width: 17px; height: 17px; stroke-width: 2.4; transition: transform 0.3s var(--ease-out); }
 .chart-dialog-close.icon-btn:hover { color: #fff; background: #ff6b6b; border-color: #ff6b6b; box-shadow: 0 0 14px rgba(255, 107, 107, 0.45); }
@@ -113,10 +204,16 @@
 
 /* #region Responsivo */
 @media (prefers-reduced-motion: reduce) {
+    .gas-fill, .gas-halo, .gas-surface, .gas-bubbles i, .gas-part-bar i { animation: none !important; }
+    .gas-bubbles { display: none; }
     .chart-dialog[open], .chart-dialog[open] > :not(#tipBox), .chart-dialog[open] .dlg-stat, .chart-dialog[open] .price-target { animation: none !important; }
 }
 
 @media (max-width: 640px) {
+    .gas-big { --w: 64px; --h: 190px; }
+    .gas-panel-body { grid-template-columns: auto minmax(0, 1fr); padding: 18px 0 0 6px; gap: 18px 22px; }
+    .gas-parts { grid-column: 1 / -1; }
+    .gas-num .num { font-size: 50px; }
     /* O card vira uma tela cheia com rolagem interna e o "X" fica preso no canto. */
     .chart-dialog {
         inset: 0; margin: 0; width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh;

@@ -79,3 +79,32 @@ class FavoritesTest(DatabaseTestCase):
         status, d = call("GET", "/api/grafico", {"ticker": ["VALE3"]})
         self.assertEqual((status, d["held"]), (200, False))
         self.assertEqual(call("GET", "/api/grafico", {"ticker": [""]})[0], 400)
+
+
+class PressureTest(DatabaseTestCase):
+    """A pressão do recuo fora do ranking (screener.pressure_info): favoritos e posições no setup."""
+
+    def test_pressure_only_in_the_setup_and_like_the_ranking(self):
+        from marketpressure.screener import screener
+        from tests.support import candles
+        n = next(n for n in range(262, 400) if screener.analyze_asset(candles(n))["setup"]["ok"])
+        info = screener.pressure_info(candles(n), "acoes")
+        self.assertAlmostEqual(info["pressure"], screener.analyze_asset(candles(n))["pressure"]["total"])
+        self.assertEqual(info["bottle"], screener.bottle_state(info["pressure"]))
+        self.assertEqual([p["key"] for p in info["pressureParts"]], ["volume", "momentum", "trend", "structure"])
+        self.assertNotIn("volume", [p["key"] for p in screener.pressure_info(candles(n), "bdrs")["pressureParts"]])
+        off = next(k for k in range(262, 400) if not screener.analyze_asset(candles(k))["setup"]["ok"])
+        self.assertIsNone(screener.pressure_info(candles(off), "acoes"))
+        self.assertIsNone(screener.pressure_info(candles(n)[:100], "acoes"))   # histórico curto
+        self.assertIn("Sem pressão", screener.NO_PRESSURE)
+
+    def test_carteira_positions_get_the_pressure_and_the_texts(self):
+        payload = {"open": [{"ticker": "PETR4", "market": "b3"}]}
+        info = {"pressure": 66.0, "bottle": "quase", "pressureParts": []}
+        with mock.patch("marketpressure.screener.screener.pressure_info", return_value=info):
+            out = fav.with_pressure(payload)
+        self.assertEqual(out["open"][0]["bottle"], "quase")
+        self.assertEqual(set(out["bottleStates"]), {"cheia", "quase", "enchendo"})
+        self.assertTrue(out["noPressureText"])
+        with mock.patch("marketpressure.screener.screener.pressure_info", return_value=None):
+            self.assertNotIn("pressure", fav.with_pressure({"open": [{"ticker": "PETR4", "market": "b3"}]})["open"][0])

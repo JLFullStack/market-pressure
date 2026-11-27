@@ -535,9 +535,29 @@ def build_ranking(analyses, strict, kinds=None):
     return ranking
 
 
+# Pressão mínima (%) de cada estado da garrafa; também desenha as marcas da garrafa da página.
+BOTTLE_LEVELS = {"quase": 60, "cheia": 75}
+# Rótulo, faixa e explicação de cada estado (o painel "Pressão acumulada" do card do gráfico). A
+# pressão descreve o padrão do recuo, não é probabilidade de acerto: os textos não prometem alta.
+BOTTLE_STATES = {
+    "cheia": {"label": "Cheia", "range": [BOTTLE_LEVELS["cheia"], 100],
+              "title": "Pressão máxima",
+              "text": "Volume, momento, tendência e estrutura mostram muita força acumulada no recuo: o padrão mais "
+                      "forte do setup. A pressão descreve o recuo; não é a chance de a compra dar certo."},
+    "quase": {"label": "Quase cheia", "range": [BOTTLE_LEVELS["quase"], BOTTLE_LEVELS["cheia"]],
+              "title": "Pressão alta",
+              "text": "Boa parte dos componentes já mostra força acumulada no recuo; falta pouco para a garrafa encher. "
+                      "A pressão descreve o recuo; não é a chance de a compra dar certo."},
+    "enchendo": {"label": "Enchendo", "range": [0, BOTTLE_LEVELS["quase"]],
+                 "title": "Pressão em formação",
+                 "text": "O ativo está no setup, mas o recuo ainda acumula pouca força compradora nos componentes. "
+                         "A pressão descreve o recuo; não é a chance de a compra dar certo."},
+}
+
+
 def bottle_state(p):
     """Estado da garrafa pela pressão: "cheia" (>= 75), "quase" (>= 60) ou "enchendo"."""
-    return "cheia" if p >= 75 else "quase" if p >= 60 else "enchendo"
+    return "cheia" if p >= BOTTLE_LEVELS["cheia"] else "quase" if p >= BOTTLE_LEVELS["quase"] else "enchendo"
 
 
 # Amplitude mínima (% do tipo em tendência primária de alta) de cada regime; também desenha as
@@ -560,6 +580,31 @@ def pressure_parts(p, kind):
     w = CONFIG["pressureWeights"].get(kind or "acoes", CONFIG["pressureWeights"]["default"])
     return [{"key": k, "label": label, "value": p[k], "weight": w[k] * 100}
             for k, label in PRESSURE_PARTS if w[k]]
+
+
+# Texto do card do gráfico para um ativo fora do setup (favoritos, posições): sem recuo, não há pressão.
+NO_PRESSURE = (f"Sem pressão agora: ela só é medida num recuo do setup (MM200 subindo, preço, MM20 e MM50 "
+               f"acima dela e o fechamento até {fmt_num(SETUP['maxDistance'] * 100, 0)}% acima de uma média depois de "
+               f"um recuo de pelo menos {fmt_num(SETUP['minPullback'] * 100, 0)}%).")
+
+
+def pressure_info(candles, kind="acoes"):
+    """Pressão do recuo de um ativo fora do ranking (favoritos, posições da Carteira), com a mesma
+    conta e os pesos do tipo do ranking: {pressure, bottle, pressureParts}, ou None fora do setup
+    (sem recuo não há o que medir). candles: os pregões fechados, no preço bruto; fundos usam o
+    preço ajustado por proventos, como no ranking (adjustDividends)."""
+    if len(candles) < CONFIG["backtestStart"]:
+        return None
+    if kind in CONFIG["adjustDividends"]:
+        candles = adjusted_candles(candles)
+    ind = compute_indicators(candles)
+    i = len(candles) - 1
+    setup = evaluate_setup(ind, i)
+    if not setup["ok"]:
+        return None
+    weights = CONFIG["pressureWeights"].get(kind or "acoes", CONFIG["pressureWeights"]["default"])
+    p = pressure(ind, i, setup, False, weights)
+    return {"pressure": p["total"], "bottle": bottle_state(p["total"]), "pressureParts": pressure_parts(p, kind)}
 
 
 def justification(a):
@@ -795,6 +840,8 @@ def scan_payload(scan, liquidity="padrao", kinds=None):
         "apiErrors": sum(1 for f in failures if f["reason"] != "histórico insuficiente"),
         "liveSession": any(a["fechamento"]["date"] != a["intradiario"]["date"] for a in scan["analyses"]),
         "regimeBands": REGIME_BANDS,
+        "bottleLevels": BOTTLE_LEVELS,
+        "bottleStates": BOTTLE_STATES,
         "views": views(scan, liquidity, kinds),
     }
 

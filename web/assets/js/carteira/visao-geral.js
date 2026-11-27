@@ -461,7 +461,8 @@ function renderPositions(a) {
             <td class="r nowrap">${fmtBRL(p.dividends)}</td>
             <td class="r nowrap">${weightCell(p.weight, maxWeight)}</td>
             <td class="c">${p.status ? signalBadge(p.status, p.statusReason, STATUS_BADGE[p.statusKey] || 'badge-low') : '<span class="small muted">—</span>'}
-                ${p.partial ? `<div class="small muted nowrap">${fmtQty(p.partial.quantity)} ${p.partial.quantity === 1 ? 'cota' : 'cotas'} de ${p.partial.lots} compra(s)</div>` : ''}</td>
+                ${p.partial ? `<div class="small muted nowrap">${fmtQty(p.partial.quantity)} ${p.partial.quantity === 1 ? 'cota' : 'cotas'} de ${p.partial.lots} compra(s)</div>` : ''}
+                ${p.pressure != null ? `<div class="pos-bottle">${bottleIcon(p.pressure, p.bottle, a.bottleLevels)}</div>` : ''}</td>
         </tr>`;
     const fixedRow = (f) => `
         <tr class="fi-section" data-reveal>
@@ -508,8 +509,11 @@ function renderPositions(a) {
 // e os alvos das compras abertas (grafico-ativo.js; GET /api/carteira/{id}/grafico).
 function openPositionChart(ticker, market, row) {
     const p = (state.analysis?.open || []).find(x => x.ticker === ticker);
+    const a = state.analysis;
     openCarteiraChart(ticker, market, row, p ? {
-        position: p, status: p.status ? { label: p.status, reason: p.statusReason, badge: STATUS_BADGE[p.statusKey] || 'badge-low' } : null
+        position: p, status: p.status ? { label: p.status, reason: p.statusReason, badge: STATUS_BADGE[p.statusKey] || 'badge-low' } : null,
+        pressure: p.pressure != null ? { value: p.pressure, state: p.bottle, parts: p.pressureParts, levels: a?.bottleLevels, states: a?.bottleStates } : null,
+        noPressure: a?.noPressureText
     } : {});
 }
 

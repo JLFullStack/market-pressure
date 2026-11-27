@@ -48,6 +48,8 @@
 /* #endregion */
 
 /* #region Posições: variação em pílula e peso como barra */
+/* A garrafa da pressão sob a Situação, nas posições no setup (grafico-ativo.js: bottleIcon). */
+.pos-bottle { margin-top: 8px; display: flex; justify-content: center; }
 .weight { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 70px; }
 .weight-bar { width: 70px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
 .weight-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #3b82ff, #22d3ee); transform: scaleX(var(--w)); transform-origin: left; }

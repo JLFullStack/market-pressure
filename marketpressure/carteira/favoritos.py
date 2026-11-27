@@ -16,6 +16,7 @@ from ..comum import market_data, runtime
 from ..comum.core import (LOCK, SETUP, compute_indicators, day_of, evaluate_setup, fmt_num, fmt_pct_value,
                           price_lock_stats, price_locked, today_iso)
 from ..configuracoes import strategy as st
+from ..screener import screener
 
 log = logging.getLogger(__name__)
 
@@ -122,13 +123,18 @@ def row(item, ranked, portfolio, universe):
         return {**base, "status": _status("travado", "Preço travado", f"Com {locked}. Confira as notícias antes de comprar.")}
     hit = ranked.get(ticker) if market == "b3" else None
     if hit:
-        base.update(rank=hit["rank"], score=hit["row"]["score"], priority=bool(hit["advice"].get("priority")))
+        base.update(rank=hit["rank"], score=hit["row"]["score"], priority=bool(hit["advice"].get("priority")),
+                    pressure=hit["row"].get("pressure"), bottle=hit["row"].get("bottle"),
+                    pressureParts=hit["row"].get("pressureParts"))
         adv = hit["advice"]
         where = f"{hit['rank']}º do ranking de {hit['kindLabel']}"
         if adv["action"] == "comprar":
             return {**base, "status": _status("comprar", "COMPRAR", f"{where}.\n{adv['reason']}")}
         return {**base, "status": _status("aguardar", "AGUARDAR", f"{where}.\n{adv['reason']}")}
     if setup["ok"]:
+        info = screener.pressure_info(closed, u.get("kind") or "acoes")   # fora do ranking: a pressão daqui
+        if info:
+            base.update(info)
         ma = setup["ma"]
         why = ("o Screener só analisa ativos da B3" if market != "b3" else
                "está fora do Top 20 do Screener de hoje (liquidez abaixo do piso ou Score menor que o dos 20 primeiros)")
@@ -177,7 +183,8 @@ def payload(portfolio=None):
         rows.append(result)
     rows.sort(key=lambda r: (STATUS_ORDER.index(r["status"]["key"]), r["ticker"]))
     favorites = {(i["ticker"], i["market"]) for i in items}
-    return {"items": rows, "max": MAX_ITEMS, "near": NEAR * 100,
+    return {"items": rows, "max": MAX_ITEMS, "near": NEAR * 100, "bottleLevels": screener.BOTTLE_LEVELS, "bottleStates": screener.BOTTLE_STATES,
+            "noPressureText": screener.NO_PRESSURE,
             "closed": closed_positions(portfolio, favorites) if portfolio else []}
 
 
@@ -208,4 +215,26 @@ def closed_positions(portfolio, favorites=frozenset()):
                     "first": min(t["date"] for t in mine), "last": max(t["date"] for t in mine),
                     "operations": len(mine), "favorite": (p["ticker"], market) in favorites})
     return sorted(out, key=lambda x: x["last"], reverse=True)
+# endregion
+
+
+# region Pressão das posições da Carteira
+def with_pressure(payload):
+    """A análise da Visão geral (portfolio_service.analysis_payload) com a pressão do recuo de cada
+    posição aberta que está no setup ({pressure, bottle, pressureParts}; screener.pressure_info) e os
+    níveis e textos da garrafa. Fica aqui, e não no portfolio_service, porque usa o screener."""
+    universe = _universe()
+    for p in payload.get("open") or []:
+        try:
+            closed = pf.closed_for(market_data.history(p["ticker"], p["market"])["candles"], p["market"])
+            kind = (universe.get(p["ticker"]) or {}).get("kind") if p["market"] == "b3" else None
+            info = screener.pressure_info(closed, kind or "acoes")
+        except Exception:
+            log.warning("pressão de %s indisponível", p["ticker"], exc_info=True)
+            info = None
+        if info:
+            p.update(info)
+    return {**payload, "bottleLevels": screener.BOTTLE_LEVELS, "bottleStates": screener.BOTTLE_STATES,
+            "noPressureText": screener.NO_PRESSURE}
+
 # endregion

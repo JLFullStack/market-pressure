@@ -57,17 +57,16 @@ function assetDialog() {
     const help = 'Preço em que cada compra ainda aberta atinge o alvo da venda parcial da regra da classe dela (Configurações). Alvos a menos de 1,5% um do outro aparecem juntos, num nível só (o preço é a média pela quantidade). Alvo já atingido cuja parte ainda não foi vendida aparece com a marca ATINGIDO (linha pontilhada). Para o gráfico não ficar carregado, só o próximo alvo ainda não atingido aparece de início: toque num alvo para mostrá-lo ou escondê-lo.';
     document.body.insertAdjacentHTML('beforeend', `
 <dialog class="chart-dialog" id="assetChartDialog" aria-labelledby="assetChartTitle">
+    <div class="chart-dialog-closebar"><button type="button" class="icon-btn chart-dialog-close" id="assetChartClose" title="Fechar" aria-label="Fechar o gráfico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="panel-head">
         <div class="result-head"><span class="avatar solo chart-dialog-avatar" id="assetChartAvatar" aria-hidden="true"></span><div>
             <div class="eyebrow chart-dialog-eyebrow" id="assetChartEyebrow">Operações no gráfico</div>
             <h2 id="assetChartTitle">Operações no gráfico</h2>
             <div class="small muted" id="assetChartInfo"></div>
         </div></div>
-        <div class="chart-dialog-tools">
-            <button type="button" class="icon-btn chart-dialog-close" id="assetChartClose" title="Fechar" aria-label="Fechar o gráfico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-        </div>
     </div>
     <div class="chart-dialog-stats" id="assetChartStats"></div>
+    <div class="gas-slot" id="assetPressure" hidden></div>
     <div class="chart-toolbar">
         <div class="bt-legend" id="assetChartLegend"></div>
         <div class="seg" role="group" aria-label="Tipo de gráfico" id="assetChartType">
@@ -154,7 +153,8 @@ function bindChartRows(container, open) {
 
 // Abre o card de um ativo. opts: url (a rota que devolve o gráfico), colorFor(cls) (cor da classe),
 // position ({avgPrice, quantity, returnPct, profit} da posição aberta), status ({label, reason,
-// badge}: a Situação ou a Indicação), back (elemento que recebe o foco ao fechar).
+// badge}: a Situação ou a Indicação), back (elemento que recebe o foco ao fechar), pressure (o painel
+// "Pressão acumulada": pressurePanel) e noPressure (o texto mostrado no lugar dele, fora do setup).
 async function openAssetChart(ticker, opts = {}) {
     const dlg = assetDialog();
     const seq = ++assetCard.seq;
@@ -167,6 +167,8 @@ async function openAssetChart(ticker, opts = {}) {
     byId('assetChartEyebrow').innerText = 'Operações no gráfico';
     byId('assetChartInfo').innerHTML = '';
     byId('assetChartStats').innerHTML = '';
+    byId('assetPressure').innerHTML = '';
+    byId('assetPressure').hidden = true;
     byId('assetChartAvatar').textContent = ticker.slice(0, 2).toUpperCase();
     byId('assetChartLegend').innerHTML = '';
     byId('assetTargets').hidden = true;
@@ -199,6 +201,11 @@ async function openAssetChart(ticker, opts = {}) {
             : '<span class="chip">sem operações nesta carteira</span>',
         `<span class="chip">${escapeHTML(rule)}</span>`].join('')}</span>`;
     renderAssetStats(data);
+    // A pressão do recuo (no setup) ou, fora dele, a linha que explica por que não há pressão.
+    const panel = pressurePanel(assetCard.opts.pressure);
+    byId('assetPressure').innerHTML = panel || (assetCard.opts.noPressure
+        ? `<p class="gas-none"><span class="gas-none-icon" aria-hidden="true"></span>${escapeHTML(assetCard.opts.noPressure)}</p>` : '');
+    byId('assetPressure').hidden = !byId('assetPressure').innerHTML;
     const projected = data.crossing?.projection?.length > 0;
     byId('assetChartLegend').innerHTML = priceLegend([
         ...(data.held ? [[COLORS.buy, 'C = compra'], [COLORS.exit, 'V = venda']] : []),
@@ -300,5 +307,71 @@ function drawTargets() {
             ${t.reached ? '<span class="price-target-tag">atingido</span>' : `<span class="pos">${t.distance === null ? '' : fmtPct(t.distance, 1)}</span>`}
             <span class="muted">${t.lots.length} compra${t.lots.length > 1 ? 's' : ''}</span>
         </button>`).join('');
+}
+//#endregion
+
+//#region Garrafa
+// "Garrafa de Gás" da pressão (adaptada da versão antiga do app): cilindro com válvula, líquido em
+// degradê na cor do estado (bottle_state do Python), brilho ondulando na superfície, reflexo no
+// vidro, auréola pulsando, bolhas subindo e uma linha em cada nível (bottleLevels). O líquido sobe
+// até a pressão quando a linha (tr.in) ou o card aparecem. Tudo em HTML/CSS; os números e os
+// textos vêm do Python.
+const BOTTLE_LABEL = { cheia: 'Cheia', quase: 'Quase cheia', enchendo: 'Enchendo' };
+const BOTTLE_ORDER = ['cheia', 'quase', 'enchendo'];
+
+// A garrafa em si. size: 'mini' (tabela) ou 'big' (painel do card).
+function gasVessel(pressure, state, levels, size = 'mini') {
+    const lv = Math.max(0, Math.min(1, pressure / 100)).toFixed(3);
+    const marks = Object.values(levels || { quase: 60, cheia: 75 }).map(v => `<i class="gas-mark" style="--at:${v / 100}"></i>`).join('');
+    return `<span class="gas gas-${size} gas-${state}" style="--lv:${lv}" aria-hidden="true">
+        <span class="gas-halo"></span>
+        <span class="gas-valve"><i></i><b></b></span>
+        <span class="gas-vessel">
+            <span class="gas-fill"><span class="gas-surface"></span></span>
+            ${pressure > 15 ? '<span class="gas-bubbles"><i></i><i></i><i></i></span>' : ''}
+            ${marks}<span class="gas-shine"></span>
+        </span></span>`;
+}
+
+// Célula da tabela (ranking do Screener, Favoritos): a garrafa e o nome do estado, com a dica.
+// size: 'mini' (Favoritos) ou 'cell' (coluna Pressão do Screener, da altura da linha); label false
+// = só a garrafa (o nome vai ao lado, na célula).
+function bottleIcon(pressure, state, levels = { quase: 60, cheia: 75 }, { size = 'mini', label = true } = {}) {
+    if (pressure === null || pressure === undefined || !BOTTLE_LABEL[state]) return '';
+    const text = `Pressão ${fmtNum(pressure, 0)}% · ${BOTTLE_LABEL[state].toLowerCase()}`
+        + (state === 'cheia' ? '' : ` (cheia a partir de ${fmtNum(levels.cheia, 0)}%)`);
+    return `<span class="bottle bottle-${state}" tabindex="0" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pressure)}"
+        data-tip="${escapeHTML(text)}" data-tip-title="Estado da garrafa" aria-label="${escapeHTML(text)}">
+        ${gasVessel(pressure, state, levels, size)}${label ? `<span class="bottle-label">${BOTTLE_LABEL[state]}</span>` : ''}</span>`;
+}
+
+// Painel "Pressão acumulada" do card do gráfico: a garrafa grande, o número, o estado, a régua das
+// faixas (a do ativo em destaque), a explicação e os 4 componentes. p = {value, state, levels,
+// states (BOTTLE_STATES do Python), parts (pressure_parts)}.
+function pressurePanel(p) {
+    if (!p || p.value === null || p.value === undefined || !p.states?.[p.state]) return '';
+    const s = p.states[p.state];
+    const bands = BOTTLE_ORDER.filter(k => p.states[k]).map(k => {
+        const b = p.states[k];
+        return `<li class="gas-band gas-${k}${k === p.state ? ' on' : ''}"><i></i><span class="num">${b.range[0]}–${b.range[1]}</span><b>${escapeHTML(b.label)}</b></li>`;
+    }).join('');
+    const parts = (p.parts || []).map((x, k) => `<div class="gas-part"><span>${escapeHTML(x.label)} <span class="muted">· peso ${fmtNum(x.weight, 0)}%</span></span>
+        <span class="num">${fmtNum(x.value, 0)}</span>
+        <span class="gas-part-bar eq-${x.key}" style="--v:${(Math.max(0, Math.min(100, x.value)) / 100).toFixed(3)};--k:${k}"><i></i></span></div>`).join('');
+    return `<section class="gas-panel gas-${p.state}" role="meter" aria-label="Pressão acumulada: ${fmtNum(p.value, 0)}%, ${escapeHTML(s.label)}"
+            aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(p.value)}">
+        <div class="gas-panel-head"><span class="kpi-label">Pressão acumulada</span><span class="gas-tag">Garrafa de Gás</span></div>
+        <div class="gas-panel-body">
+            ${gasVessel(p.value, p.state, p.levels, 'big')}
+            <div class="gas-read">
+                <div class="gas-num"><span class="num">${fmtNum(p.value, 0)}</span><small>%</small></div>
+                <div class="gas-state"><i></i>${escapeHTML(s.label)}</div>
+                <div class="small muted">${escapeHTML(s.title)}</div>
+                <ul class="gas-bands">${bands}</ul>
+            </div>
+            ${parts ? `<div class="gas-parts"><div class="kpi-label">Componentes (0 a 100)</div>${parts}</div>` : ''}
+        </div>
+        <p class="gas-note"><i></i><span><strong>${escapeHTML(s.title)} · ${escapeHTML(s.label)}</strong>${escapeHTML(s.text)}</span></p>
+    </section>`;
 }
 //#endregion

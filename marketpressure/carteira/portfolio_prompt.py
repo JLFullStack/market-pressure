@@ -378,6 +378,13 @@ def _position(p, info, ranked, rule, transactions, clones=None, dividends=()):
     candles = _history(t, p["market"]) if p.get("hasQuote") else []
     closed = pf.closed_for(candles, p["market"])
     on = f"no fechamento de {fmt_date(day_of(closed[-1]['date']))}" if closed else "no último fechamento"
+    gas = screener.pressure_info(closed, info.get("kind") or "acoes") if closed else None
+    if gas:   # só no setup: a "Garrafa de Gás" do recuo, como no ranking do Screener
+        state = screener.BOTTLE_STATES[gas["bottle"]]
+        parts = ", ".join(f"{x['label'].lower()} {fmt_num(x['value'], 0)}" for x in gas["pressureParts"])
+        lines.append(f"- **Pressão do recuo** ({on}): {fmt_num(gas['pressure'], 0)}% ({state['label'].lower()}; cheia a partir de "
+                     f"{screener.BOTTLE_LEVELS['cheia']}%) — {parts}. Descreve a força acumulada no recuo; não é a chance "
+                     "de acerto nem decide a compra sozinha.")
     setup = (p.get("setup") or {}).get(SETUP_MODE) or {}
     if setup.get("ok"):
         lines.append(f"- No setup de recuo {on}, testando a {setup['ma']['name']}")

@@ -43,6 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const params = new URLSearchParams({ ticker, market, carteira: currentPortfolio() });
         openAssetChart(ticker, {
             url: `/grafico?${params}`, back: row,
+            pressure: a ? { value: a.pressure, state: a.bottle, parts: a.pressureParts, levels: lastScan?.bottleLevels, states: lastScan?.bottleStates } : null,
             status: a?.advice ? { title: 'Indicação do Screener', label: a.advice.label, reason: a.advice.reason, badge: ADVICE_BADGE[a.advice.action] || 'badge-low' } : null
         });
     });
@@ -294,12 +295,6 @@ function rankingPanel(scan, r, result, strict) {
         </section>`;
 }
 
-const BOTTLE_BADGE = {
-    cheia: `<span class="badge badge-hot">🔥 Cheia</span>`,
-    quase: `<span class="badge badge-fill">💧 Q. Cheia</span>`,
-    enchendo: `<span class="badge badge-low">Enchendo</span>`
-};
-
 // Justificativa (screener.justification): uma linha por aspecto, título à esquerda e os sinais
 // separados por "·" (cada sinal inteiro numa linha, sem quebrar no meio).
 const justificationList = (parts) => `<dl class="facts">${parts.map(p => `<dt>${escapeHTML(p.label)}</dt>
@@ -325,8 +320,10 @@ function pressureCell(a) {
     const eq = parts.length
         ? `<span class="eq" tabindex="0" data-tip="${escapeHTML(detail)}" data-tip-title="Componentes da pressão" aria-label="Componentes da pressão: ${escapeHTML(detail.replace(/\n/g, '; '))}">${bars}</span>`
         : '';
-    return `<div class="press">${eq}<span class="press-num num">${fmtNum(a.pressure, 0)}%</span></div>
-        <div class="small" style="margin-top: 6px;">${BOTTLE_BADGE[a.bottle]}</div>`;
+    // A garrafa à esquerda, da altura da linha; à direita, os componentes com a % e o nome do estado.
+    return `<div class="press">${bottleIcon(a.pressure, a.bottle, lastScan?.bottleLevels, { size: 'cell', label: false })}
+        <div class="press-info"><div class="press-top">${eq}<span class="press-num num">${fmtNum(a.pressure, 0)}%</span></div>
+        <span class="bottle-label bottle-${a.bottle}">${BOTTLE_LABEL[a.bottle] || ''}</span></div></div>`;
 }
 
 // Coluna "Histórico (backtest)": 10 anos, últimos 3 anos e compras abertas (números do Python).
@@ -355,7 +352,7 @@ function tableRows(top, kind) {
             <td class="c">${scoreRing(a.score)}</td>
             <td class="c nowrap num">${fmtBRL(a.price)}<div class="small" style="color: ${a.change >= 0 ? 'var(--success)' : 'var(--danger)'};">${a.change >= 0 ? '+' : ''}${fmtNum(a.change, 2)}%</div></td>
             <td class="c"><span class="ma-pill">${a.setup.ma.name}</span></td>
-            <td class="c nowrap">${pressureCell(a)}</td>
+            <td class="c nowrap press-cell">${pressureCell(a)}</td>
             <td class="c nowrap">${btCell(a.bt)}</td>
             <td class="c">${a.advice ? signalBadge(a.advice.label, a.advice.reason, ADVICE_BADGE[a.advice.action] || 'badge-low') : '—'}</td>
             <td>${justificationList(a.justification)}</td>
