@@ -175,6 +175,10 @@ class SettingsTest(DatabaseTestCase):
         self.assertIn("Iniciar", data["message"])
         status, data = api.call("POST", "/api/configuracoes/telegram", "", lambda: {"enabled": True, "chatId": "abc"})
         self.assertEqual(status, 400)
+        # Token errado ou revogado: o Telegram responde "Not Found"/"Unauthorized".
+        for reason in ("Not Found", "Unauthorized"):
+            self.assertIn("token do bot", nt._explain(reason, None))
+        self.assertIn("Iniciar", nt._explain("Bad Request: chat not found", None))
 
     def test_published_test_goes_to_the_worker_without_the_chat(self):
         s = {"enabled": True, "chatId": "123456789"}

@@ -116,6 +116,10 @@ def _explain(reason, bot_name):
         return f"O bot está bloqueado no seu Telegram: desbloqueie-o, {start} e toque em Iniciar."
     if "forbidden" in lower or "can't initiate" in lower:
         return f"O bot ainda não pode falar com você: {start} e toque em Iniciar (/start)."
+    if lower in ("not found", "unauthorized"):
+        # O Telegram responde assim quando o token do bot está errado, incompleto ou foi revogado.
+        return ("O Telegram recusou o token do bot (está incompleto, errado ou foi revogado). "
+                "Confira o token completo, no formato número:letras, e cadastre-o de novo.")
     if "bot não configurado" in lower:
         return NO_BOT
     if "nenhum chat salvo" in lower:
