@@ -197,8 +197,6 @@
         <div class="panel tax-panel" data-reveal id="notificacoes">
             <div class="panel-head">
                 <div class="panel-title"><span class="icon-chip tone-cyan" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 4L3 11l6 2 2 6 3-4 5 4z"/><path d="M9 13l12-9"/></svg></span><h2>Notificações pelo Telegram</h2></div>
-                <label class="toggle switch tax-switch"><input type="checkbox" name="enabled"><span class="switch-track" aria-hidden="true"></span>
-                    <span>Receber o aviso diário do ranking no meu Telegram</span></label>
             </div>
             <div class="tax-grid telegram-grid">
                 <label class="param-card tone-cyan telegram-input">
@@ -206,6 +204,18 @@
                     <span class="param-input"><input name="chatId" class="select" type="text" inputmode="numeric" autocomplete="off" maxlength="21" placeholder="ex.: 123456789" aria-label="Id do seu chat no Telegram"></span>
                     <span class="kpi-note">só números; peça o seu ao <a id="helperBotLink" href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a></span>
                 </label>
+                <div class="param-card tone-blue telegram-choice">
+                    <span class="kpi-label">Aviso do ranking</span>
+                    <label class="toggle switch"><input type="checkbox" name="enabled"><span class="switch-track" aria-hidden="true"></span>
+                        <span>Receber o aviso diário do ranking</span></label>
+                    <span class="kpi-note">os ativos que entraram no Top com COMPRAR e a mudança de regime de cada tipo, depois do fechamento</span>
+                </div>
+                <div class="param-card tone-violet telegram-choice">
+                    <span class="kpi-label">Aviso dos favoritos</span>
+                    <label class="toggle switch"><input type="checkbox" name="favorites"><span class="switch-track" aria-hidden="true"></span>
+                        <span>Avisar quando um favorito virar compra</span></label>
+                    <span class="kpi-note">entrou no setup, virou COMPRAR no Screener ou ficou com o preço travado (possível OPA); os favoritos ficam em Carteira → Favoritos</span>
+                </div>
             </div>
             <div class="tax-facts">
                 <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4L3 11l6 2 2 6 3-4 5 4z"/></svg>
@@ -215,7 +225,7 @@
                 <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>
                     <span><strong>3. Teste</strong>Ligue a chave e toque em <b>Enviar mensagem de teste</b>: ele salva e manda uma mensagem padrão para o seu Telegram.</span></div>
                 <div class="tax-fact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg>
-                    <span><strong>O que chega</strong>Depois do fechamento, quando há novidade: os ativos que <b>entraram</b> no Top com COMPRAR e a mudança de regime de cada tipo. A indicação não considera a sua carteira.</span></div>
+                    <span><strong>O que chega</strong>Depois do fechamento, quando há novidade: os ativos que <b>entraram</b> no Top com COMPRAR e a mudança de regime de cada tipo e, no aviso dos favoritos, os <b>seus</b> favoritos que mudaram de situação. A indicação não considera a sua carteira.</span></div>
             </div>
             <p class="small muted" id="telegramText"></p>
             <div class="strategy-actions">

@@ -295,3 +295,40 @@ test("só a atualização diária envia a todos, e só a quem ligou o aviso", as
     assert.deepEqual(await response.json(), { configured: true, recipients: 2, sent: 1, failed: 1 });
     assert.deepEqual(messages().map(m => [m.chat_id, m.text]).sort(), [["1234567", "ranking"], ["99999", "ranking"]]);
 });
+
+test("favoritos: a atualização lê só as listas de quem ligou o aviso e envia a um usuário por vez", async () => {
+    const settings = (who, chatId, favorites) => put(who, { settings_telegram: JSON.stringify([{ enabled: false, favorites, chat_id: chatId }]) });
+    await settings(alice, "1234567", true);
+    await settings(bob, "2345678", false);              // aviso dos favoritos desligado
+    await put(alice, { watchlist: JSON.stringify([{ ticker: "PETR4", market: "b3", added: "2026-11-27" }, { ticker: "x/y", market: "b3" }]),
+                       portfolios: JSON.stringify([{ id: "c1", name: "Segredo" }]) });
+    await put(bob, { watchlist: JSON.stringify([{ ticker: "VALE3", market: "b3" }]) });
+    // Usuários não usam as rotas do serviço; o serviço não usa as dos usuários.
+    for (const [method, path] of [["GET", "/notify/watchlists"], ["POST", "/notify/user"]]) {
+        assert.equal((await call(method, path, { ...alice, ...(method === "POST" ? { body: {} } : {}) })).status, 403, path);
+    }
+    const response = await call("GET", "/notify/watchlists", { bearer: SERVICE_TOKEN });
+    const data = await response.json();
+    assert.deepEqual(data.users, [{ user: ids.alice, list: [{ ticker: "PETR4", market: "b3" }], state: [] }]);
+    assert.ok(!JSON.stringify(data).includes("1234567"), "o número do chat não sai do Worker");
+    assert.ok(!JSON.stringify(data).includes("Segredo"), "as carteiras não saem do Worker");
+    // Envio a um usuário: só com o aviso ligado, e grava o que foi avisado na tabela dele.
+    const state = [{ ticker: "PETR4", market: "b3", status: "comprar", ref_date: "2026-11-27" }, { ticker: "<x>", status: "y" }];
+    assert.equal((await call("POST", "/notify/user", { bearer: SERVICE_TOKEN, body: { user: ids.bob, text: "oi" } })).status, 409);
+    assert.equal((await call("POST", "/notify/user", { bearer: SERVICE_TOKEN, body: { user: "nao-existe", text: "oi" } })).status, 404);
+    assert.equal((await call("POST", "/notify/user", { bearer: SERVICE_TOKEN, body: { user: `${ids.alice}/x`, text: "oi" } })).status, 400);
+    upstream.length = 0;
+    const sent = await call("POST", "/notify/user", { bearer: SERVICE_TOKEN, body: { user: ids.alice, text: "favoritos", state } });
+    assert.equal(sent.status, 200);
+    assert.deepEqual(messages().map(m => [m.chat_id, m.text]), [["1234567", "favoritos"]]);
+    assert.deepEqual(JSON.parse(stored(`${ids.alice}/watchlist_alerts`)), [state[0]]);
+    const again = await (await call("GET", "/notify/watchlists", { bearer: SERVICE_TOKEN })).json();
+    assert.deepEqual(again.users[0].state, [state[0]]);
+    // Dia sem novidade: só o estado, sem mensagem.
+    upstream.length = 0;
+    const quiet = [{ ...state[0], status: "perto", ref_date: "2026-11-28" }];
+    assert.equal((await call("POST", "/notify/user", { bearer: SERVICE_TOKEN, body: { user: ids.alice, text: "", state: quiet } })).status, 200);
+    assert.equal(messages().length, 0);
+    assert.deepEqual(JSON.parse(stored(`${ids.alice}/watchlist_alerts`)), quiet);
+    assert.equal((await call("POST", "/notify/user", { bearer: SERVICE_TOKEN, body: { user: ids.alice, text: "" } })).status, 400);
+});

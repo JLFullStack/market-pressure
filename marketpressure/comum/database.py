@@ -101,7 +101,9 @@ SCHEMAS = {
     "tax_payments": _schema(("portfolio_id", _str), ("month", _str), ("amount", _f64), ("paid_on", _str)),
     "tax_opening": _schema(("portfolio_id", _str), ("common", _f64), ("funds", _f64)),
     # Notificações pelo Telegram (notificacoes.py): aviso ligado e o id do chat do usuário
-    "settings_telegram": _schema(("enabled", _bool), ("chat_id", _str)),
+    "settings_telegram": _schema(("enabled", _bool), ("favorites", _bool), ("chat_id", _str)),
+    # O que o aviso dos favoritos já avisou (carteira/favoritos_alerta.py): o último estado de cada um
+    "watchlist_alerts": _schema(("ticker", _str), ("market", _str), ("status", _str), ("ref_date", _str)),
     # Favoritos (carteira/favoritos.py): a lista de observação do usuário
     "watchlist": _schema(("ticker", _str), ("market", _str), ("added", _str)),
     "holidays": _schema(("date", _str), ("name", _str), ("kind", _str)),   # feriados (holidays.py); date "MM-DD" = todo ano

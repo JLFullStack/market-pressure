@@ -18,7 +18,8 @@
 //   qualquer usuário  as próprias tabelas; lê as comuns; candles, CDI e proventos pelo /proxy.
 //   administrador     também grava as comuns, atualiza a lista de ativos (brapi e screener do
 //                     Yahoo, pelo /proxy) e gerencia as contas (auth.js).
-//   token de serviço  só as tabelas comuns, o /proxy e o /notify/send (atualização diária).
+//   token de serviço  só as tabelas comuns, o /proxy e o /notify/send, /notify/watchlists e
+//                     /notify/user (atualização diária).
 //   o resto          arquivos de dist/ (páginas, CSS, JS e o pacote Python), via ASSETS.
 //
 // Tudo exige login, menos a tela de login (PUBLIC): sem sessão, as páginas redirecionam para

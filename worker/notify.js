@@ -9,6 +9,14 @@
 //                                          por TEST_WINDOW_MINUTES
 //   POST /notify/send   (token de serviço)  {text}: envia o texto a todos os usuários com o aviso
 //                                          ligado (o aviso diário do ranking, update.py)
+//   GET  /notify/watchlists (token de serviço) só as listas de favoritos ({ticker, market}) e o que já
+//                                          foi avisado delas, de quem ligou o aviso dos favoritos;
+//                                          nada de carteiras e nem o número do chat
+//   POST /notify/user   (token de serviço)  {user, text, state}: envia o texto ao chat salvo DESSE
+//                                          usuário (com o aviso dos favoritos ligado) e, se chegou,
+//                                          grava state em "{user}/watchlist_alerts" (a única tabela
+//                                          de usuário que o serviço grava, e só por aqui); sem
+//                                          texto, só grava o estado (dia sem novidade)
 //
 // O token vai na URL da Bot API, então ela nunca vai para o log nem para a resposta.
 
@@ -16,6 +24,13 @@ const API = "https://api.telegram.org/bot";
 const MAX_TEXT = 4096;
 const CHAT_ID = /^-?\d{5,20}$/;
 const TABLE = "settings_telegram";
+const WATCHLIST = "watchlist";              // favoritos do usuário (carteira/favoritos.py)
+const WATCH_STATE = "watchlist_alerts";     // o que já foi avisado de cada favorito
+const TICKER = /^[A-Z0-9]{1,12}$/;
+const MARKETS = new Set(["b3", "us", "crypto"]);
+const STATUS = /^[a-z]{1,20}$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_STATE = 100;
 const TEST_LIMIT = 5;
 const TEST_WINDOW_MINUTES = 15;
 const BOT_INFO_MS = 3600 * 1000;
@@ -50,7 +65,7 @@ function parseSettings(rows) {
     try {
         const row = JSON.parse(rows)?.[0];
         const chatId = String(row?.chat_id ?? "");
-        return CHAT_ID.test(chatId) ? { enabled: row.enabled === true, chatId } : null;
+        return CHAT_ID.test(chatId) ? { enabled: row.enabled === true, favorites: row.favorites === true, chatId } : null;
     } catch {
         return null;
     }
@@ -104,14 +119,77 @@ async function send(request, env) {
     return json(200, { configured: true, recipients: chats.length, sent, failed: chats.length - sent });
 }
 
+// Linhas de uma tabela de usuário (texto JSON) → só os campos esperados, validados.
+function parseRows(text, keep) {
+    try {
+        const rows = JSON.parse(text || "[]");
+        return Array.isArray(rows) ? rows.map(keep).filter(Boolean) : [];
+    } catch {
+        return [];
+    }
+}
+const favoriteRow = (r) => TICKER.test(String(r?.ticker ?? "")) && MARKETS.has(r?.market || "b3")
+    ? { ticker: r.ticker, market: r.market || "b3" } : null;
+const stateRow = (r) => favoriteRow(r) && STATUS.test(String(r?.status ?? "")) && DAY.test(String(r?.ref_date ?? ""))
+    ? { ticker: r.ticker, market: r.market || "b3", status: r.status, ref_date: r.ref_date } : null;
+
+// Quem ligou o aviso dos favoritos (com chat salvo): o id da conta, a lista e o que já foi avisado.
+async function watchlists(env) {
+    if (!env.TELEGRAM_BOT_TOKEN) return json(200, { configured: false, users: [] });
+    const { results } = await env.DB.prepare("SELECT name, rows FROM mp_tables WHERE name LIKE ?").bind(`%/${TABLE}`).all();
+    const ids = results.filter(r => parseSettings(r.rows)?.favorites).map(r => r.name.slice(0, -TABLE.length - 1));
+    const users = [];
+    for (const id of ids) {
+        const names = [`${id}/${WATCHLIST}`, `${id}/${WATCH_STATE}`];
+        const rows = (await env.DB.prepare("SELECT name, rows FROM mp_tables WHERE name IN (?, ?)").bind(...names).all()).results;
+        const text = (name) => rows.find(r => r.name === name)?.rows;
+        const list = parseRows(text(names[0]), favoriteRow);
+        if (list.length) users.push({ user: id, list, state: parseRows(text(names[1]), stateRow) });
+    }
+    return json(200, { configured: true, users });
+}
+
+// Envia ao chat salvo de um usuário (com o aviso dos favoritos ligado) e grava o que foi avisado.
+async function sendUser(request, env) {
+    if (!env.TELEGRAM_BOT_TOKEN) return json(503, { ok: false, description: "bot não configurado" });
+    const body = await request.json().catch(() => null);
+    const user = typeof body?.user === "string" ? body.user : "";
+    const text = typeof body?.text === "string" ? body.text : "";
+    if (!user || user.includes("/") || text.length > MAX_TEXT || (!text && !Array.isArray(body?.state))) {
+        return json(400, { ok: false, description: `usuário e texto de até ${MAX_TEXT} caracteres (ou só o estado)` });
+    }
+    if (!(await env.DB.prepare("SELECT id FROM mp_users WHERE id = ?").bind(user).first())) {
+        return json(404, { ok: false, description: "usuário não encontrado" });
+    }
+    const row = await env.DB.prepare("SELECT rows FROM mp_tables WHERE name = ?").bind(`${user}/${TABLE}`).first();
+    const settings = row && parseSettings(row.rows);
+    if (!settings?.favorites) return json(409, { ok: false, description: "aviso dos favoritos desligado" });
+    if (text) {
+        const sent = await sendMessage(env, settings.chatId, text);
+        if (!sent.ok) return json(502, { ok: false, description: sent.description });
+    }
+    if (Array.isArray(body.state)) {
+        const state = body.state.slice(0, MAX_STATE).map(stateRow).filter(Boolean);
+        await env.DB.prepare("INSERT INTO mp_tables (name, rows, updated_at) VALUES (?, ?, ?) "
+            + "ON CONFLICT(name) DO UPDATE SET rows = excluded.rows, updated_at = excluded.updated_at")
+            .bind(`${user}/${WATCH_STATE}`, JSON.stringify(state), Date.now()).run();
+    }
+    return json(200, { ok: true });
+}
+
 // user: o usuário logado, ou {service: true} para o token de serviço.
 export async function handleNotify(request, url, env, user) {
     const route = `${request.method} ${url.pathname}`;
     if (user.service) {
-        return route === "POST /notify/send" ? send(request, env) : json(403, { message: "não permitido" });
+        if (route === "POST /notify/send") return send(request, env);
+        if (route === "GET /notify/watchlists") return watchlists(env);
+        if (route === "POST /notify/user") return sendUser(request, env);
+        return json(403, { message: "não permitido" });
     }
     if (route === "GET /notify/info") return info(env);
     if (route === "POST /notify/test") return test(env, user);
-    if (url.pathname === "/notify/send") return json(403, { message: "só a atualização diária envia a todos" });
+    if (["/notify/send", "/notify/watchlists", "/notify/user"].includes(url.pathname)) {
+        return json(403, { message: "só a atualização diária usa esta rota" });
+    }
     return json(404, { message: "não encontrado" });
 }

@@ -14,8 +14,10 @@ e não é salvo) e a varredura salva inclui o candle em andamento, como a feita 
   faz isto sozinho, ver server.daily_update).
 
 Depois de salvar a varredura, envia pelo Telegram o aviso do ranking (screener/ranking_alert.py) a
-quem o ligou na aba Configurações: publicado, pelo Worker (que guarda o token do bot); local, direto,
-com o TELEGRAM_BOT_TOKEN do .env. Uma falha no aviso não falha a atualização.
+quem o ligou na aba Configurações e o aviso dos favoritos (carteira/favoritos_alerta.py) a cada um
+que o ligou, sobre a própria lista: publicado, pelo Worker (que guarda o token do bot e entrega só as
+listas de favoritos); local, direto, com o TELEGRAM_BOT_TOKEN do .env. Uma falha nos avisos não
+falha a atualização.
 
 Sai com código 1 se a varredura falhar ou não puder ser salva.
 """
@@ -60,14 +62,18 @@ def run():
 
 
 def notify(scan):
-    """Aviso do ranking pelo Telegram; qualquer falha só vai para o log."""
+    """Avisos do ranking e dos favoritos pelo Telegram; a falha de um só vai para o log e não
+    impede o outro."""
+    from .carteira import favoritos_alerta
     from .screener import ranking_alert
-    try:
-        result = ranking_alert.notify(scan, os.environ.get("MARKETPRESSURE_REMOTE_URL", ""))
-    except Exception:
-        log.warning("não foi possível enviar o aviso do ranking pelo Telegram", exc_info=True)
-        return
-    log.info("aviso do ranking pelo Telegram: %s", result)
+    site = os.environ.get("MARKETPRESSURE_REMOTE_URL", "")
+    for label, alert in (("do ranking", ranking_alert), ("dos favoritos", favoritos_alerta)):
+        try:
+            result = alert.notify(scan, site)
+        except Exception:
+            log.warning("não foi possível enviar o aviso %s pelo Telegram", label, exc_info=True)
+            continue
+        log.info("aviso %s pelo Telegram: %s", label, result)
 
 
 def main():

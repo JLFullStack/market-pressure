@@ -170,6 +170,7 @@ const telegramForm = document.getElementById('telegramForm');
 const telegramOut = document.getElementById('telegramMsg');
 function showTelegram(data) {
     telegramForm.elements.enabled.checked = data.telegram.enabled;
+    telegramForm.elements.favorites.checked = !!data.telegram.favorites;
     telegramForm.elements.chatId.value = data.telegram.chatId || '';
     document.getElementById('telegramText').textContent = data.text;
     const link = document.getElementById('botLink');
@@ -180,7 +181,7 @@ function showTelegram(data) {
 async function postTelegram(path, busyText) {
     const busy = busyStart(busyText);
     try {
-        const data = await apiPost(path, { enabled: telegramForm.elements.enabled.checked, chatId: telegramForm.elements.chatId.value });
+        const data = await apiPost(path, { enabled: telegramForm.elements.enabled.checked, favorites: telegramForm.elements.favorites.checked, chatId: telegramForm.elements.chatId.value });
         showTelegram(data);
         telegramOut.className = `form-msg ${data.ok ? 'ok' : 'error'}`;
         telegramOut.textContent = data.message;

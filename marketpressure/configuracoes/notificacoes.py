@@ -1,8 +1,10 @@
 """Notificações pelo Telegram (aba Configurações): o chat de cada usuário, o teste e o envio.
 
-O usuário informa o id do próprio chat no Telegram e liga o aviso; a atualização diária
-(screener/ranking_alert.py) envia o aviso do ranking a todos os que o ligaram. Tabela
-settings_telegram (uma linha: enabled, chat_id; por usuário na versão publicada).
+O usuário informa o id do próprio chat no Telegram e liga os avisos; a atualização diária envia o
+aviso do ranking (screener/ranking_alert.py) a todos os que o ligaram e o aviso dos favoritos
+(carteira/favoritos_alerta.py) a cada um, sobre a lista dele. Tabela settings_telegram (uma linha:
+enabled = aviso do ranking, favorites = aviso dos favoritos, chat_id; por usuário na versão
+publicada).
 
 Dois caminhos, porque o token do bot é segredo:
 - publicado (runtime.REMOTE: navegador ou a atualização com o token de serviço): quem envia é o
@@ -22,7 +24,8 @@ from ..comum import database as db
 log = logging.getLogger(__name__)
 
 TABLE = "settings_telegram"
-DEFAULT = {"enabled": False, "chatId": ""}
+DEFAULT = {"enabled": False, "favorites": False, "chatId": ""}
+STATE_TABLE = "watchlist_alerts"   # o que já foi avisado de cada favorito (local; publicado, o Worker grava)
 CHAT_ID = re.compile(r"^-?\d{5,20}$")           # o mesmo de worker/notify.js
 HELPER_BOT = "https://t.me/userinfobot"         # responde com o id de quem fala com ele
 TEST_TEXT = ("MarketPressure: mensagem de teste. Se ela chegou, as notificações pelo Telegram estão "
@@ -36,12 +39,13 @@ def from_form(body):
     """Formulário → (configuração, erro). chatId: só números (grupos começam com "-")."""
     chat = re.sub(r"\s", "", str(body.get("chatId") or ""))
     enabled = body.get("enabled") is True
+    favorites = body.get("favorites") is True
     if chat and not CHAT_ID.match(chat):
         return None, ("O id do chat tem só números (de 5 a 20 dígitos; o de um grupo começa com -). "
                       "Peça o seu ao @userinfobot no Telegram.")
-    if enabled and not chat:
+    if (enabled or favorites) and not chat:
         return None, "Para receber os avisos, informe o id do seu chat no Telegram."
-    return {"enabled": enabled, "chatId": chat}, None
+    return {"enabled": enabled, "favorites": favorites, "chatId": chat}, None
 
 
 def load():
@@ -54,11 +58,12 @@ def load():
         return dict(DEFAULT)
     chat = str(rows[0].get("chat_id") or "")
     chat = chat if CHAT_ID.match(chat) else ""
-    return {"enabled": rows[0].get("enabled") is True and bool(chat), "chatId": chat}
+    return {"enabled": rows[0].get("enabled") is True and bool(chat),
+            "favorites": rows[0].get("favorites") is True and bool(chat), "chatId": chat}
 
 
 def save(s):
-    db.write_tables({TABLE: [{"enabled": s["enabled"], "chat_id": s["chatId"] or None}]})
+    db.write_tables({TABLE: [{"enabled": s["enabled"], "favorites": s.get("favorites") is True, "chat_id": s["chatId"] or None}]})
     return s
 
 # endregion
@@ -93,8 +98,10 @@ def payload(s=None):
     name = bot["name"]
     if bot["configured"] is False:
         text = NO_BOT
-    elif s["enabled"]:
-        text = f"Ligado: o aviso diário do ranking vai para o chat {s['chatId']}."
+    elif s["enabled"] or s.get("favorites"):
+        what = " e ".join(w for w, on in (("o aviso diário do ranking", s["enabled"]),
+                                          ("o aviso dos seus favoritos", s.get("favorites"))) if on)
+        text = f"Ligado: {what} vai para o chat {s['chatId']}."
     else:
         text = "Desligado: nenhuma mensagem é enviada a você."
     return {"telegram": s, "text": text, "helperBot": HELPER_BOT,
@@ -180,5 +187,50 @@ def broadcast(text):
         return data.get("recipients", 0), data.get("sent", 0)
     chats = _local_chats()
     return len(chats), sum(1 for chat in chats if telegram.deliver(chat, text)[0])
+
+# endregion
+
+
+# region Aviso dos favoritos
+def favorite_lists():
+    """[{user, list: [{ticker, market}], state: [{ticker, market, status, ref_date}]}] de quem ligou o
+    aviso dos favoritos, ou None quando não deu para saber. Publicado, o Worker devolve só as listas
+    (nada de carteiras nem o chat); local, a lista e o estado daqui (user None)."""
+    if runtime.REMOTE:
+        status, data = _remote("GET", "/notify/watchlists")
+        if status != 200:
+            log.warning("o site não devolveu as listas de favoritos (HTTP %s): %s", status, data.get("message", ""))
+            return None
+        return data.get("users") or []
+    s = load()
+    if not s.get("favorites") and not config.TELEGRAM_CHAT_ID:
+        return []
+    try:
+        items = [{"ticker": r["ticker"], "market": r.get("market") or "b3"} for r in db.read_table("watchlist") if r.get("ticker")]
+        state = db.read_table(STATE_TABLE)
+    except Exception:
+        log.warning("favoritos locais indisponíveis para o aviso", exc_info=True)
+        return None
+    return [{"user": None, "list": items, "state": state}] if items else []
+
+
+def deliver_user(user, text, state):
+    """Envia o aviso dos favoritos a um usuário e, se chegou, grava o estado: True/False. Sem texto,
+    só grava o estado (dia sem novidade). Publicado, o Worker envia ao chat salvo do usuário e grava
+    o estado na tabela dele; local, envio direto ao chat salvo aqui (e ao TELEGRAM_CHAT_ID do .env)."""
+    if runtime.REMOTE:
+        status, data = _remote("POST", "/notify/user", json.dumps({"user": user, "text": text[:telegram.MAX_LENGTH], "state": state}))
+        if status != 200:
+            log.warning("aviso dos favoritos não enviado a um usuário (HTTP %s): %s", status, data.get("description", ""))
+        return status == 200
+    if text:
+        s = load()
+        chats = [s["chatId"]] if s.get("favorites") and s["chatId"] else []
+        if config.TELEGRAM_CHAT_ID and config.TELEGRAM_CHAT_ID not in chats:
+            chats.append(config.TELEGRAM_CHAT_ID)
+        if not any([telegram.deliver(chat, text)[0] for chat in chats]):
+            return False
+    db.write_tables({STATE_TABLE: state})
+    return True
 
 # endregion

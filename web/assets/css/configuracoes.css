@@ -130,7 +130,9 @@
 /* #endregion */
 
 /* #region Telegram */
-.telegram-grid { grid-template-columns: minmax(0, 360px); margin-bottom: 14px; }
+.telegram-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); margin-bottom: 14px; }
+.telegram-choice { display: flex; flex-direction: column; gap: 8px; }
+.telegram-choice .toggle { font-size: 14px; font-weight: 600; }
 .telegram-input { cursor: text; }
 .telegram-input .select { width: 100%; text-align: left; font-variant-numeric: tabular-nums; }
 .telegram-input .kpi-note a, .tax-fact a { color: var(--accent); }

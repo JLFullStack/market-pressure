@@ -139,7 +139,9 @@ class SettingsTest(DatabaseTestCase):
         self.addCleanup(patcher.stop)
 
     def test_form_validation(self):
-        self.assertEqual(nt.from_form({"enabled": True, "chatId": " 123 456 789 "}), ({"enabled": True, "chatId": "123456789"}, None))
+        self.assertEqual(nt.from_form({"enabled": True, "chatId": " 123 456 789 "}), ({"enabled": True, "favorites": False, "chatId": "123456789"}, None))
+        self.assertEqual(nt.from_form({"favorites": True, "chatId": "123456789"})[0]["favorites"], True)
+        self.assertIsNone(nt.from_form({"favorites": True, "chatId": ""})[0])   # o aviso dos favoritos também precisa do chat
         self.assertEqual(nt.from_form({"enabled": False, "chatId": "-1001234567890"})[0]["chatId"], "-1001234567890")
         for body in ({"enabled": True, "chatId": ""}, {"chatId": "@fulano"}, {"chatId": "12"}, {"chatId": "1" * 21}):
             s, error = nt.from_form(body)
@@ -150,7 +152,7 @@ class SettingsTest(DatabaseTestCase):
         self.assertEqual(nt.load(), nt.DEFAULT)
         nt.save({"enabled": True, "chatId": "123456789"})
         data = nt.payload()
-        self.assertEqual(data["telegram"], {"enabled": True, "chatId": "123456789"})
+        self.assertEqual(data["telegram"], {"enabled": True, "favorites": False, "chatId": "123456789"})
         self.assertEqual(data["bot"], {"configured": True, "name": "@MarketPressureBot", "link": "https://t.me/MarketPressureBot"})
         self.assertIn("123456789", data["text"])
         with mock.patch.object(config, "TELEGRAM_BOT_TOKEN", ""):
