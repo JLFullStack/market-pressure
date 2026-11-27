@@ -223,6 +223,7 @@ function render(d) {
         + (d.market === 'us' ? ' Ativo dos EUA: resultado em reais sem a variação do dólar.' : '');
     drawCharts(d);
     renderKpis(d);
+    renderResample('bt', d.resampling);
     renderLotsChart(d);
     state.pages.lots = 0;
     state.selected.lots = null;
@@ -430,6 +431,64 @@ function renderLotsChart(d) {
                 tooltip: { ...chartTooltip(), callbacks: {
                     title: (items) => { const l = lots[items[0].dataIndex]; return `Compra ${l.n} · ${fmtDate(l.entry.date)}${l.open ? ' · aberta' : ''}`; },
                     label: (ctx) => { const l = lots[ctx.dataIndex]; return ` ${fmtPct(l.return, 1)} · ${fmtBRL(l.profit)} · ${fmtNum(l.days, 0)} pregões`; }
+                } }
+            }
+        })
+    });
+}
+//#endregion
+
+//#region Reamostragem
+// Painel "Reamostragem" dos dois modos (prefixo bt ou pf): veredito, cartões, histograma dos
+// sorteios e o lucro sem as maiores operações. Tudo calculado no Python (backtest/reamostragem.py).
+const RESAMPLE_BADGE = { consistente: 'badge-ok', incerto: 'badge-fill', fragil: 'badge-fill', abaixo: 'badge-hot', inconclusivo: 'badge-low' };
+
+function renderResample(p, r) {
+    const panel = $(`${p}ResamplePanel`);
+    panel.hidden = !r;
+    if (!r) return;
+    const brl = (v) => fmtBRL(v);
+    $(`${p}ResampleSub`).innerText = `O resultado depende de poucas compras? ${fmtNum(r.draws, 0)} sorteios de ${fmtNum(r.trades, 0)} operações`;
+    $(`${p}ResampleVerdict`).innerHTML = `<span class="badge ${RESAMPLE_BADGE[r.verdict.key] || 'badge-low'}">${escapeHTML(r.verdict.title)}</span> ${escapeHTML(r.verdict.text)}`;
+    $(`${p}ResampleKpis`).innerHTML = [
+        kpi('Lucro provável', `${brl(r.profit.low)} a ${brl(r.profit.high)}`, `no período: ${brl(r.actual)} · mediana dos sorteios ${brl(r.profit.mid)}`, '',
+            `Faixa entre o pior e o melhor resultado típico dos sorteios (${r.low}% e ${r.high}%). Quanto mais larga, mais o lucro dependeu de quais operações aconteceram.`),
+        kpi('Resultado médio por compra', `${pct(r.meanReturn.low)} a ${pct(r.meanReturn.high)}`, `mediana ${pct(r.meanReturn.mid)} · inclui as abertas`, '',
+            'Faixa provável da média do resultado de cada compra, sobre o valor investido nela.'),
+        kpi('Chance de prejuízo', cnt(r.lossChance, 'pctu', 0), 'sorteios com lucro abaixo de zero', r.lossChance >= 25 ? 'neg' : '',
+            'Parte dos sorteios em que a soma das operações deu prejuízo.'),
+        ...r.refs.map(x => kpi(`Chance de ficar abaixo: ${escapeHTML(x.label)}`, cnt(x.belowChance, 'pctu', 0), `${escapeHTML(x.label)} com os mesmos aportes: ${brl(x.profit)}`,
+            x.belowChance >= 50 ? 'neg' : '', 'Parte dos sorteios em que a estratégia lucrou menos que a referência no mesmo período.'))
+    ].join('');
+    showCards($(`${p}ResampleKpis`));
+    const refs = r.refs.length ? r.refs : [{ key: 'zero', label: 'lucro' }];
+    $(`${p}ResampleCut`).innerHTML = r.withoutTop.length ? r.withoutTop.map(w => `<tr>
+            <td><strong>${w.n === 1 ? 'a maior' : `as ${w.n} maiores`}</strong><div class="small muted">${w.names.map(escapeHTML).join(' · ')}</div></td>
+            <td class="r nowrap ${signClass(w.profit)}"><strong>${brl(w.profit)}</strong></td>
+            <td class="r nowrap">${w.share === null ? '—' : `${fmtNum(w.share, 0)}%`}</td>
+            <td>${refs.map(x => `<span class="badge ${w.beats[x.key] ? 'badge-ok' : 'badge-hot'}">${w.beats[x.key] ? '✓' : '✗'} ${escapeHTML(x.key === 'zero' ? 'lucro' : x.label)}</span>`).join(' ')}</td>
+        </tr>`).join('')
+        : '<tr><td colspan="4" class="empty-row">Poucas operações com lucro para tirar.</td></tr>';
+    // Histograma: barras abaixo da primeira referência (ou de zero) em vermelho.
+    const line = r.refs.length ? r.refs[0].profit : 0;
+    const bins = r.histogram;
+    chartWhenVisible(`${p}ResampleChart`, {
+        type: 'bar',
+        data: {
+            labels: bins.map(b => fmtCompactBRLBt((b.from + b.to) / 2)),
+            datasets: [{
+                label: 'Sorteios', data: bins.map(b => b.count),
+                backgroundColor: bins.map(b => hexAlpha((b.from + b.to) / 2 < line ? COLORS.down : COLORS.up, 0.75)),
+                hoverBackgroundColor: bins.map(b => (b.from + b.to) / 2 < line ? COLORS.down : COLORS.up),
+                borderRadius: 3, borderSkipped: false, categoryPercentage: 1, barPercentage: 0.92
+            }]
+        },
+        options: barOptions((v) => fmtNum(v, 0), {
+            plugins: {
+                legend: { display: false },
+                tooltip: { ...chartTooltip(), callbacks: {
+                    title: (items) => { const b = bins[items[0].dataIndex]; return `${brl(b.from)} a ${brl(b.to)}`; },
+                    label: (ctx) => ` ${fmtNum(ctx.raw, 0)} sorteios (${fmtNum(ctx.raw / r.draws * 100, 1)}%)`
                 } }
             }
         })
@@ -695,6 +754,7 @@ function renderPortfolio(d) {
 
     const rule = d.strategies[0];
     renderPfKpis(d);
+    renderResample('pf', d.resampling);
     renderPfYears(d);
     renderPfYearsChart(d);
     renderPfAssetsChart(d);

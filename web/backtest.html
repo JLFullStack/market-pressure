@@ -247,6 +247,36 @@
             <p class="small muted" id="btCompare"></p>
         </div>
 
+        <div class="panel" data-reveal id="btResamplePanel" hidden>
+            <div class="panel-head">
+                <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/></svg></span><h2>Reamostragem <span class="tip" tabindex="0" data-tip="Sorteia as operações deste resultado, com reposição, 2.000 vezes: cada sorteio é um período com outra mistura das mesmas compras. Mostra a faixa provável do lucro e quanto ele depende das maiores operações." aria-label="Ajuda: Sorteia as operações deste resultado, com reposição, 2.000 vezes: cada sorteio é um período com outra mistura das mesmas compras. Mostra a faixa provável do lucro e quanto ele depende das maiores operações.">?</span></h2></div>
+                <span class="small muted" id="btResampleSub"></span>
+            </div>
+            <p class="bt-compare resample-verdict" id="btResampleVerdict" role="status"></p>
+            <div class="kpis kpi-cards bt-kpis" id="btResampleKpis"></div>
+            <div class="chart-grid resample-grid">
+                <div>
+                    <h3 class="bt-subhead">Lucro em cada sorteio</h3>
+                    <div class="chart-wrap chart-small" data-reveal="late"><canvas id="btResampleChart" role="img" aria-label="Quantos sorteios deram cada faixa de lucro"></canvas></div>
+                </div>
+                <div>
+                    <h3 class="bt-subhead">Sem as maiores operações</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Tirando</th><th class="r">Lucro</th><th class="r">Peso no lucro</th><th>Ainda supera?</th></tr></thead>
+                            <tbody id="btResampleCut"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <ul class="notes">
+                <li><strong>Faixa provável</strong>: entre o pior e o melhor resultado típico dos sorteios (5% e 95%); o lucro real do período aparece no gráfico.</li>
+                <li><strong>Sem as maiores</strong>: o lucro tirando as operações que mais ganharam, como se não tivessem acontecido.</li>
+                <li>Sortear operações <strong>ignora a ordem e o caixa de cada dia</strong>: mede quanto o resultado depende de poucos ganhos, não é uma nova simulação.</li>
+                <li>Os sorteios usam uma semente fixa: o mesmo backtest sempre dá a mesma resposta.</li>
+            </ul>
+        </div>
+
         <div class="panel" data-reveal>
             <div class="panel-head">
                 <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 20V10M10 20V5M15 20v-7M20 20V8"/></svg></span><h2>Resultado de cada compra</h2></div>
@@ -377,6 +407,36 @@
             <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><h2 id="pfSummaryTitle">Resumo</h2></div>
             <div class="kpis kpi-cards bt-kpis" id="pfKpis"></div>
             <p class="small muted" id="pfOnlyB"></p>
+        </div>
+
+        <div class="panel" data-reveal id="pfResamplePanel" hidden>
+            <div class="panel-head">
+                <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/></svg></span><h2>Reamostragem <span class="tip" tabindex="0" data-tip="Sorteia as operações deste resultado, com reposição, 2.000 vezes: cada sorteio é um período com outra mistura das mesmas compras. Mostra a faixa provável do lucro e quanto ele depende das maiores operações." aria-label="Ajuda: Sorteia as operações deste resultado, com reposição, 2.000 vezes: cada sorteio é um período com outra mistura das mesmas compras. Mostra a faixa provável do lucro e quanto ele depende das maiores operações.">?</span></h2></div>
+                <span class="small muted" id="pfResampleSub"></span>
+            </div>
+            <p class="bt-compare resample-verdict" id="pfResampleVerdict" role="status"></p>
+            <div class="kpis kpi-cards bt-kpis" id="pfResampleKpis"></div>
+            <div class="chart-grid resample-grid">
+                <div>
+                    <h3 class="bt-subhead">Lucro em cada sorteio</h3>
+                    <div class="chart-wrap chart-small" data-reveal="late"><canvas id="pfResampleChart" role="img" aria-label="Quantos sorteios deram cada faixa de lucro"></canvas></div>
+                </div>
+                <div>
+                    <h3 class="bt-subhead">Sem as maiores operações</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Tirando</th><th class="r">Lucro</th><th class="r">Peso no lucro</th><th>Ainda supera?</th></tr></thead>
+                            <tbody id="pfResampleCut"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <ul class="notes">
+                <li><strong>Faixa provável</strong>: entre o pior e o melhor resultado típico dos sorteios (5% e 95%); o lucro real do período aparece no gráfico.</li>
+                <li><strong>Sem as maiores</strong>: o lucro tirando as operações que mais ganharam, como se não tivessem acontecido.</li>
+                <li>Sortear operações <strong>ignora a ordem e o caixa de cada dia</strong> (na carteira, as compras crescem com o patrimônio; CDI do caixa e imposto ficam fixos): mede quanto o resultado depende de poucos ganhos, não é uma nova simulação.</li>
+                <li>Os sorteios usam uma semente fixa: o mesmo backtest sempre dá a mesma resposta.</li>
+            </ul>
         </div>
 
         <div class="chart-grid">

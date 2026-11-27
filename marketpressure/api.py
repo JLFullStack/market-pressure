@@ -19,6 +19,7 @@ from .comum import market_data
 from .screener import screener
 from .carteira import portfolio as pf
 from .backtest import portfolio_backtest as pb
+from .backtest import reamostragem
 from .carteira import portfolio_prompt
 from .carteira import portfolio_service as svc
 from .carteira import portfolio_store as store
@@ -210,7 +211,8 @@ def backtest_args(req):
 
 
 def single_backtest(args):
-    """screener.backtest_view, guardado para o prompt de análise (ValueError → 400)."""
+    """screener.backtest_view com a reamostragem dos lotes (reamostragem.single), guardado para o prompt
+    de análise (ValueError → 400)."""
     key = bp.cache_key("ativo", args)
     view = bp.recall(key)
     if view is None:
@@ -218,6 +220,7 @@ def single_backtest(args):
             view = screener.backtest_view(*args)
         except ValueError as err:
             raise HTTPError(400, str(err)) from None
+        view["resampling"] = reamostragem.single(view)
         bp.remember(key, view)
     return view
 

@@ -310,6 +310,27 @@ def _guide(kind):
 
 
 # region Um ativo
+def _resampling_lines(r):
+    """Seção da reamostragem das operações (backtest/reamostragem.py), ou nada sem ela."""
+    if not r:
+        return []
+    lines = ["", f"# Reamostragem das operações ({r['draws']} sorteios com reposição das {r['trades']} operações, semente fixa)", "",
+             f"- Veredito do app: {r['verdict']['title']}. {r['verdict']['text']}",
+             f"- Lucro: {fmt_brl(r['actual'])} no período; faixa provável ({r['low']}% a {r['high']}%) de "
+             f"{fmt_brl(r['profit']['low'])} a {fmt_brl(r['profit']['high'])}, mediana {fmt_brl(r['profit']['mid'])}",
+             f"- Resultado médio por compra: {_pct(r['meanReturn']['low'])} a {_pct(r['meanReturn']['high'])} "
+             f"(mediana {_pct(r['meanReturn']['mid'])})",
+             f"- Chance de prejuízo: {_pct(r['lossChance'], 0, False)}"]
+    lines += [f"- Chance de lucrar menos que {x['label']} ({fmt_brl(x['profit'])}): {_pct(x['belowChance'], 0, False)}" for x in r["refs"]]
+    names = {x["key"]: x["label"] for x in r["refs"]} | {"zero": "zero"}
+    for w in r["withoutTop"]:
+        beats = ", ".join(f"{'acima de' if ok else 'abaixo de'} {names.get(k, k)}" for k, ok in w["beats"].items())
+        lines.append(f"- Sem {'a maior' if w['n'] == 1 else f'as {w["n"]} maiores'} ({'; '.join(w['names'])}): lucro {fmt_brl(w['profit'])} ({beats})")
+    lines.append("- Limite: sortear operações ignora a ordem e o caixa de cada dia; mede a dependência de poucos ganhos, "
+                 "não é uma nova simulação.")
+    return lines
+
+
 def build_single(view, exit_mode):
     """Prompt do modo "Um ativo" (view = screener.backtest_view)."""
     s, b, cur = view["stats"], view["onlyB"], view["currency"]
@@ -347,6 +368,7 @@ def build_single(view, exit_mode):
                      f"média {_pct(b['avgReturn'])}, capital máximo {money(b['maxCapital'])} (retorno sobre ele {_pct(b['returnOnMaxCapital'])})")
     if view.get("compare"):
         lines.append(f"- {view['compare']}")
+    lines += _resampling_lines(view.get("resampling"))
     lots = view["lots"]
     lines += ["", f"# Compras (lotes){' — as ' + str(MAX_LOTS) + ' mais recentes' if len(lots) > MAX_LOTS else ''}", "",
               "| # | Compra | Preço | Venda parcial | Saída | Resultado | Pregões | Alta máx. | Devolvido | Situação | Indicação |",
@@ -437,6 +459,7 @@ def build_portfolio(result):
     losers = [a for a in sorted(assets, key=lambda a: a["profit"])[:5] if a["profit"] < 0]
     lines += ["", "Ativos que mais lucraram: " + ("; ".join(asset(a) for a in by_profit[:10]) or "—"),
               "Ativos que mais perderam: " + ("; ".join(asset(a) for a in losers) or "nenhum ativo deu prejuízo")]
+    lines += _resampling_lines(result.get("resampling"))
 
     shown = trades[-MAX_TRADES:]
     lines += ["", f"# Compras ({sts[0]['label']}){' — as ' + str(MAX_TRADES) + ' mais recentes de ' + str(len(trades)) if len(trades) > MAX_TRADES else ''}", "",

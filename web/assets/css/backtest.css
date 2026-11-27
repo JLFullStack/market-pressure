@@ -55,6 +55,13 @@
 .in .robust-bar i { animation: grow-x 1s var(--ease-out) 0.4s backwards; }
 /* #endregion */
 
+/* #region Reamostragem */
+.resample-verdict { font-weight: 400; line-height: 1.55; }
+.resample-verdict .badge { margin-right: 6px; }
+.resample-grid { align-items: start; }
+.resample-grid td .badge { margin: 2px 4px 2px 0; }
+/* #endregion */
+
 /* #region Tabelas: lote selecionado */
 .lot-row { cursor: pointer; }
 .lot-row.selected td { background-color: rgba(56, 139, 253, 0.1); }

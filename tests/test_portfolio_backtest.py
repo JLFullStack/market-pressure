@@ -32,6 +32,11 @@ class PortfolioBacktestTest(DatabaseTestCase):
         self.assertEqual(len(rule["curve"]), result["sessions"] + 1)
         self.assertAlmostEqual(rule["curve"][-1]["value"], m["profit"])
         self.assertIn("a mais que", result["compare"])
+        # Reamostragem: o lucro do período e as referências (BOVA11, IVVB11) com os mesmos aportes.
+        r = result["resampling"]
+        self.assertAlmostEqual(r["actual"], m["profit"])
+        self.assertEqual([x["key"] for x in r["refs"]], ["bova", "ivvb"])
+        self.assertEqual(r["trades"], len(result["trades"]))
 
     def test_monthly_contributions_and_benchmark_get_the_same_flows(self):
         result = pb.run(params(monthly="500"))

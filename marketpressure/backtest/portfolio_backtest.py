@@ -28,6 +28,7 @@ from ..comum import database as db
 from ..comum import market_data, runtime
 from ..screener import screener as sc
 from ..configuracoes import strategy as st
+from . import reamostragem
 from ..comum.core import (EXIT, entry_stats, entry_warnings, add_up, adjusted_candles, closed_candles, compute_indicators, day_of, evaluate_setup,
                    exit_signal, fmt_brl, fmt_date, fmt_num, fmt_sessions, trend_strength, PARTIAL_TIMINGS)
 
@@ -874,7 +875,7 @@ def run(params):
         traded[r["ticker"]]["trades"] += 1
         traded[r["ticker"]]["profit"] += r["profit"]
     sessions = len(cal) - 1
-    return {
+    result = {
         "period": f"{fmt_date(cal[0])} a {fmt_date(cal[-1])}", "sessions": sessions, "duration": fmt_sessions(sessions),
         "bounds": {"min": first_day, "max": last_day, "from": cal[0], "to": cal[-1]}, "note": note,
         "universe": {"label": UNIVERSES[params["universe"]], "candidates": len(assets), "ranked": len(data),
@@ -885,6 +886,8 @@ def run(params):
         "assets": sorted(traded.values(), key=lambda x: (-x["trades"], x["ticker"])), "warnings": warnings,
         "profitRanking": _profit_ranking(traded.values()),
     }
+    result["resampling"] = reamostragem.portfolio(result)
+    return result
 
 
 PROFIT_RANKING = 6  # ativos de cada ponta no gráfico "Lucro por ativo"

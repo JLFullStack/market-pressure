@@ -103,6 +103,9 @@ class ServerTest(DatabaseTestCase):
         self.assertAlmostEqual(s["realized"] + s["unrealized"], s["profit"])
         self.assertAlmostEqual(data["equity"][-1]["value"], s["profit"])
         self.assertAlmostEqual(sum(lot["profit"] for lot in data["lots"]), s["profit"])
+        # Reamostragem dos lotes (backtest/reamostragem.py): o lucro do período é o dos lotes.
+        self.assertAlmostEqual(data["resampling"]["actual"], s["profit"])
+        self.assertEqual(data["resampling"]["trades"], len(data["lots"]))
         self.assertTrue(0 < s["maxCapital"] <= s["invested"])
         b = data["onlyB"]
         self.assertTrue(0 < b["maxCapital"] <= b["invested"])
@@ -111,6 +114,7 @@ class ServerTest(DatabaseTestCase):
         self.assertEqual(status, 200)
         self.assertIn("PETR4", prompt["title"])
         self.assertIn("# Compras (lotes)", prompt["text"])
+        self.assertIn("# Reamostragem das operações", prompt["text"])
         self.assertIn("alvo e parte escolhidos à mão", prompt["text"])
         self.assertEqual(prompt["text"].count("\n| "), len(data["lots"]) + 1)   # cabeçalho + um lote por linha
         self.assertEqual(self.request("GET", "/api/backtest/prompt?ticker=")[0], 400)
