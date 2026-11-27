@@ -297,7 +297,10 @@ class ServerTest(DatabaseTestCase):
         self.assertEqual(data["markers"][0]["kind"], "buy")
         self.assertTrue(data["candles"] and data["ma"]["mm200"])
         self.assertIn("targets", data)
-        self.assertEqual(self.request("GET", f"/api/carteira/{pid}/grafico?ticker=VALE3")[0], 404)
+        # Sem lançamentos (um favorito): o gráfico abre, sem marcadores; sem ativo, 404.
+        status, other, _ = self.request("GET", f"/api/carteira/{pid}/grafico?ticker=VALE3")
+        self.assertEqual((status, other["held"], other["markers"]), (200, False, []))
+        self.assertEqual(self.request("GET", f"/api/carteira/{pid}/grafico?ticker=")[0], 404)
         self.assertEqual(self.request("GET", "/api/carteira/nao-existe/grafico?ticker=PETR4")[0], 404)
 
 if __name__ == "__main__":

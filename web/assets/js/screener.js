@@ -8,6 +8,8 @@
 const POLL_MS = 700; // intervalo entre as consultas de progresso da varredura
 const PORTFOLIO_KEY = "marketpressure_carteira_atual"; // carteira escolhida na aba Carteira
 let lastScan = null;
+let favorites = new Set();       // favoritos do usuário, "TICKER|mercado" (a ★ de cada linha do ranking)
+const shownRows = new Map();     // linha do ranking por ticker, para o card do gráfico (Indicação)
 
 document.addEventListener("DOMContentLoaded", () => {
     const modeSelect = document.getElementById('baseMode');
@@ -25,10 +27,29 @@ document.addEventListener("DOMContentLoaded", () => {
         try { localStorage.setItem(LIQUIDITY_KEY, liquidity.value); } catch (e) { /* preferência não salva */ }
         runScan(false);
     });
-    document.getElementById('rankings').addEventListener('click', (e) => {
+    const rankings = document.getElementById('rankings');
+    rankings.addEventListener('click', async (e) => {
         const btn = e.target.closest('button.copy-analysis');
         if (btn) copyAnalysis(btn);
+        const star = e.target.closest('button.fav-star');
+        if (star) {
+            const list = await toggleFavorite(star);
+            if (list) favorites = new Set(list.map(f => `${f.ticker}|${f.market}`));
+        }
     });
+    // Linha do ranking → card com o gráfico do ativo e as operações da carteira escolhida, quando houver.
+    bindChartRows(rankings, (ticker, market, row) => {
+        const a = shownRows.get(ticker);
+        const params = new URLSearchParams({ ticker, market, carteira: currentPortfolio() });
+        openAssetChart(ticker, {
+            url: `/grafico?${params}`, back: row,
+            status: a?.advice ? { title: 'Indicação do Screener', label: a.advice.label, reason: a.advice.reason, badge: ADVICE_BADGE[a.advice.action] || 'badge-low' } : null
+        });
+    });
+    apiGet('/favoritos/lista').then(r => {
+        favorites = new Set(r.list.map(f => `${f.ticker}|${f.market}`));
+        if (lastScan) render(lastScan);
+    }).catch(e => console.warn('favoritos indisponíveis', e));
     observeReveal();
     runScan(false);
 });
@@ -322,12 +343,13 @@ function tableRows(top, kind) {
         return `<tr><td colspan="10" class="empty-row">Nenhum ${kind === 'acoes' ? 'ativo' : 'ativo deste tipo'} atende a todos os critérios hoje.</td></tr>`;
     }
     const medals = ['🥇', '🥈', '🥉'];
+    for (const a of top) shownRows.set(a.ticker, a);
     return top.map((a, index) => `
-        <tr class="${index < 3 ? `podium podium-${index + 1}` : ''}" data-reveal>
+        <tr class="chart-row${index < 3 ? ` podium podium-${index + 1}` : ''}" data-reveal tabindex="0" data-ticker="${escapeHTML(a.ticker)}" data-market="b3" aria-label="Abrir o gráfico de ${escapeHTML(a.ticker)}">
             <td class="c nowrap" style="font-weight: bold;">${medals[index] || ''} ${index + 1}º</td>
             <td><div class="rank-inline">${medals[index] || ''} ${index + 1}º</div>
                 <div class="asset"><span class="avatar av-${kind}" aria-hidden="true">${escapeHTML(a.ticker.slice(0, 2))}</span>
-                <div class="asset-text"><a href="https://br.tradingview.com/chart/?symbol=BMFBOVESPA:${a.ticker}" target="_blank" rel="noopener" class="ticker-link">${a.ticker}</a>
+                <div class="asset-text">${favoriteStar(a.ticker, 'b3', favorites.has(`${a.ticker}|b3`))}<a href="https://br.tradingview.com/chart/?symbol=BMFBOVESPA:${a.ticker}" target="_blank" rel="noopener" class="ticker-link">${a.ticker}</a>
                 <a href="backtest.html?ticker=${encodeURIComponent(a.ticker)}" class="inline-link small" aria-label="Backtest de ${a.ticker}">backtest</a>
                 <div class="small muted" title="${escapeHTML(a.sector || a.name || '')}">${escapeHTML(a.sector || a.name || '')}</div></div></div></td>
             <td class="c">${scoreRing(a.score)}</td>

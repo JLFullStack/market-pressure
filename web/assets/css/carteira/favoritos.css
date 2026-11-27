@@ -1,0 +1,17 @@
+/* Carteira → Favoritos (carteira/favoritos.js): a lista de observação e os ativos que já passaram
+   pela carteira. As linhas (.chart-row) e a estrela (.fav-star) são do grafico-ativo.css. */
+
+/* #region Formulário e tabela */
+.fav-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; margin: 6px 0 14px; }
+.fav-form .field { min-width: 140px; }
+.fav-form #favTicker { text-transform: uppercase; }
+.fav-table td .badge { margin-left: 4px; vertical-align: middle; }
+/* #endregion */
+
+/* #region Responsivo */
+@media (max-width: 640px) {
+    .fav-form { align-items: stretch; }
+    .fav-form .field { flex: 1 1 45%; min-width: 0; }
+    .fav-form .btn { flex: 1 1 100%; }
+}
+/* #endregion */

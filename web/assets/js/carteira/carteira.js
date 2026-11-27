@@ -27,7 +27,7 @@ const SELECTED_KEY = 'marketpressure_carteira_atual'; // só a preferência; os 
 const TAB_KEY = 'marketpressure_carteira_aba'; // última sub-aba, usada quando a URL não tem hash
 // Sub-abas da página, na ordem da barra. Cada uma é #tab-{nome} (botão) e #panel-{nome} (seção);
 // a ativa fica no hash da URL (#visao, #aportes...), então recarregar e voltar/avançar a mantêm.
-const TABS = ['visao', 'aportes', 'proventos', 'metas', 'impostos', 'configuracoes'];
+const TABS = ['visao', 'aportes', 'proventos', 'metas', 'favoritos', 'impostos', 'configuracoes'];
 // Hashes (e valores salvos) das sub-abas antigas, que foram juntadas em "Aportes e lançamentos".
 const TAB_ALIASES = { aportar: 'aportes', lancamentos: 'aportes' };
 // Uma cor fixa por classe (portfolio.CLASSES); outras usam EXTRA_COLORS.
@@ -77,9 +77,9 @@ const state = {
     goalsSeq: 0,         // descarta respostas de metas fora de ordem
     goalCharts: [],      // gráficos dos cartões de meta (destruídos a cada redesenho)
     editingGoal: null,   // id da meta em edição no formulário (null = nova)
-    // Card "Operações no gráfico" (linha das Posições): resposta de /grafico, gráfico e séries,
-    // linhas de alvo desenhadas, índices dos alvos visíveis e candles/linha.
-    asset: null, assetPrice: null, assetLines: [], targetsShown: new Set(), assetSeq: 0, chartType: 'candles'
+    favorites: null,     // resposta de /favoritos (null = ainda não carregada; a sub-aba pede ao abrir)
+    favoritesSeq: 0,     // descarta respostas de favoritos fora de ordem
+    favSet: new Set()    // favoritos do usuário ("TICKER|mercado"): a ★ das Posições
 };
 
 const $ = (id) => document.getElementById(id);
@@ -110,10 +110,16 @@ async function init() {
     setupVisaoGeral();
     setupAportes();
     setupMetas();
+    setupFavoritos();
     setupImpostos();
     setupConfiguracoes();
     setupPagers();
     state.tab = tabFromHash() || savedTab() || 'visao';
+    // Só os códigos dos favoritos, para a ★ das Posições (a lista completa vem ao abrir a sub-aba).
+    apiGet('/favoritos/lista').then(r => {
+        setFavorites(r.list);
+        if (state.analysis) renderPositions(state.analysis);
+    }).catch(e => console.warn('favoritos indisponíveis', e));
 
     const busy = busyStart('Carregando carteiras...');
     try {
@@ -265,6 +271,7 @@ async function loadPortfolio(busy) {
     }
     state.goals = null; // as metas são pedidas de novo ao abrir a sub-aba (showTab)
     state.taxes = null; // os impostos também
+    state.favorites = null; // e os favoritos (a situação muda com as cotações)
     showTab(state.tab);
     renderFixedIncomeSelect(st);
     renderClassSelects(st);
@@ -350,6 +357,7 @@ function showTab(name) {
         for (const c of charts) if (c) { c.resize(); c.update('none'); }
     }
     if (has && name === 'metas' && !state.goals) loadGoals();
+    if (has && name === 'favoritos' && !state.favorites) loadFavorites();
     if (has && name === 'impostos' && !state.taxes && state.structure?.hasEntries) loadTaxes();
 }
 

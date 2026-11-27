@@ -8,11 +8,13 @@
     <link rel="stylesheet" href="assets/css/app.css">
     <link rel="stylesheet" href="assets/css/responsivo.css">
     <link rel="stylesheet" href="assets/css/animacao.css">
+    <link rel="stylesheet" href="assets/css/grafico-ativo.css">
     <link rel="stylesheet" href="assets/css/carteira/carteira.css">
     <link rel="stylesheet" href="assets/css/carteira/visao-geral.css">
     <link rel="stylesheet" href="assets/css/carteira/aportes-e-lancamentos.css">
     <link rel="stylesheet" href="assets/css/carteira/proventos.css">
     <link rel="stylesheet" href="assets/css/carteira/metas.css">
+    <link rel="stylesheet" href="assets/css/carteira/favoritos.css">
     <link rel="stylesheet" href="assets/css/carteira/impostos.css">
     <link rel="stylesheet" href="assets/css/carteira/configuracoes.css">
     <!-- #endregion -->
@@ -108,6 +110,7 @@
         <button type="button" class="subtab" role="tab" id="tab-aportes" data-tab="aportes" aria-controls="panel-aportes" aria-selected="false" tabindex="-1">Aportes e lançamentos</button>
         <button type="button" class="subtab" role="tab" id="tab-proventos" data-tab="proventos" aria-controls="panel-proventos" aria-selected="false" tabindex="-1">Proventos</button>
         <button type="button" class="subtab" role="tab" id="tab-metas" data-tab="metas" aria-controls="panel-metas" aria-selected="false" tabindex="-1">Metas</button>
+        <button type="button" class="subtab" role="tab" id="tab-favoritos" data-tab="favoritos" aria-controls="panel-favoritos" aria-selected="false" tabindex="-1">Favoritos</button>
         <button type="button" class="subtab" role="tab" id="tab-impostos" data-tab="impostos" aria-controls="panel-impostos" aria-selected="false" tabindex="-1">Impostos</button>
         <button type="button" class="subtab" role="tab" id="tab-configuracoes" data-tab="configuracoes" aria-controls="panel-configuracoes" aria-selected="false" tabindex="-1">Configurações</button>
     </div>
@@ -802,6 +805,52 @@
     </section>
     <!-- #endregion -->
 
+    <!-- #region Favoritos -->
+    <section id="panel-favoritos" role="tabpanel" aria-labelledby="tab-favoritos" tabindex="0" hidden>
+        <div class="panel" data-reveal>
+            <div class="panel-head">
+                <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9l-5.25 2.7 1-5.8L3.5 9.7l5.9-.9z"/></svg></span><h2>Favoritos</h2></div>
+                <span class="small muted" id="favCount"></span>
+            </div>
+            <form class="fav-form" id="favForm" novalidate>
+                <label class="field">Ativo
+                    <input type="text" id="favTicker" class="select" placeholder="Ex.: PETR4" maxlength="12" autocomplete="off" spellcheck="false" required>
+                </label>
+                <label class="field">Mercado
+                    <select id="favMarket" class="select"><option value="b3">B3</option><option value="us">EUA</option><option value="crypto">Cripto</option></select>
+                </label>
+                <button type="submit" class="btn" id="favAddBtn">Adicionar</button>
+                <span class="small" id="favMsg" role="status"></span>
+            </form>
+            <div class="table-container">
+                <table class="sticky-first fav-table">
+                    <thead><tr><th>Ativo</th><th class="r">Preço</th><th class="r">Var. dia</th><th class="r">Distância das médias</th><th class="c">Ranking</th><th class="c">Situação</th><th class="c" aria-label="Favorito"></th></tr></thead>
+                    <tbody id="favBody"></tbody>
+                </table>
+            </div>
+            <ul class="notes">
+                <li>Toque numa linha para abrir o <strong>gráfico</strong> do ativo, com as compras e vendas desta carteira quando houver.</li>
+                <li><strong>Situação</strong>: COMPRAR/AGUARDAR é a Indicação do Screener de hoje (o ativo está no ranking); <strong>em pullback</strong> = no setup, mas fora do ranking; <strong>perto do recuo</strong> = em tendência de alta, a até 6% da média mais próxima; <strong>fora da tendência</strong> = sem a MM200 subindo com o preço acima dela.</li>
+                <li><strong>Distância das médias</strong>: quanto o fechamento está acima (ou abaixo) da MM20, MM50 e MM200, no último pregão fechado.</li>
+                <li>A ★ nas linhas do ranking do Screener também adiciona e tira favoritos. A lista é sua: vale para todas as carteiras.</li>
+            </ul>
+        </div>
+
+        <div class="panel" data-reveal>
+            <div class="panel-head">
+                <div class="panel-title"><span class="icon-chip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v5h5"/></svg></span><h2>Já passaram pela carteira</h2></div>
+                <span class="small muted">vendidos por inteiro · toque para ver as operações no gráfico</span>
+            </div>
+            <div class="table-container">
+                <table class="sticky-first">
+                    <thead><tr><th>Ativo</th><th>Período</th><th class="r">Operações</th><th class="r">Lucro</th><th class="r">Resultado</th><th class="c" aria-label="Favorito"></th></tr></thead>
+                    <tbody id="closedBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    <!-- #endregion -->
+
     <!-- #region Impostos -->
     <section id="panel-impostos" role="tabpanel" aria-labelledby="tab-impostos" tabindex="0" hidden>
         <div class="panel" data-reveal data-no-entries>
@@ -952,55 +1001,19 @@
     <!-- #endregion -->
 </div>
 
-<!-- #region Card flutuante "Operações no gráfico" -->
-<!-- Card flutuante "Operações no gráfico": abre ao clicar numa linha das Posições (assetChart* em carteira.js). -->
-<dialog class="chart-dialog" id="assetChartDialog" aria-labelledby="assetChartTitle">
-    <div class="panel-head">
-        <div class="result-head"><span class="avatar solo chart-dialog-avatar" id="assetChartAvatar" aria-hidden="true"></span><div>
-            <div class="eyebrow chart-dialog-eyebrow">Operações no gráfico</div>
-            <h2 id="assetChartTitle">Operações no gráfico</h2>
-            <div class="small muted" id="assetChartInfo"></div>
-        </div></div>
-        <div class="chart-dialog-tools">
-            <button type="button" class="icon-btn chart-dialog-close" id="assetChartClose" title="Fechar" aria-label="Fechar o gráfico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-        </div>
-    </div>
-    <div class="chart-dialog-stats" id="assetChartStats"></div>
-    <div class="chart-toolbar">
-        <div class="bt-legend" id="assetChartLegend"></div>
-        <div class="seg" role="group" aria-label="Tipo de gráfico" id="assetChartType">
-            <button type="button" data-type="candles" aria-pressed="true">Candles</button>
-            <button type="button" data-type="line" aria-pressed="false">Linha</button>
-        </div>
-    </div>
-    <div class="bt-chart" id="assetChartBox" role="img" aria-label="Gráfico de preço do ativo com as compras, as vendas e os alvos das compras abertas"></div>
-    <div class="price-targets" id="assetTargets" hidden>
-        <div class="price-target-head">
-            <span class="small"><strong>Alvos das compras abertas</strong> <span class="tip" tabindex="0" data-tip="Preço em que cada compra ainda aberta atinge o alvo da venda parcial da regra da classe dela (Configurações). Alvos a menos de 1,5% um do outro aparecem juntos, num nível só (o preço é a média pela quantidade). Alvo já atingido cuja parte ainda não foi vendida aparece com a marca ATINGIDO (linha pontilhada). Para o gráfico não ficar carregado, só o próximo alvo ainda não atingido aparece de início: toque num alvo para mostrá-lo ou escondê-lo." aria-label="Ajuda: alvos das compras abertas">?</span></span>
-            <div class="seg" role="group" aria-label="Alvos no gráfico" id="assetTargetMode">
-                <button type="button" data-mode="next" aria-pressed="true">Próximo</button>
-                <button type="button" data-mode="all" aria-pressed="false">Todos</button>
-                <button type="button" data-mode="none" aria-pressed="false">Nenhum</button>
-            </div>
-        </div>
-        <div class="price-target-chips" id="assetTargetChips"></div>
-    </div>
-    <p class="crossing-note" id="assetCrossing" hidden></p>
-    <p class="small muted" id="assetChartMsg" role="status"></p>
-</dialog>
-<!-- #endregion -->
-
 <!-- #region Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="assets/js/core.js"></script>
 <script src="assets/js/animacao.js"></script>
 <script src="assets/js/graficos.js"></script>
+<script src="assets/js/grafico-ativo.js"></script>
 <script src="assets/js/carteira/carteira.js"></script>
 <script src="assets/js/carteira/visao-geral.js"></script>
 <script src="assets/js/carteira/aportes-e-lancamentos.js"></script>
 <script src="assets/js/carteira/proventos.js"></script>
 <script src="assets/js/carteira/metas.js"></script>
+<script src="assets/js/carteira/favoritos.js"></script>
 <script src="assets/js/carteira/impostos.js"></script>
 <script src="assets/js/carteira/configuracoes.js"></script>
 <!-- #endregion -->

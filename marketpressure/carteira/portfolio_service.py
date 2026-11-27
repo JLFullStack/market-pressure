@@ -17,7 +17,7 @@ from ..configuracoes import strategy as st
 from . import risco, tax_alert, tax_report
 from ..comum.core import add_up, day_of, fmt_brl, fmt_date, session_in_progress, today_iso
 from .portfolio import (APORTE_MODES, BENCHMARK, CLASS_GROUP, FI_LABELS, FX, JCP_TAX, MARKETS, PERIODS, add_months,
-                        analyze_portfolio, batch_rows, class_members, close_on_or_before, contribution_history,
+                        analyze_portfolio, batch_rows, by_date, class_members, close_on_or_before, contribution_history,
                         contribution_items, contribution_path, contribution_plan, dividends_by_month, dividends_to_receive, fixed_income_class, has_entries, is_iso_date,
                         market_of, net_flows, normalize_ticker, open_lots, parse_number, patrimony_bars, period_start, receivables_by_month,
                         rebase_series, split_pending_dividends, unbooked_receivables, held_members, zero_target_text,
@@ -396,15 +396,19 @@ def goal_preview(portfolio, goal):
 
 
 # region Card do gráfico
-def asset_chart(portfolio, ticker):
-    """Card "Operações no gráfico" de uma posição: o gráfico do ativo com os lançamentos e os
-    alvos das compras abertas pela regra da classe dele (portfolio.asset_chart). LookupError se o
-    ativo não tem lançamentos na carteira."""
+def asset_chart(portfolio, ticker, market=None):
+    """Card "Operações no gráfico": o gráfico do ativo com os lançamentos e os alvos das compras
+    abertas pela regra da classe dele (portfolio.asset_chart). Também para um ativo sem lançamentos
+    (um favorito: só o gráfico, market = o pedido, b3 sem ele) e para um já vendido por inteiro
+    (com o resultado da posição encerrada em "closed"). LookupError com ticker inválido."""
     ticker = normalize_ticker(ticker)
-    if not any(t["ticker"] == ticker for t in portfolio["transactions"]):
-        raise LookupError(f"{ticker} não tem lançamentos nesta carteira")
-    market = market_of(portfolio, ticker)
+    if not ticker:
+        raise LookupError("informe o ativo")
+    held = any(t["ticker"] == ticker for t in portfolio["transactions"])
+    market = market_of(portfolio, ticker) if held else (market if market in MARKETS else "b3")
     classes = {t: a.get("class") for t, a in portfolio["assets"].items()}
+    if not held:
+        classes[ticker] = suggested_class(ticker, market)
     rule = st.asset_rules(st.load(), classes)(ticker, market)
     out = pf_asset_chart(portfolio["transactions"], ticker, quote_history(ticker, market)["candles"], market, rule)
     name = ticker
@@ -415,7 +419,15 @@ def asset_chart(portfolio, ticker):
             log.warning("não foi possível ler a lista de ativos salva; gráfico sem o nome do ativo", exc_info=True)
     if out.get("crossing"):   # acerto do modelo: o da validação e o do registro ao vivo
         out["crossing"]["accuracy"] = cz.accuracy_text(cz.live_stats(cz.read_log()))
-    return {**out, "cls": classes.get(ticker), "name": name, "ruleLabel": st.STRATEGIES[rule["key"]]}
+    closed = None
+    if held and not out["openLots"]:
+        p = next((x for x in full_analysis(portfolio, reuse=True)["positions"]
+                  if x["ticker"] == ticker and x["quantity"] <= 0), None)
+        if p:
+            last = by_date(t for t in portfolio["transactions"] if t["ticker"] == ticker)[-1]
+            closed = {"profit": p["profit"], "returnPct": p["returnPct"], "lastDate": last["date"]}
+    return {**out, "cls": classes.get(ticker), "name": name, "ruleLabel": st.STRATEGIES[rule["key"]],
+            "held": held, "closed": closed}
 
 
 def held_lots(portfolio, tickers):

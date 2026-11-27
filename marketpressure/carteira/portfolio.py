@@ -918,8 +918,11 @@ def asset_chart(transactions, ticker, candles, market, strategy=DEFAULT_STRATEGY
                                 "na tabela de Posições).")
     # Alvo mostrado de início: o mais próximo ainda não atingido (sem ele, o primeiro).
     upcoming = next((k for k, level in enumerate(levels) if not level["reached"]), 0 if levels else None)
-    first = lower_bound(days, txs[0]["date"]) if txs else 0
-    if partial_fraction(strategy) <= 0:
+    # Zoom inicial: da primeira compra (com margem) até hoje; sem lançamentos, o último ano.
+    first = lower_bound(days, txs[0]["date"]) if txs else max(0, len(days) - 252 + CHART_MARGIN_SESSIONS)
+    if not txs:
+        note = None
+    elif partial_fraction(strategy) <= 0:
         note = "A regra deste tipo vende tudo só na reversão de tendência: as compras não têm alvo."
     elif not lots:
         note = "Sem compras abertas: nenhum alvo a mostrar."

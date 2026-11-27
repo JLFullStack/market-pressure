@@ -320,6 +320,15 @@ h3 { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 6
 .inline-link { color: var(--accent); text-decoration: none; font-weight: 600; }
 .inline-link:hover { text-decoration: underline; }
 .inline-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+/* Botão só com ícone (excluir lançamento na Carteira, fechar o card do gráfico na Carteira e no Screener). */
+.icon-btn {
+    display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0;
+    border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer;
+    transition: color 0.2s, background-color 0.2s, border-color 0.2s, transform 0.15s var(--ease-out);
+}
+.icon-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn:active { transform: scale(0.9); }
+.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* #endregion */
 
 /* #region Barra do app */

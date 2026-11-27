@@ -97,15 +97,8 @@ tr.in .target-bar i { animation: grow-x 0.9s var(--ease-out) backwards; animatio
 .target-mode.fixed { color: var(--violet); background: rgba(155, 123, 255, 0.15); }
 /* #endregion */
 
-/* #region Botão de ícone (excluir lançamento, fechar o card do gráfico) */
-.icon-btn {
-    display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0;
-    border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer;
-    transition: color 0.2s, background-color 0.2s, border-color 0.2s, transform 0.15s var(--ease-out);
-}
-.icon-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-.icon-btn:active { transform: scale(0.9); }
-.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* #region Botão de ícone: excluir lançamento */
+/* O botão base (.icon-btn) fica no app.css: o card do gráfico também abre no Screener. */
 /* Excluir: sempre vermelho (fundo e borda suaves); no hover acende, a tampa da lixeira abre e o
    botão ganha brilho. */
 .icon-danger { color: #ff6b6b; background-color: rgba(255, 107, 107, 0.1); border-color: rgba(255, 107, 107, 0.28); }

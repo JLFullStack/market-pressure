@@ -20,6 +20,7 @@ from .screener import screener
 from .carteira import portfolio as pf
 from .backtest import portfolio_backtest as pb
 from .backtest import reamostragem
+from .carteira import favoritos
 from .carteira import portfolio_prompt
 from .carteira import portfolio_service as svc
 from .carteira import portfolio_store as store
@@ -358,12 +359,59 @@ def get_analysis(req):
 
 @route("GET", f"/api/carteira/{PORTFOLIO_ID}/grafico")
 def get_asset_chart(req):
-    """Card "Operações no gráfico" de uma posição: candles, médias, lançamentos e alvos do ativo."""
+    """Card "Operações no gráfico": candles, médias, lançamentos e alvos do ativo (também de um
+    favorito sem lançamentos, com market=, e de um já vendido)."""
     try:
-        return svc.asset_chart(portfolio_of(req), req.arg("ticker"))
+        return svc.asset_chart(portfolio_of(req), req.arg("ticker"), req.arg("market"))
     except LookupError as err:
         raise HTTPError(404, str(err)) from None
     except RuntimeError as err:  # quote_history: o Yahoo não tem cotações do ativo
+        raise HTTPError(502, str(err)) from None
+
+
+def _portfolio_or_none(portfolio_id):
+    """A carteira pedida (a última aberta na aba Carteira; sem ela, a primeira) ou None."""
+    try:
+        portfolios = store.read_doc()["portfolios"]
+    except Exception:
+        log.warning("carteiras indisponíveis para os favoritos", exc_info=True)
+        return None
+    return next((p for p in portfolios if p.get("id") == portfolio_id), portfolios[0] if portfolios else None)
+
+
+@route("GET", "/api/favoritos")
+def get_favorites(req):
+    """Favoritos (lista de observação): a situação de cada um e os ativos já vendidos da carteira."""
+    return favoritos.payload(_portfolio_or_none(req.arg("carteira")))
+
+
+@route("GET", "/api/favoritos/lista")
+def get_favorite_list(req):
+    """Só os códigos dos favoritos ([{ticker, market}]), para a estrela do ranking do Screener."""
+    return {"list": [{"ticker": i["ticker"], "market": i["market"]} for i in favoritos.load()]}
+
+
+@route("POST", "/api/favoritos")
+def post_favorites(req):
+    """{op: add|remove, ticker, market} → {message, list} (400 com o motivo). A página pede a
+    situação de novo (GET) quando a mostra."""
+    try:
+        message = favoritos.change(req.json_object())
+    except ValueError as err:
+        raise HTTPError(400, str(err)) from None
+    return {"message": message, **get_favorite_list(req)}
+
+
+@route("GET", "/api/grafico")
+def get_any_chart(req):
+    """Card "Operações no gráfico" fora da Carteira (linha do ranking do Screener): o gráfico do
+    ativo com as operações da carteira escolhida (carteira=; sem ela, a primeira), quando houver."""
+    portfolio = _portfolio_or_none(req.arg("carteira")) or {"transactions": [], "assets": {}, "classes": []}
+    try:
+        return svc.asset_chart(portfolio, req.arg("ticker"), req.arg("market"))
+    except LookupError as err:
+        raise HTTPError(400, str(err)) from None
+    except (RuntimeError, market_data.UpstreamError) as err:
         raise HTTPError(502, str(err)) from None
 
 
